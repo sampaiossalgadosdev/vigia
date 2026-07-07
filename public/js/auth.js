@@ -148,6 +148,7 @@ const Auth = (() => {
     carregarPagina(page);
   });
 
+  window.Auth = { login, logout, exigirLogin, usuarioAtual, montarSidebar };
   return { login, logout, exigirLogin, usuarioAtual, montarSidebar };
 })();
 

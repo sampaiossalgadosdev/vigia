@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Caixa</title>
   <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -12,7 +13,6 @@
     <main class="conteudo">
       <div class="topo">
         <h1>Caixa</h1>
-        <div class="usuario-area" id="usuarioArea"></div>
       </div>
       <div class="cards">
         <div class="card"><div class="rotulo">Status</div><div class="valor" id="statusCaixa">—</div></div>
@@ -29,6 +29,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    initNavbar();
     async function carregar() {
       const atual = await API.get('/api/caixa/atual');
       document.getElementById('statusCaixa').textContent = atual.status === 'fechado' ? 'Fechado' : 'Aberto';

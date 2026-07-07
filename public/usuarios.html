@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Usuários</title>
   <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -12,7 +13,6 @@
     <main class="conteudo">
       <div class="topo">
         <h1>Usuários</h1>
-        <div class="usuario-area" id="usuarioArea"></div>
       </div>
 
       <div class="barra-acoes">
@@ -50,6 +50,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    initNavbar();
     let editandoId = null;
 
     async function carregar() {

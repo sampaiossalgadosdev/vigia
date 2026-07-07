@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Relatórios</title>
   <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -12,7 +13,6 @@
     <main class="conteudo">
       <div class="topo">
         <h1>Relatórios</h1>
-        <div class="usuario-area" id="usuarioArea"></div>
       </div>
       <div class="abas">
         <button class="ativa" data-aba="dia" onclick="trocarAba('dia')">Vendas do dia</button>
@@ -33,6 +33,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+    initNavbar();
     function trocarAba(aba) { document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba)); document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba)); }
     async function carregar() {
       const dia = await API.get('/api/relatorios/vendas-dia');
