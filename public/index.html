@@ -40,12 +40,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
-    (async () => {
-      const usuario = await Auth.exigirLogin();
-      if (!usuario) return;
-      await Auth.montarSidebar('index.html');
-
-      // Cards
+    async function carregarDashboard() {
       try {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
         const [produtos, alertas, sugestoes, movsHoje] = await Promise.all([
@@ -74,7 +69,6 @@
           ).join('');
       } catch (e) { console.error(e); }
 
-      // Últimas 5 movimentações
       try {
         const movs = await API.get('/api/estoque/movimentacoes?limit=5');
         const corpo = document.getElementById('tabelaMovs');
@@ -86,12 +80,19 @@
             '<td>' + m.quantidade + ' ' + m.produto.unidade + '</td><td>' + m.origem + '</td></tr>'
           ).join('');
       } catch (e) { console.error(e); }
-    })();
+    }
 
     async function marcarLida(id) {
-      try { await API.put('/api/sugestoes/' + id + '/lida'); window.location.reload(); }
+      try { await API.put('/api/sugestoes/' + id + '/lida'); await carregarDashboard(); }
       catch (e) { alert(e.message); }
     }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('index.html');
+      await carregarDashboard();
+    })();
   </script>
 </body>
 </html>

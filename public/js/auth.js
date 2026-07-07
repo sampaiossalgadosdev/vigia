@@ -48,6 +48,41 @@ const Auth = (() => {
     try { return JSON.parse(localStorage.getItem('usuario')); } catch (e) { return null; }
   }
 
+  async function carregarPagina(pagina) {
+    const container = document.querySelector('main.conteudo');
+    if (!container) return;
+
+    const url = pagina === 'index.html' ? '/' : '/' + pagina;
+    const parent = container.parentNode;
+    container.innerHTML = '<div class="vazio">Carregando...</div>';
+
+    try {
+      const resp = await fetch(url, { cache: 'no-store' });
+      if (!resp.ok) throw new Error('Falha ao carregar a página');
+      const html = await resp.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const main = doc.querySelector('main.conteudo');
+      if (!main) throw new Error('Estrutura de página inválida');
+
+      const clone = main.cloneNode(true);
+      parent.replaceChild(clone, container);
+
+      document.querySelectorAll('script[data-dynamic]').forEach((script) => script.remove());
+      Array.from(doc.querySelectorAll('script')).forEach((script) => {
+        const novo = document.createElement('script');
+        novo.setAttribute('data-dynamic', 'true');
+        if (script.src) novo.src = script.src;
+        else novo.textContent = script.textContent;
+        document.body.appendChild(novo);
+      });
+
+      const target = pagina === 'index.html' ? '/' : '/' + pagina;
+      history.pushState({ page: pagina }, '', target);
+    } catch (e) {
+      container.innerHTML = '<div class="vazio">Não foi possível carregar esta página.</div>';
+    }
+  }
+
   /**
    * Injeta a sidebar padrão, marca o link ativo, esconde módulos por perfil
    * e busca o badge de sugestões pendentes.
@@ -75,10 +110,22 @@ const Auth = (() => {
         .filter(([href]) => href !== 'usuarios.html' || (usuario && usuario.perfil === 'dono'))
         .map(([href, rotulo]) => {
           const badge = href === 'index.html' ? ' <span id="badgeSugestoes" class="badge oculto"></span>' : '';
-          return '<a href="/' + href + '" class="' + (href === paginaAtiva ? 'ativo' : '') + '">' + rotulo + badge + '</a>';
+          return '<a href="/' + href + '" class="' + (href === paginaAtiva ? 'ativo' : '') + '" data-page="' + href + '">' + rotulo + badge + '</a>';
         })
         .join('') +
       '</nav>';
+
+    el.querySelectorAll('a[data-page]').forEach((link) => {
+      link.addEventListener('click', async (ev) => {
+        const pagina = link.getAttribute('data-page');
+        if (pagina) {
+          ev.preventDefault();
+          el.querySelectorAll('a[data-page]').forEach((item) => item.classList.remove('ativo'));
+          link.classList.add('ativo');
+          await carregarPagina(pagina);
+        }
+      });
+    });
 
     const topo = document.getElementById('usuarioArea');
     if (topo && usuario)
@@ -94,6 +141,12 @@ const Auth = (() => {
       }
     } catch (e) { /* badge é opcional */ }
   }
+
+  window.carregarPagina = carregarPagina;
+  window.addEventListener('popstate', (event) => {
+    const page = event.state && event.state.page ? event.state.page : 'index.html';
+    carregarPagina(page);
+  });
 
   return { login, logout, exigirLogin, usuarioAtual, montarSidebar };
 })();
