@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Entrar</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="login-pagina">
+    <div class="login-caixa">
+      <div class="marca">
+        <strong>VIGIA</strong>
+        <span>Varejo Inteligente: Gestão Integrada e Automatizada</span>
+      </div>
+      <div id="erro" class="msg-erro"></div>
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" autocomplete="username" placeholder="voce@seumercado.com.br">
+      </div>
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" autocomplete="current-password" placeholder="Sua senha">
+      </div>
+      <button class="btn" id="btnEntrar" style="width:100%">Entrar</button>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    const erroEl = document.getElementById('erro');
+
+    async function entrar() {
+      erroEl.classList.remove('visivel');
+      const btn = document.getElementById('btnEntrar');
+      btn.disabled = true; btn.textContent = 'Entrando...';
+      try {
+        await Auth.login(document.getElementById('email').value.trim(), document.getElementById('senha').value);
+        window.location.href = '/index.html';
+      } catch (e) {
+        erroEl.textContent = e.message;
+        erroEl.classList.add('visivel');
+        btn.disabled = false; btn.textContent = 'Entrar';
+      }
+    }
+
+    document.getElementById('btnEntrar').addEventListener('click', entrar);
+    document.getElementById('senha').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') entrar(); });
+
+    // Se já houver refresh token válido, pula direto para o dashboard
+    (async () => { if (await API.renovar()) window.location.href = '/index.html'; })();
+  </script>
+</body>
+</html>

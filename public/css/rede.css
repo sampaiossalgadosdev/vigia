@@ -1,0 +1,61 @@
+/*
+ * Arquivo: rede.css
+ * Responsabilidade: Estilos do painel do superusuário (rede de lojas),
+ * com identidade visual distinta (tema escuro azulado) sobre a base do app.css.
+ */
+:root {
+  --rede-fundo: #101826;
+  --rede-painel: #18233a;
+  --rede-linha: #2a3854;
+  --rede-texto: #e8edf6;
+  --rede-suave: #93a3c0;
+  --rede-acento: #4f8ef7;
+  --rede-alerta: #ff6b6b;
+}
+
+body.rede { background: var(--rede-fundo); color: var(--rede-texto); }
+
+body.rede .sidebar { background: #0b1220; }
+body.rede .sidebar .logo { color: var(--rede-acento); }
+body.rede .sidebar nav a.ativo { background: var(--rede-acento); }
+
+body.rede .conteudo { max-width: 1280px; }
+body.rede .topo h1 { color: var(--rede-texto); }
+body.rede .topo .usuario-area { color: var(--rede-suave); }
+
+body.rede .card, body.rede .painel {
+  background: var(--rede-painel); border-color: var(--rede-linha); color: var(--rede-texto);
+}
+body.rede .card .rotulo { color: var(--rede-suave); }
+body.rede .card.alerta .valor { color: var(--rede-alerta); }
+
+body.rede th { color: var(--rede-suave); border-bottom-color: var(--rede-linha); }
+body.rede td { border-bottom-color: var(--rede-linha); }
+body.rede tr:hover td { background: rgba(79,142,247,.08); }
+
+body.rede .btn { background: var(--rede-acento); }
+body.rede .btn:hover { background: #3d78dd; }
+body.rede .btn.secundario { background: var(--rede-linha); color: var(--rede-texto); }
+
+body.rede input, body.rede select, body.rede textarea {
+  background: #101a2e; border-color: var(--rede-linha); color: var(--rede-texto);
+}
+body.rede input:focus, body.rede select:focus, body.rede textarea:focus { outline-color: var(--rede-acento); border-color: var(--rede-acento); }
+
+body.rede .modal { background: var(--rede-painel); color: var(--rede-texto); }
+
+.loja-card {
+  background: var(--rede-painel); border: 1px solid var(--rede-linha);
+  border-radius: 12px; padding: 18px; cursor: pointer; transition: border-color .15s;
+}
+.loja-card:hover { border-color: var(--rede-acento); }
+.loja-card h3 { font-size: 16px; margin-bottom: 2px; }
+.loja-card .cnpj { font-size: 12px; color: var(--rede-suave); margin-bottom: 12px; }
+.loja-card .metricas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; }
+.loja-card .metricas strong { display: block; font-size: 17px; }
+.grade-lojas { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+
+body.rede .login-pagina { background: linear-gradient(160deg, #0b1220, #1c3a6e); }
+body.rede .login-caixa { background: var(--rede-painel); }
+body.rede .login-caixa .marca strong { color: var(--rede-acento); }
+body.rede .login-caixa .marca span, body.rede .login-caixa label { color: var(--rede-suave); }

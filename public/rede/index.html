@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA Rede · Minhas lojas</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/rede.css">
+</head>
+<body class="rede">
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Minhas lojas</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <p style="color:var(--rede-suave);font-size:13px;margin-bottom:16px">
+        Na Parte 1 (sem PDV), o faturamento é estimado a partir das saídas de estoque × preço atual de cada produto.
+      </p>
+
+      <div class="grade-lojas" id="grade">
+        <div class="vazio">Carregando lojas...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api-rede.js"></script>
+  <script src="/js/auth-rede.js"></script>
+  <script>
+    const moeda = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const escapar = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    (async () => {
+      const usuario = AuthRede.exigirLogin();
+      if (!usuario) return;
+      AuthRede.montarSidebar('index.html');
+
+      try {
+        const data = await ApiRede.get('/api/rede/lojas');
+        const grade = document.getElementById('grade');
+        if (data.lojas.length === 0) {
+          grade.innerHTML = '<div class="vazio">Nenhuma loja atrelada ao seu acesso ainda. Fale com o administrador do sistema.</div>';
+          return;
+        }
+        grade.innerHTML = data.lojas.map((l) =>
+          '<div class="loja-card" onclick="window.location.href=\'/rede/loja.html?id=' + l.id + '\'">' +
+          '<h3>' + escapar(l.nome) + '</h3>' +
+          '<div class="cnpj">CNPJ ' + l.cnpj + '</div>' +
+          '<div class="metricas">' +
+          '<div>Faturamento do mês<strong>' + moeda(l.faturamentoMes) + '</strong></div>' +
+          '<div>Hoje<strong>' + moeda(l.faturamentoHoje) + '</strong></div>' +
+          '<div>Ticket médio<strong>' + moeda(l.ticketMedio) + '</strong></div>' +
+          '<div>Rupturas<strong style="color:' + (l.rupturas > 0 ? 'var(--rede-alerta)' : 'inherit') + '">' + l.rupturas + '</strong></div>' +
+          '</div></div>'
+        ).join('');
+      } catch (e) {
+        document.getElementById('grade').innerHTML = '<div class="vazio">' + escapar(e.message) + '</div>';
+      }
+    })();
+  </script>
+</body>
+</html>

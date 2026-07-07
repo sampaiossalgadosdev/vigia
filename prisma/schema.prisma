@@ -1,0 +1,304 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── SUPERADMIN ───────────────────────────────────────────
+model Superadmin {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── SUPERUSUÁRIO (dono de rede) ──────────────────────────
+model Superusuario {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redes     SuperusuarioTenant[]
+  sugestoes Sugestao[]
+}
+
+model SuperusuarioTenant {
+  id             String   @id @default(uuid())
+  superusuarioId String
+  tenantId       String
+  criadoEm       DateTime @default(now())
+
+  superusuario Superusuario @relation(fields: [superusuarioId], references: [id])
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@unique([superusuarioId, tenantId])
+  @@index([superusuarioId])
+  @@index([tenantId])
+}
+
+// ─── TENANT ───────────────────────────────────────────────
+model Tenant {
+  id               String   @id @default(uuid())
+  nome             String
+  cnpj             String   @unique
+  email            String
+  telefone         String?
+  plano            String   @default("basico")
+  regimeTributario String   @default("simples")
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  usuarios      Usuario[]
+  produtos      Produto[]
+  categorias    Categoria[]
+  fornecedores  Fornecedor[]
+  nfes          Nfe[]
+  movimentacoes MovimentacaoEstoque[]
+  sugestoes     Sugestao[]
+  superusuarios SuperusuarioTenant[]
+  auditoria     Auditoria[]
+  refreshTokens RefreshToken[]
+  decisoesIA    DecisaoIA[]
+}
+
+// ─── REFRESH TOKEN ────────────────────────────────────────
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  usuarioId String?
+  token     String   @unique
+  expiresAt DateTime
+  criadoEm  DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([token])
+  @@index([usuarioId])
+}
+
+// ─── USUÁRIO ──────────────────────────────────────────────
+model Usuario {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  email     String
+  senha     String
+  perfil    String // dono | gerente | operador
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([perfil])
+}
+
+// ─── CATEGORIA ────────────────────────────────────────────
+model Categoria {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  produtos Produto[]
+
+  @@unique([tenantId, nome])
+  @@index([tenantId])
+}
+
+// ─── PRODUTO ──────────────────────────────────────────────
+model Produto {
+  id             String   @id @default(uuid())
+  tenantId       String
+  ean            String
+  codigoInterno  String?
+  plu            String? // código PLU para produtos por peso (balança)
+  nome           String
+  marca          String?
+  ncm            String?
+  unidade        String   @default("UN") // UN | KG | CX | L | PC | FD
+  vendidoPorPeso Boolean  @default(false)
+  preco          Decimal  @db.Decimal(10, 2)
+  custoMedio     Decimal  @default(0) @db.Decimal(10, 2)
+  estoqueQtd     Decimal  @default(0) @db.Decimal(10, 3)
+  estoqueMin     Decimal  @default(0) @db.Decimal(10, 3)
+  imagemUrl      String?
+  categoriaId    String?
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  categoria     Categoria? @relation(fields: [categoriaId], references: [id])
+  itensNfe      NfeItem[]
+  movimentacoes MovimentacaoEstoque[]
+  decisoesIA    DecisaoIA[]
+
+  @@unique([tenantId, ean])
+  @@index([tenantId])
+  @@index([tenantId, ean])
+  @@index([tenantId, categoriaId])
+  @@index([tenantId, ativo])
+  @@index([plu])
+}
+
+// ─── FORNECEDOR ───────────────────────────────────────────
+model Fornecedor {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  cnpj      String
+  email     String?
+  telefone  String?
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  nfes   Nfe[]
+
+  @@unique([tenantId, cnpj])
+  @@index([tenantId])
+}
+
+// ─── NF-e ENTRADA ─────────────────────────────────────────
+model Nfe {
+  id           String   @id @default(uuid())
+  tenantId     String
+  fornecedorId String?
+  chaveAcesso  String   @unique
+  numeroNfe    String
+  dataEmissao  DateTime
+  valorTotal   Decimal  @db.Decimal(10, 2)
+  xmlOriginal  String   @db.Text
+  status       String   @default("pendente") // pendente | confirmada | cancelada
+  criadoEm     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
+  itens      NfeItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([chaveAcesso])
+}
+
+model NfeItem {
+  id            String  @id @default(uuid())
+  nfeId         String
+  produtoId     String?
+  ean           String
+  descricao     String
+  ncm           String?
+  unidade       String
+  quantidade    Decimal @db.Decimal(10, 3)
+  valorUnitario Decimal @db.Decimal(10, 4)
+  valorTotal    Decimal @db.Decimal(10, 2)
+  status        String  @default("ok") // ok | pendente (produto não encontrado, aguarda confirmação)
+
+  nfe     Nfe      @relation(fields: [nfeId], references: [id])
+  produto Produto? @relation(fields: [produtoId], references: [id])
+
+  @@index([nfeId])
+  @@index([produtoId])
+}
+
+// ─── MOVIMENTAÇÃO DE ESTOQUE ──────────────────────────────
+model MovimentacaoEstoque {
+  id         String   @id @default(uuid())
+  tenantId   String
+  produtoId  String
+  tipo       String // entrada | saida | ajuste | perda | devolucao | transferencia
+  quantidade Decimal  @db.Decimal(10, 3)
+  custoUnit  Decimal? @db.Decimal(10, 4)
+  origem     String // nfe | venda | ajuste_manual | inventario | perda_manual | devolucao
+  origemId   String?
+  usuarioId  String?
+  observacao String?
+  criadoEm   DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  produto Produto @relation(fields: [produtoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, produtoId])
+  @@index([tenantId, tipo])
+  @@index([criadoEm])
+}
+
+// ─── SUGESTÃO (superusuário → tenant) ────────────────────
+model Sugestao {
+  id             String   @id @default(uuid())
+  superusuarioId String
+  tenantId       String
+  titulo         String
+  mensagem       String   @db.Text
+  tipo           String // promocao | estoque | preco | geral
+  status         String   @default("pendente") // pendente | lida | arquivada
+  criadoEm       DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  superusuario Superusuario @relation(fields: [superusuarioId], references: [id])
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([superusuarioId])
+}
+
+// ─── AUDITORIA ────────────────────────────────────────────
+model Auditoria {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  usuarioId  String?
+  acao       String // login | logout | criar | editar | excluir | importar | etc.
+  entidade   String // Produto | Fornecedor | Usuario | Nfe | Promocao | etc.
+  entidadeId String?
+  antes      Json?
+  depois     Json?
+  ip         String?
+  criadoEm   DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, entidade])
+  @@index([criadoEm])
+}
+
+// ─── DECISÃO IA ───────────────────────────────────────────
+model DecisaoIA {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  produtoId            String
+  tipo                 String // promocao_criada | markup_alterado | preco_alterado
+  valorAntes           Decimal? @db.Decimal(10, 2)
+  valorDepois          Decimal  @db.Decimal(10, 2)
+  estoqueNaMomento     Decimal  @db.Decimal(10, 3)
+  giro30dias           Decimal  @default(0) @db.Decimal(10, 3)
+  resultadoMargem      Decimal? @db.Decimal(10, 2)
+  resultadoVolumeExtra Decimal? @db.Decimal(10, 3)
+  criadoEm             DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  produto Produto @relation(fields: [produtoId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, produtoId])
+}

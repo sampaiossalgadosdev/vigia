@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Estoque / NF-e</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Estoque / NF-e</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="abas">
+        <button class="ativa" data-aba="upload" onclick="trocarAba('upload')">Upload de XML</button>
+        <button data-aba="pendentes" onclick="trocarAba('pendentes')">Itens pendentes <span id="badgePendentes" class="badge oculto"></span></button>
+        <button data-aba="historico" onclick="trocarAba('historico')">Histórico de NF-es</button>
+      </div>
+
+      <!-- Aba 1: upload XML -->
+      <div class="aba-conteudo ativa" id="aba-upload">
+        <div class="painel">
+          <div class="drop-area" id="dropArea">
+            <p><strong>Arraste o XML da NF-e aqui</strong> ou clique para selecionar</p>
+            <input type="file" id="arquivoXml" accept=".xml" style="display:none">
+          </div>
+          <div id="erroUpload" class="msg-erro" style="margin-top:12px"></div>
+        </div>
+
+        <div class="painel" id="painelNfe" style="display:none">
+          <h2 id="tituloNfe"></h2>
+          <p id="resumoNfe" style="font-size:14px;color:var(--cinza);margin-bottom:12px"></p>
+          <table>
+            <thead><tr><th>EAN</th><th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th><th>Status</th></tr></thead>
+            <tbody id="itensNfe"></tbody>
+          </table>
+          <div class="rodape" style="display:flex;justify-content:flex-end;margin-top:14px">
+            <button class="btn" id="btnConfirmarNfe" onclick="confirmarNfe()">Confirmar entrada</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Aba 2: itens pendentes -->
+      <div class="aba-conteudo" id="aba-pendentes">
+        <div class="painel">
+          <h2>Itens de NF-e sem produto vinculado</h2>
+          <table>
+            <thead><tr><th>NF-e</th><th>EAN do XML</th><th>Descrição</th><th>Qtd</th><th>V. Unit.</th><th></th></tr></thead>
+            <tbody id="tabelaPendentes"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Aba 3: histórico -->
+      <div class="aba-conteudo" id="aba-historico">
+        <div class="barra-acoes">
+          <select id="filtroStatus" onchange="carregarHistorico()">
+            <option value="">Todas</option>
+            <option value="pendente">Pendentes</option>
+            <option value="confirmada">Confirmadas</option>
+            <option value="cancelada">Canceladas</option>
+          </select>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Número</th><th>Fornecedor</th><th>Emissão</th><th>Valor</th><th>Itens</th><th>Status</th></tr></thead>
+            <tbody id="tabelaHistorico"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: vincular item pendente -->
+  <div class="modal-fundo" id="modalVincular">
+    <div class="modal">
+      <h2>Vincular item a um produto</h2>
+      <p id="infoItem" style="font-size:14px;color:var(--cinza);margin-bottom:12px"></p>
+      <div id="erroVincular" class="msg-erro"></div>
+      <div class="campo">
+        <label>Buscar produto existente</label>
+        <input type="search" id="buscaVincular" placeholder="Nome ou EAN">
+      </div>
+      <div style="max-height:240px;overflow-y:auto">
+        <table><tbody id="resultadosVincular"></tbody></table>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="cadastrarDoItem()">Cadastrar novo produto com dados do XML</button>
+        <button class="btn secundario" onclick="UI.fecharModal('modalVincular')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let nfeAtual = null, itemVinculando = null;
+
+    function trocarAba(aba) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
+      if (aba === 'pendentes') carregarPendentes();
+      if (aba === 'historico') carregarHistorico();
+    }
+
+    // ─── Upload de XML ───
+    const dropArea = document.getElementById('dropArea');
+    const inputXml = document.getElementById('arquivoXml');
+    dropArea.addEventListener('click', () => inputXml.click());
+    dropArea.addEventListener('dragover', (ev) => { ev.preventDefault(); dropArea.classList.add('arrastando'); });
+    dropArea.addEventListener('dragleave', () => dropArea.classList.remove('arrastando'));
+    dropArea.addEventListener('drop', (ev) => {
+      ev.preventDefault(); dropArea.classList.remove('arrastando');
+      if (ev.dataTransfer.files.length) enviarXml(ev.dataTransfer.files[0]);
+    });
+    inputXml.addEventListener('change', () => { if (inputXml.files.length) enviarXml(inputXml.files[0]); });
+
+    async function enviarXml(arquivo) {
+      const erroEl = document.getElementById('erroUpload');
+      erroEl.classList.remove('visivel');
+      const form = new FormData();
+      form.append('arquivo', arquivo);
+      try {
+        const nfe = await API.post('/api/estoque/nfe/upload', form);
+        mostrarNfe(nfe);
+      } catch (e) {
+        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+      }
+    }
+
+    function mostrarNfe(nfe) {
+      nfeAtual = nfe;
+      document.getElementById('painelNfe').style.display = 'block';
+      document.getElementById('tituloNfe').textContent = 'NF-e ' + nfe.numeroNfe + ' · ' + (nfe.fornecedor ? nfe.fornecedor.nome : 'sem fornecedor');
+      const r = nfe.resumo || {
+        totalItens: nfe.itens.length,
+        itensOk: nfe.itens.filter((i) => i.status === 'ok').length,
+        itensPendentes: nfe.itens.filter((i) => i.status === 'pendente').length,
+      };
+      document.getElementById('resumoNfe').textContent =
+        'Valor total ' + UI.moeda(nfe.valorTotal) + ' · ' + r.totalItens + ' itens (' + r.itensOk + ' ok, ' + r.itensPendentes + ' pendentes). Itens pendentes serão ignorados na confirmação.';
+      document.getElementById('itensNfe').innerHTML = nfe.itens.map((i) =>
+        '<tr><td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
+        '<td>' + UI.moeda(i.valorUnitario) + '</td><td>' + UI.moeda(i.valorTotal) + '</td>' +
+        '<td><span class="tag ' + (i.status === 'ok' ? 'ok' : 'pendente') + '">' + i.status + '</span></td></tr>'
+      ).join('');
+      document.getElementById('btnConfirmarNfe').style.display = nfe.status === 'confirmada' ? 'none' : 'inline-block';
+    }
+
+    async function confirmarNfe() {
+      if (!nfeAtual) return;
+      try {
+        await API.post('/api/estoque/nfe/confirmar/' + nfeAtual.id, {});
+        alert('Entrada confirmada. Estoque e custo médio atualizados.');
+        document.getElementById('painelNfe').style.display = 'none';
+        nfeAtual = null;
+        atualizarBadgePendentes();
+      } catch (e) { alert(e.message); }
+    }
+
+    // ─── Itens pendentes ───
+    async function carregarPendentes() {
+      const data = await API.get('/api/estoque/pendentes');
+      const corpo = document.getElementById('tabelaPendentes');
+      if (data.itens.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhum item pendente.</td></tr>'; return; }
+      corpo.innerHTML = data.itens.map((i) =>
+        '<tr><td>' + i.nfe.numeroNfe + ' <span class="tag ' + (i.nfe.status === 'confirmada' ? 'ok' : 'neutro') + '">' + i.nfe.status + '</span></td>' +
+        '<td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
+        '<td>' + UI.moeda(i.valorUnitario) + '</td>' +
+        '<td><button class="btn pequeno" onclick=\'abrirVincular(' + JSON.stringify(i) + ')\'>Vincular / Cadastrar</button></td></tr>'
+      ).join('');
+    }
+
+    async function atualizarBadgePendentes() {
+      try {
+        const data = await API.get('/api/estoque/pendentes');
+        const badge = document.getElementById('badgePendentes');
+        if (data.total > 0) { badge.textContent = data.total; badge.classList.remove('oculto'); }
+        else badge.classList.add('oculto');
+      } catch (e) { /* opcional */ }
+    }
+
+    function abrirVincular(item) {
+      itemVinculando = item;
+      document.getElementById('infoItem').textContent =
+        'Item: ' + item.descricao + ' · EAN do XML: ' + item.ean + ' · ' + item.quantidade + ' ' + item.unidade;
+      document.getElementById('erroVincular').classList.remove('visivel');
+      document.getElementById('buscaVincular').value = '';
+      document.getElementById('resultadosVincular').innerHTML = '';
+      UI.abrirModal('modalVincular');
+    }
+
+    document.getElementById('buscaVincular').addEventListener('input', async (ev) => {
+      const termo = ev.target.value.trim();
+      if (termo.length < 2) return;
+      const data = await API.get('/api/produtos?limit=8&search=' + encodeURIComponent(termo));
+      document.getElementById('resultadosVincular').innerHTML = data.items.map((p) =>
+        '<tr><td>' + UI.escapar(p.nome) + '<br><small>' + p.ean + '</small></td>' +
+        '<td style="text-align:right"><button class="btn pequeno" onclick=\'vincular(' + JSON.stringify(p.id) + ')\'>Vincular</button></td></tr>'
+      ).join('');
+    });
+
+    async function vincular(produtoId) {
+      const erroEl = document.getElementById('erroVincular');
+      erroEl.classList.remove('visivel');
+      try {
+        await API.post('/api/estoque/nfe/' + itemVinculando.nfe.id + '/itens/' + itemVinculando.id + '/vincular', { produtoId });
+        UI.fecharModal('modalVincular');
+        carregarPendentes();
+        atualizarBadgePendentes();
+      } catch (e) {
+        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+      }
+    }
+
+    /** Cria um produto novo com os dados do item do XML e vincula em seguida. */
+    async function cadastrarDoItem() {
+      const erroEl = document.getElementById('erroVincular');
+      erroEl.classList.remove('visivel');
+      const i = itemVinculando;
+      const eanNumerico = /^\d{8}$|^\d{12,14}$/.test(i.ean) ? i.ean : null;
+      if (!eanNumerico) {
+        erroEl.textContent = 'O item do XML não possui EAN válido. Cadastre o produto manualmente em Produtos e depois vincule aqui.';
+        erroEl.classList.add('visivel');
+        return;
+      }
+      const preco = prompt('Preço de venda (R$) para "' + i.descricao + '":', (Number(i.valorUnitario) * 1.3).toFixed(2));
+      if (!preco) return;
+      try {
+        const produto = await API.post('/api/produtos', {
+          ean: eanNumerico, nome: i.descricao, ncm: i.ncm || '', unidade: ['UN','KG','CX','L','PC','FD'].includes(i.unidade) ? i.unidade : 'UN',
+          preco: Number(String(preco).replace(',', '.')), custoMedio: Number(i.valorUnitario), estoqueQtd: 0, estoqueMin: 0,
+        });
+        await vincular(produto.id);
+      } catch (e) {
+        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroEl.classList.add('visivel');
+      }
+    }
+
+    // ─── Histórico ───
+    async function carregarHistorico() {
+      const status = document.getElementById('filtroStatus').value;
+      const data = await API.get('/api/estoque/nfe?limit=50' + (status ? '&status=' + status : ''));
+      const corpo = document.getElementById('tabelaHistorico');
+      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma NF-e encontrada.</td></tr>'; return; }
+      corpo.innerHTML = data.items.map((n) =>
+        '<tr onclick=\'verNfe(' + JSON.stringify(n.id) + ')\' style="cursor:pointer">' +
+        '<td>' + n.numeroNfe + '</td><td>' + UI.escapar(n.fornecedor ? n.fornecedor.nome : '-') + '</td>' +
+        '<td>' + UI.data(n.dataEmissao) + '</td><td>' + UI.moeda(n.valorTotal) + '</td><td>' + n._count.itens + '</td>' +
+        '<td><span class="tag ' + (n.status === 'confirmada' ? 'ok' : n.status === 'pendente' ? 'pendente' : 'erro') + '">' + n.status + '</span></td></tr>'
+      ).join('');
+    }
+
+    async function verNfe(id) {
+      const nfe = await API.get('/api/estoque/nfe/' + id);
+      trocarAba('upload');
+      mostrarNfe(nfe);
+      document.getElementById('painelNfe').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('estoque.html');
+      atualizarBadgePendentes();
+    })();
+  </script>
+</body>
+</html>

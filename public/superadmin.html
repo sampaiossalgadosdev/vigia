@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Superadmin</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <!-- Login inline do superadmin -->
+  <div class="login-pagina" id="telaLogin" style="display:none">
+    <div class="login-caixa">
+      <div class="marca"><strong>VIGIA</strong><span>Painel do Superadmin</span></div>
+      <div id="erroLogin" class="msg-erro"></div>
+      <div class="campo"><label>E-mail</label><input type="email" id="loginEmail"></div>
+      <div class="campo"><label>Senha</label><input type="password" id="loginSenha"></div>
+      <button class="btn" style="width:100%" onclick="entrar()">Entrar</button>
+    </div>
+  </div>
+
+  <div class="layout" id="telaPainel" style="display:none">
+    <aside class="sidebar">
+      <div class="logo">VIGIA<small>Superadmin</small></div>
+      <nav>
+        <a href="#" class="ativo">Painel de controle</a>
+      </nav>
+    </aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Painel do Superadmin</h1>
+        <div class="usuario-area">
+          <span id="nomeAdmin"></span>
+          <button class="btn secundario pequeno" onclick="sair()">Sair</button>
+        </div>
+      </div>
+
+      <div class="abas">
+        <button class="ativa" data-aba="tenants" onclick="trocarAba('tenants')">Tenants</button>
+        <button data-aba="superusuarios" onclick="trocarAba('superusuarios')">Superusuários</button>
+      </div>
+
+      <!-- Aba tenants -->
+      <div class="aba-conteudo ativa" id="aba-tenants">
+        <div class="barra-acoes">
+          <input type="search" id="buscaTenant" placeholder="Buscar por nome ou CNPJ">
+          <label style="margin:0;display:flex;align-items:center;gap:6px;font-weight:400">
+            <input type="checkbox" id="verInativos" style="width:auto" onchange="carregarTenants()"> incluir inativos
+          </label>
+          <button class="btn" onclick="abrirNovoTenant()">Novo tenant</button>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Nome</th><th>CNPJ</th><th>Plano</th><th>Status</th><th>Usuários</th><th>Produtos</th><th></th></tr></thead>
+            <tbody id="tabelaTenants"><tr><td colspan="7" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Aba superusuários -->
+      <div class="aba-conteudo" id="aba-superusuarios">
+        <div class="barra-acoes">
+          <button class="btn" onclick="abrirNovoSuper()">Novo superusuário</button>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Lojas atreladas</th><th></th></tr></thead>
+            <tbody id="tabelaSupers"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal tenant -->
+  <div class="modal-fundo" id="modalTenant">
+    <div class="modal">
+      <h2 id="tituloTenant">Novo tenant</h2>
+      <div id="erroTenant" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="t_nome"></div>
+        <div class="campo"><label>CNPJ *</label><input id="t_cnpj" maxlength="18"></div>
+        <div class="campo"><label>E-mail *</label><input id="t_email" type="email"></div>
+        <div class="campo"><label>Plano</label>
+          <select id="t_plano"><option value="basico">básico</option><option value="pro">pro</option><option value="rede">rede</option></select>
+        </div>
+        <div class="campo"><label>Regime tributário</label>
+          <select id="t_regime"><option value="simples">Simples Nacional</option><option value="presumido">Lucro Presumido</option><option value="real">Lucro Real</option></select>
+        </div>
+      </div>
+      <div id="areaDono">
+        <h2 style="font-size:15px;margin:14px 0 8px">Dono inicial (opcional)</h2>
+        <div class="form-grid">
+          <div class="campo"><label>Nome</label><input id="d_nome"></div>
+          <div class="campo"><label>E-mail</label><input id="d_email" type="email"></div>
+          <div class="campo cheio"><label>Senha</label><input id="d_senha" type="password"></div>
+        </div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalTenant')">Cancelar</button>
+        <button class="btn" onclick="salvarTenant()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal importar produtos para tenant -->
+  <div class="modal-fundo" id="modalImportarTenant">
+    <div class="modal">
+      <h2>Importar produtos para o tenant</h2>
+      <div id="erroImportTenant" class="msg-erro"></div>
+      <div class="barra-acoes">
+        <button class="btn secundario" onclick="baixarModeloTenant()">Baixar modelo.xlsx</button>
+        <input type="file" id="arquivoTenant" accept=".csv,.xlsx,.xls">
+        <button class="btn" onclick="previewTenant()">Gerar prévia</button>
+      </div>
+      <p id="resumoImportTenant" style="font-weight:600;margin:8px 0"></p>
+      <div class="rodape">
+        <button class="btn" id="btnConfirmarImportTenant" style="display:none" onclick="confirmarImportTenant()">Confirmar importação</button>
+        <button class="btn secundario" onclick="UI.fecharModal('modalImportarTenant')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal superusuário -->
+  <div class="modal-fundo" id="modalSuper">
+    <div class="modal">
+      <h2>Novo superusuário</h2>
+      <div id="erroSuper" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="s_nome"></div>
+        <div class="campo"><label>E-mail *</label><input id="s_email" type="email"></div>
+        <div class="campo"><label>Senha *</label><input id="s_senha" type="password"></div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalSuper')">Cancelar</button>
+        <button class="btn" onclick="salvarSuper()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal atrelar tenants -->
+  <div class="modal-fundo" id="modalAtrelar">
+    <div class="modal">
+      <h2>Lojas atreladas</h2>
+      <div id="erroAtrelar" class="msg-erro"></div>
+      <div id="listaAtrelar" style="max-height:300px;overflow-y:auto"></div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalAtrelar')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Wrapper de API do superadmin: token no localStorage (admin_token, 4h, sem refresh).
+     */
+    const AdminApi = {
+      token: () => localStorage.getItem('admin_token'),
+      async request(caminho, opcoes = {}) {
+        const headers = opcoes.headers ? { ...opcoes.headers } : {};
+        if (!(opcoes.body instanceof FormData) && opcoes.body !== undefined) headers['Content-Type'] = 'application/json';
+        if (this.token()) headers['Authorization'] = 'Bearer ' + this.token();
+        const resp = await fetch(caminho, { ...opcoes, headers });
+        if (resp.status === 401) { localStorage.removeItem('admin_token'); mostrarLogin(); throw new Error('Sessão expirada'); }
+        const tipo = resp.headers.get('content-type') || '';
+        if (!tipo.includes('application/json')) {
+          if (!resp.ok) throw new Error('Falha na requisição');
+          return resp.blob();
+        }
+        const json = await resp.json();
+        if (!json.success) { const e = new Error(json.message); e.errors = json.errors || []; throw e; }
+        return json.data;
+      },
+      get(c) { return this.request(c); },
+      post(c, b) { return this.request(c, { method: 'POST', body: b instanceof FormData ? b : JSON.stringify(b) }); },
+      put(c, b) { return this.request(c, { method: 'PUT', body: JSON.stringify(b) }); },
+      del(c) { return this.request(c, { method: 'DELETE' }); },
+    };
+
+    const UI = {
+      abrirModal: (id) => document.getElementById(id).classList.add('aberto'),
+      fecharModal: (id) => document.getElementById(id).classList.remove('aberto'),
+      escapar: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    };
+
+    let editandoTenantId = null, tenantImportandoId = null, tokenImportTenant = null;
+
+    function mostrarLogin() {
+      document.getElementById('telaLogin').style.display = 'flex';
+      document.getElementById('telaPainel').style.display = 'none';
+    }
+    function mostrarPainel() {
+      document.getElementById('telaLogin').style.display = 'none';
+      document.getElementById('telaPainel').style.display = 'flex';
+      const admin = JSON.parse(localStorage.getItem('admin_usuario') || 'null');
+      if (admin) document.getElementById('nomeAdmin').textContent = admin.nome;
+      carregarTenants();
+    }
+
+    async function entrar() {
+      const erroEl = document.getElementById('erroLogin');
+      erroEl.classList.remove('visivel');
+      try {
+        const resp = await fetch('/api/superadmin/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: document.getElementById('loginEmail').value.trim(), senha: document.getElementById('loginSenha').value }),
+        });
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.message);
+        localStorage.setItem('admin_token', json.data.accessToken);
+        localStorage.setItem('admin_usuario', JSON.stringify(json.data.superadmin));
+        mostrarPainel();
+      } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }
+    }
+
+    function sair() {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_usuario');
+      mostrarLogin();
+    }
+
+    function trocarAba(aba) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
+      if (aba === 'tenants') carregarTenants();
+      else carregarSupers();
+    }
+
+    // ─── Tenants ───
+    async function carregarTenants() {
+      const busca = encodeURIComponent(document.getElementById('buscaTenant').value.trim());
+      const inativos = document.getElementById('verInativos').checked ? '&incluirInativos=true' : '';
+      const data = await AdminApi.get('/api/superadmin/tenants?limit=50&search=' + busca + inativos);
+      document.getElementById('tabelaTenants').innerHTML = data.items.map((t) =>
+        '<tr><td>' + UI.escapar(t.nome) + '</td><td>' + t.cnpj + '</td><td>' + t.plano + '</td>' +
+        '<td><span class="tag ' + (t.ativo ? 'ok' : 'erro') + '">' + (t.ativo ? 'ativo' : 'inativo') + '</span></td>' +
+        '<td>' + t._count.usuarios + '</td><td>' + t._count.produtos + '</td>' +
+        '<td><button class="btn secundario pequeno" onclick=\'editarTenant(' + JSON.stringify(t) + ')\'>Editar</button> ' +
+        '<button class="btn secundario pequeno" onclick=\'alternarTenant(' + JSON.stringify(t.id) + ',' + !t.ativo + ')\'>' + (t.ativo ? 'Desativar' : 'Ativar') + '</button> ' +
+        '<button class="btn pequeno" onclick=\'abrirImportarTenant(' + JSON.stringify(t.id) + ')\'>Importar produtos</button></td></tr>'
+      ).join('') || '<tr><td colspan="7" class="vazio">Nenhum tenant.</td></tr>';
+    }
+
+    function abrirNovoTenant() {
+      editandoTenantId = null;
+      document.getElementById('tituloTenant').textContent = 'Novo tenant';
+      document.getElementById('areaDono').style.display = 'block';
+      document.getElementById('erroTenant').classList.remove('visivel');
+      ['t_nome','t_cnpj','t_email','d_nome','d_email','d_senha'].forEach((id) => document.getElementById(id).value = '');
+      UI.abrirModal('modalTenant');
+    }
+
+    function editarTenant(t) {
+      editandoTenantId = t.id;
+      document.getElementById('tituloTenant').textContent = 'Editar tenant';
+      document.getElementById('areaDono').style.display = 'none';
+      document.getElementById('erroTenant').classList.remove('visivel');
+      document.getElementById('t_nome').value = t.nome;
+      document.getElementById('t_cnpj').value = t.cnpj;
+      document.getElementById('t_email').value = t.email;
+      document.getElementById('t_plano').value = t.plano;
+      document.getElementById('t_regime').value = t.regimeTributario;
+      UI.abrirModal('modalTenant');
+    }
+
+    async function salvarTenant() {
+      const erroEl = document.getElementById('erroTenant');
+      erroEl.classList.remove('visivel');
+      const body = {
+        nome: document.getElementById('t_nome').value.trim(),
+        cnpj: document.getElementById('t_cnpj').value.trim(),
+        email: document.getElementById('t_email').value.trim(),
+        plano: document.getElementById('t_plano').value,
+        regimeTributario: document.getElementById('t_regime').value,
+      };
+      if (!editandoTenantId) {
+        const donoEmail = document.getElementById('d_email').value.trim();
+        if (donoEmail)
+          body.dono = { nome: document.getElementById('d_nome').value.trim(), email: donoEmail, senha: document.getElementById('d_senha').value };
+      }
+      try {
+        if (editandoTenantId) await AdminApi.put('/api/superadmin/tenants/' + editandoTenantId, body);
+        else await AdminApi.post('/api/superadmin/tenants', body);
+        UI.fecharModal('modalTenant');
+        carregarTenants();
+      } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }
+    }
+
+    async function alternarTenant(id, ativo) {
+      try { await AdminApi.put('/api/superadmin/tenants/' + id, { ativo }); carregarTenants(); }
+      catch (e) { alert(e.message); }
+    }
+
+    function abrirImportarTenant(id) {
+      tenantImportandoId = id; tokenImportTenant = null;
+      document.getElementById('resumoImportTenant').textContent = '';
+      document.getElementById('btnConfirmarImportTenant').style.display = 'none';
+      document.getElementById('erroImportTenant').classList.remove('visivel');
+      UI.abrirModal('modalImportarTenant');
+    }
+
+    async function baixarModeloTenant() {
+      const blob = await AdminApi.request('/api/superadmin/tenants/' + tenantImportandoId + '/produtos/modelo');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'modelo.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function previewTenant() {
+      const erroEl = document.getElementById('erroImportTenant');
+      erroEl.classList.remove('visivel');
+      const input = document.getElementById('arquivoTenant');
+      if (!input.files.length) { erroEl.textContent = 'Selecione um arquivo.'; erroEl.classList.add('visivel'); return; }
+      const form = new FormData(); form.append('arquivo', input.files[0]);
+      try {
+        const data = await AdminApi.post('/api/superadmin/tenants/' + tenantImportandoId + '/produtos/importar/preview', form);
+        tokenImportTenant = data.tokenImportacao;
+        document.getElementById('resumoImportTenant').textContent =
+          data.total + ' linhas · ' + data.validos + ' válidas · ' + data.invalidos + ' inválidas';
+        document.getElementById('btnConfirmarImportTenant').style.display = data.validos > 0 ? 'inline-block' : 'none';
+      } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }
+    }
+
+    async function confirmarImportTenant() {
+      try {
+        const r = await AdminApi.post('/api/superadmin/tenants/' + tenantImportandoId + '/produtos/importar/confirmar', { tokenImportacao: tokenImportTenant });
+        alert('Importação concluída: ' + r.inseridos + ' inseridos, ' + r.ignorados + ' ignorados.');
+        UI.fecharModal('modalImportarTenant');
+        carregarTenants();
+      } catch (e) { alert(e.message); }
+    }
+
+    // ─── Superusuários ───
+    async function carregarSupers() {
+      const data = await AdminApi.get('/api/superadmin/superusuarios?limit=50');
+      document.getElementById('tabelaSupers').innerHTML = data.items.map((s) =>
+        '<tr><td>' + UI.escapar(s.nome) + '</td><td>' + UI.escapar(s.email) + '</td>' +
+        '<td>' + s.redes.map((r) => UI.escapar(r.tenant.nome)).join(', ') + '</td>' +
+        '<td><button class="btn pequeno" onclick=\'abrirAtrelar(' + JSON.stringify(s.id) + ')\'>Gerenciar lojas</button></td></tr>'
+      ).join('') || '<tr><td colspan="4" class="vazio">Nenhum superusuário.</td></tr>';
+    }
+
+    function abrirNovoSuper() {
+      document.getElementById('erroSuper').classList.remove('visivel');
+      ['s_nome','s_email','s_senha'].forEach((id) => document.getElementById(id).value = '');
+      UI.abrirModal('modalSuper');
+    }
+
+    async function salvarSuper() {
+      const erroEl = document.getElementById('erroSuper');
+      erroEl.classList.remove('visivel');
+      try {
+        await AdminApi.post('/api/superadmin/superusuarios', {
+          nome: document.getElementById('s_nome').value.trim(),
+          email: document.getElementById('s_email').value.trim(),
+          senha: document.getElementById('s_senha').value,
+        });
+        UI.fecharModal('modalSuper');
+        carregarSupers();
+      } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }
+    }
+
+    async function abrirAtrelar(superusuarioId) {
+      const [supers, tenants] = await Promise.all([
+        AdminApi.get('/api/superadmin/superusuarios?limit=50'),
+        AdminApi.get('/api/superadmin/tenants?limit=100'),
+      ]);
+      const superusuario = supers.items.find((s) => s.id === superusuarioId);
+      const atrelados = new Set(superusuario.redes.map((r) => r.tenantId));
+      document.getElementById('listaAtrelar').innerHTML = tenants.items.map((t) => {
+        const esta = atrelados.has(t.id);
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--linha)">' +
+          '<span>' + UI.escapar(t.nome) + '</span>' +
+          '<button class="btn pequeno ' + (esta ? 'perigo' : '') + '" onclick=\'' +
+          (esta ? 'desatrelar(' : 'atrelar(') + JSON.stringify(superusuarioId) + ',' + JSON.stringify(t.id) + ')\'>' +
+          (esta ? 'Desatrelar' : 'Atrelar') + '</button></div>';
+      }).join('');
+      UI.abrirModal('modalAtrelar');
+    }
+
+    async function atrelar(superusuarioId, tenantId) {
+      try { await AdminApi.post('/api/superadmin/superusuarios/' + superusuarioId + '/tenants', { tenantIds: [tenantId] }); abrirAtrelar(superusuarioId); carregarSupers(); }
+      catch (e) { alert(e.message); }
+    }
+    async function desatrelar(superusuarioId, tenantId) {
+      try { await AdminApi.del('/api/superadmin/superusuarios/' + superusuarioId + '/tenants/' + tenantId); abrirAtrelar(superusuarioId); carregarSupers(); }
+      catch (e) { alert(e.message); }
+    }
+
+    document.getElementById('buscaTenant').addEventListener('input', carregarTenants);
+    document.getElementById('loginSenha').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') entrar(); });
+
+    if (AdminApi.token()) mostrarPainel(); else mostrarLogin();
+  </script>
+</body>
+</html>

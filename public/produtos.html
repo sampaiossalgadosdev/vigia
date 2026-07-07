@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Produtos</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Produtos</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="barra-acoes">
+        <input type="search" id="busca" placeholder="Buscar por nome, EAN, marca ou PLU">
+        <button class="btn" onclick="abrirNovo()">Novo produto</button>
+        <button class="btn secundario" onclick="UI.abrirModal('modalImportar')">Importar em lote</button>
+      </div>
+
+      <div class="painel">
+        <table>
+          <thead><tr><th>EAN</th><th>Nome</th><th>Unid.</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Categoria</th><th></th></tr></thead>
+          <tbody id="tabela"><tr><td colspan="8" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+        <div class="paginacao">
+          <button class="btn secundario pequeno" onclick="mudarPagina(-1)">Anterior</button>
+          <span id="infoPagina"></span>
+          <button class="btn secundario pequeno" onclick="mudarPagina(1)">Próxima</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal criar/editar -->
+  <div class="modal-fundo" id="modalProduto">
+    <div class="modal">
+      <h2 id="tituloModal">Novo produto</h2>
+      <div id="erroModal" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo"><label>EAN *</label><input id="f_ean" maxlength="14"></div>
+        <div class="campo"><label>Nome *</label><input id="f_nome" maxlength="200"></div>
+        <div class="campo"><label>Marca</label><input id="f_marca"></div>
+        <div class="campo"><label>NCM (8 dígitos)</label><input id="f_ncm" maxlength="8"></div>
+        <div class="campo"><label>Unidade</label>
+          <select id="f_unidade"><option>UN</option><option>KG</option><option>CX</option><option>L</option><option>PC</option><option>FD</option></select>
+        </div>
+        <div class="campo"><label>Preço (R$) *</label><input id="f_preco" type="number" step="0.01" min="0.01"></div>
+        <div class="campo"><label>Custo médio (R$)</label><input id="f_custo" type="number" step="0.01" min="0"></div>
+        <div class="campo"><label>Estoque atual</label><input id="f_estoque" type="number" step="0.001" min="0"></div>
+        <div class="campo"><label>Estoque mínimo</label><input id="f_minimo" type="number" step="0.001" min="0"></div>
+        <div class="campo"><label>Categoria (id opcional)</label><input id="f_categoria" placeholder="uuid da categoria"></div>
+        <div class="campo">
+          <label><input type="checkbox" id="f_peso" style="width:auto"> Vendido por peso (balança)</label>
+        </div>
+        <div class="campo" id="campoPlu" style="display:none"><label>PLU (4 a 6 dígitos) *</label><input id="f_plu" maxlength="6"></div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalProduto')">Cancelar</button>
+        <button class="btn" id="btnSalvar" onclick="salvar()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal importação em lote -->
+  <div class="modal-fundo" id="modalImportar">
+    <div class="modal">
+      <h2>Importar produtos em lote</h2>
+      <div id="erroImportar" class="msg-erro"></div>
+      <p style="font-size:14px;color:var(--cinza);margin-bottom:12px">
+        1) Baixe o modelo · 2) Preencha e envie (CSV ou XLSX, até 5.000 linhas / 10MB) · 3) Confira a prévia · 4) Confirme.
+      </p>
+      <div class="barra-acoes">
+        <button class="btn secundario" onclick="baixarModelo()">Baixar modelo.xlsx</button>
+        <input type="file" id="arquivoImportar" accept=".csv,.xlsx,.xls">
+        <button class="btn" onclick="enviarPreview()">Gerar prévia</button>
+      </div>
+      <div id="areaPreview" style="display:none">
+        <p id="resumoPreview" style="font-weight:600;margin:10px 0"></p>
+        <div style="max-height:300px;overflow-y:auto">
+          <table>
+            <thead><tr><th>Linha</th><th>Nome</th><th>EAN</th><th>Status</th></tr></thead>
+            <tbody id="tabelaPreview"></tbody>
+          </table>
+        </div>
+        <div class="rodape">
+          <button class="btn" id="btnConfirmarImportacao" onclick="confirmarImportacao()">Confirmar importação</button>
+        </div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalImportar')">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let pagina = 1, totalPaginas = 1, editandoId = null, tokenImportacao = null;
+
+    document.getElementById('f_peso').addEventListener('change', (ev) => {
+      document.getElementById('campoPlu').style.display = ev.target.checked ? 'block' : 'none';
+    });
+
+    async function carregar() {
+      const busca = encodeURIComponent(document.getElementById('busca').value.trim());
+      const data = await API.get('/api/produtos?page=' + pagina + '&limit=20&search=' + busca);
+      totalPaginas = data.totalPages || 1;
+      document.getElementById('infoPagina').textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
+      const corpo = document.getElementById('tabela');
+      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="8" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
+      corpo.innerHTML = data.items.map((p) =>
+        '<tr><td>' + p.ean + (p.vendidoPorPeso ? ' <span class="tag neutro">PLU ' + p.plu + '</span>' : '') + '</td>' +
+        '<td>' + UI.escapar(p.nome) + '</td><td>' + p.unidade + '</td>' +
+        '<td>' + UI.moeda(p.preco) + '</td><td>' + UI.moeda(p.custoMedio) + '</td>' +
+        '<td>' + (Number(p.estoqueQtd) <= Number(p.estoqueMin) ? '<span class="tag erro">' + p.estoqueQtd + '</span>' : p.estoqueQtd) + '</td>' +
+        '<td>' + (p.categoria ? UI.escapar(p.categoria.nome) : '-') + '</td>' +
+        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(p.id) + ')\'>Editar</button> ' +
+        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(p.id) + ')\'>Excluir</button></td></tr>'
+      ).join('');
+    }
+
+    function mudarPagina(delta) {
+      const nova = pagina + delta;
+      if (nova < 1 || nova > totalPaginas) return;
+      pagina = nova; carregar();
+    }
+
+    function preencher(p) {
+      document.getElementById('f_ean').value = p.ean || '';
+      document.getElementById('f_nome').value = p.nome || '';
+      document.getElementById('f_marca').value = p.marca || '';
+      document.getElementById('f_ncm').value = p.ncm || '';
+      document.getElementById('f_unidade').value = p.unidade || 'UN';
+      document.getElementById('f_preco').value = p.preco || '';
+      document.getElementById('f_custo').value = p.custoMedio || '';
+      document.getElementById('f_estoque').value = p.estoqueQtd || '';
+      document.getElementById('f_minimo').value = p.estoqueMin || '';
+      document.getElementById('f_categoria').value = p.categoriaId || '';
+      document.getElementById('f_peso').checked = !!p.vendidoPorPeso;
+      document.getElementById('f_plu').value = p.plu || '';
+      document.getElementById('campoPlu').style.display = p.vendidoPorPeso ? 'block' : 'none';
+    }
+
+    function abrirNovo() {
+      editandoId = null;
+      document.getElementById('tituloModal').textContent = 'Novo produto';
+      document.getElementById('erroModal').classList.remove('visivel');
+      preencher({});
+      UI.abrirModal('modalProduto');
+    }
+
+    async function editar(id) {
+      const p = await API.get('/api/produtos/' + id);
+      editandoId = id;
+      document.getElementById('tituloModal').textContent = 'Editar produto';
+      document.getElementById('erroModal').classList.remove('visivel');
+      preencher(p);
+      UI.abrirModal('modalProduto');
+    }
+
+    async function salvar() {
+      const body = {
+        ean: document.getElementById('f_ean').value.trim(),
+        nome: document.getElementById('f_nome').value.trim(),
+        marca: document.getElementById('f_marca').value.trim(),
+        ncm: document.getElementById('f_ncm').value.trim(),
+        unidade: document.getElementById('f_unidade').value,
+        preco: document.getElementById('f_preco').value,
+        custoMedio: document.getElementById('f_custo').value || 0,
+        estoqueQtd: document.getElementById('f_estoque').value || 0,
+        estoqueMin: document.getElementById('f_minimo').value || 0,
+        categoriaId: document.getElementById('f_categoria').value.trim(),
+        vendidoPorPeso: document.getElementById('f_peso').checked,
+        plu: document.getElementById('f_plu').value.trim(),
+      };
+      const erroEl = document.getElementById('erroModal');
+      erroEl.classList.remove('visivel');
+      try {
+        if (editandoId) await API.put('/api/produtos/' + editandoId, body);
+        else await API.post('/api/produtos', body);
+        UI.fecharModal('modalProduto');
+        carregar();
+      } catch (e) {
+        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroEl.classList.add('visivel');
+      }
+    }
+
+    async function remover(id) {
+      if (!confirm('Desativar este produto? Ele sairá das listagens (soft delete).')) return;
+      try { await API.del('/api/produtos/' + id); carregar(); } catch (e) { alert(e.message); }
+    }
+
+    // ─── Importação em lote ───
+    async function baixarModelo() {
+      const blob = await API.request('/api/produtos/exportar/modelo');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'modelo.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function enviarPreview() {
+      const erroEl = document.getElementById('erroImportar');
+      erroEl.classList.remove('visivel');
+      const input = document.getElementById('arquivoImportar');
+      if (!input.files.length) { erroEl.textContent = 'Selecione um arquivo CSV ou XLSX.'; erroEl.classList.add('visivel'); return; }
+      const form = new FormData();
+      form.append('arquivo', input.files[0]);
+      try {
+        const data = await API.post('/api/produtos/importar/preview', form);
+        tokenImportacao = data.tokenImportacao;
+        document.getElementById('resumoPreview').textContent =
+          data.total + ' linhas · ' + data.validos + ' válidas · ' + data.invalidos + ' inválidas';
+        document.getElementById('tabelaPreview').innerHTML = data.itens.map((i) =>
+          '<tr><td>' + i.linha + '</td><td>' + UI.escapar(i.nome || '-') + '</td><td>' + (i.ean || '-') + '</td>' +
+          '<td>' + (i.status === 'valido'
+            ? '<span class="tag ok">válido</span>'
+            : '<span class="tag erro">inválido</span> <small>' + UI.escapar((i.erros || []).join('; ')) + '</small>') + '</td></tr>'
+        ).join('');
+        document.getElementById('areaPreview').style.display = 'block';
+        document.getElementById('btnConfirmarImportacao').disabled = data.validos === 0;
+      } catch (e) {
+        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+      }
+    }
+
+    async function confirmarImportacao() {
+      const erroEl = document.getElementById('erroImportar');
+      erroEl.classList.remove('visivel');
+      try {
+        const resultado = await API.post('/api/produtos/importar/confirmar', { tokenImportacao });
+        alert('Importação concluída: ' + resultado.inseridos + ' inseridos, ' + resultado.ignorados + ' ignorados.');
+        UI.fecharModal('modalImportar');
+        document.getElementById('areaPreview').style.display = 'none';
+        carregar();
+      } catch (e) {
+        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+      }
+    }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('produtos.html');
+      document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
+      carregar();
+    })();
+  </script>
+</body>
+</html>

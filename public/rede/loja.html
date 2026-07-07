@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA Rede · Loja</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/rede.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="rede">
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1 id="tituloLoja">Loja</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="barra-acoes">
+        <a href="/rede/index.html" class="btn secundario">← Voltar</a>
+        <button class="btn" onclick="abrirSugestao()">Enviar sugestão para esta loja</button>
+      </div>
+
+      <div class="cards">
+        <div class="card"><div class="rotulo">Faturamento do mês (estimado)</div><div class="valor" id="kpiFat">—</div></div>
+        <div class="card"><div class="rotulo">Movimentações no mês</div><div class="valor" id="kpiMov">—</div></div>
+        <div class="card"><div class="rotulo">Ticket médio</div><div class="valor" id="kpiTicket">—</div></div>
+        <div class="card alerta"><div class="rotulo">Rupturas de estoque</div><div class="valor" id="kpiRupturas">—</div></div>
+      </div>
+
+      <div class="painel">
+        <h2>Saídas por dia · últimos 30 dias</h2>
+        <canvas id="grafico30" height="90"></canvas>
+      </div>
+
+      <div class="painel">
+        <h2>Histórico mensal · últimos 6 meses</h2>
+        <canvas id="grafico6m" height="80"></canvas>
+      </div>
+
+      <div class="painel">
+        <h2>Top 10 produtos (30 dias)</h2>
+        <table>
+          <thead><tr><th>#</th><th>Produto</th><th>Qtd saída</th><th>Valor estimado</th></tr></thead>
+          <tbody id="tabelaTop"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="painel">
+        <h2>Rupturas de estoque (estoque ≤ mínimo)</h2>
+        <table>
+          <thead><tr><th>Produto</th><th>EAN</th><th>Estoque</th><th>Mínimo</th></tr></thead>
+          <tbody id="tabelaRupturas"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="painel">
+        <h2>Sugestões que você já enviou para esta loja</h2>
+        <div id="listaSugestoes" class="vazio">Carregando...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal de sugestão -->
+  <div class="modal-fundo" id="modalSugestao">
+    <div class="modal">
+      <h2>Enviar sugestão</h2>
+      <div id="erroSugestao" class="msg-erro"></div>
+      <div class="campo"><label>Tipo</label>
+        <select id="s_tipo">
+          <option value="geral">Geral</option>
+          <option value="promocao">Promoção</option>
+          <option value="estoque">Estoque</option>
+          <option value="preco">Preço</option>
+        </select>
+      </div>
+      <div class="campo"><label>Título *</label><input id="s_titulo" maxlength="150"></div>
+      <div class="campo"><label>Mensagem *</label><textarea id="s_mensagem" rows="4"></textarea></div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="fecharModal()">Cancelar</button>
+        <button class="btn" onclick="enviarSugestao()">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api-rede.js"></script>
+  <script src="/js/auth-rede.js"></script>
+  <script>
+    const tenantId = new URLSearchParams(window.location.search).get('id');
+    const moeda = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const escapar = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    function fecharModal() { document.getElementById('modalSugestao').classList.remove('aberto'); }
+    function abrirSugestao() {
+      document.getElementById('erroSugestao').classList.remove('visivel');
+      document.getElementById('s_titulo').value = '';
+      document.getElementById('s_mensagem').value = '';
+      document.getElementById('modalSugestao').classList.add('aberto');
+    }
+
+    async function enviarSugestao() {
+      const erroEl = document.getElementById('erroSugestao');
+      erroEl.classList.remove('visivel');
+      try {
+        await ApiRede.post('/api/rede/sugestoes', {
+          tenantId,
+          tipo: document.getElementById('s_tipo').value,
+          titulo: document.getElementById('s_titulo').value.trim(),
+          mensagem: document.getElementById('s_mensagem').value.trim(),
+        });
+        fecharModal();
+        alert('Sugestão enviada. A loja verá no dashboard dela.');
+        carregar();
+      } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }
+    }
+
+    let g30 = null, g6m = null;
+
+    async function carregar() {
+      const data = await ApiRede.get('/api/rede/lojas/' + tenantId);
+
+      document.getElementById('tituloLoja').textContent = data.loja.nome;
+      document.getElementById('kpiFat').textContent = moeda(data.kpis.faturamentoMes);
+      document.getElementById('kpiMov').textContent = data.kpis.movimentacoesMes;
+      document.getElementById('kpiTicket').textContent = moeda(data.kpis.ticketMedio);
+      document.getElementById('kpiRupturas').textContent = data.kpis.rupturas;
+
+      // Gráfico 30 dias (barras)
+      const ctx30 = document.getElementById('grafico30');
+      if (g30) g30.destroy();
+      g30 = new Chart(ctx30, {
+        type: 'bar',
+        data: {
+          labels: data.grafico30Dias.map((d) => d.dia.slice(5)),
+          datasets: [{
+            label: 'Valor estimado (R$)',
+            data: data.grafico30Dias.map((d) => d.valor),
+            backgroundColor: 'rgba(79,142,247,.65)',
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          plugins: { legend: { labels: { color: '#93a3c0' } } },
+          scales: {
+            x: { ticks: { color: '#93a3c0' }, grid: { color: 'rgba(147,163,192,.1)' } },
+            y: { ticks: { color: '#93a3c0' }, grid: { color: 'rgba(147,163,192,.1)' } },
+          },
+        },
+      });
+
+      // Gráfico 6 meses (linha)
+      const ctx6m = document.getElementById('grafico6m');
+      if (g6m) g6m.destroy();
+      g6m = new Chart(ctx6m, {
+        type: 'line',
+        data: {
+          labels: data.historico6Meses.map((m) => m.mes),
+          datasets: [{
+            label: 'Faturamento estimado (R$)',
+            data: data.historico6Meses.map((m) => m.valor),
+            borderColor: '#4f8ef7',
+            backgroundColor: 'rgba(79,142,247,.18)',
+            fill: true,
+            tension: .3,
+          }],
+        },
+        options: {
+          plugins: { legend: { labels: { color: '#93a3c0' } } },
+          scales: {
+            x: { ticks: { color: '#93a3c0' }, grid: { color: 'rgba(147,163,192,.1)' } },
+            y: { ticks: { color: '#93a3c0' }, grid: { color: 'rgba(147,163,192,.1)' } },
+          },
+        },
+      });
+
+      // Top 10
+      const corpoTop = document.getElementById('tabelaTop');
+      corpoTop.innerHTML = data.topProdutos.length
+        ? data.topProdutos.map((p, i) =>
+            '<tr><td>' + (i + 1) + '</td><td>' + escapar(p.nome) + '</td><td>' + Number(p.quantidade).toLocaleString('pt-BR') + '</td><td>' + moeda(p.valor) + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="4" class="vazio">Sem saídas no período.</td></tr>';
+
+      // Rupturas
+      const corpoRupturas = document.getElementById('tabelaRupturas');
+      corpoRupturas.innerHTML = data.rupturas.length
+        ? data.rupturas.map((r) =>
+            '<tr><td>' + escapar(r.nome) + '</td><td>' + r.ean + '</td><td style="color:var(--rede-alerta);font-weight:700">' + r.estoqueQtd + '</td><td>' + r.estoqueMin + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="4" class="vazio">Nenhuma ruptura. 👌</td></tr>';
+
+      // Sugestões enviadas
+      const lista = document.getElementById('listaSugestoes');
+      lista.classList.remove('vazio');
+      lista.innerHTML = data.sugestoesEnviadas.length
+        ? data.sugestoesEnviadas.map((s) =>
+            '<div style="padding:10px 0;border-bottom:1px solid var(--rede-linha)">' +
+            '<span class="tag neutro">' + s.tipo + '</span> <strong>' + escapar(s.titulo) + '</strong>' +
+            ' <small style="color:var(--rede-suave)">(' + s.status + ')</small>' +
+            '<div style="font-size:13px;color:var(--rede-suave);margin-top:4px">' + escapar(s.mensagem) + '</div></div>'
+          ).join('')
+        : '<div class="vazio">Você ainda não enviou sugestões para esta loja.</div>';
+    }
+
+    (async () => {
+      const usuario = AuthRede.exigirLogin();
+      if (!usuario) return;
+      AuthRede.montarSidebar('index.html');
+      if (!tenantId) { window.location.href = '/rede/index.html'; return; }
+      try { await carregar(); }
+      catch (e) { alert(e.message); window.location.href = '/rede/index.html'; }
+    })();
+  </script>
+</body>
+</html>

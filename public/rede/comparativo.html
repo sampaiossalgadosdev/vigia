@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA Rede · Comparativo</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/rede.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="rede">
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Comparativo entre lojas</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="barra-acoes">
+        <label style="margin:0">Mês:</label>
+        <input type="month" id="filtroMes" style="max-width:180px">
+        <button class="btn" onclick="carregar()">Aplicar</button>
+      </div>
+
+      <div class="painel">
+        <h2>Faturamento estimado por loja</h2>
+        <canvas id="graficoComparativo" height="90"></canvas>
+      </div>
+
+      <div class="painel">
+        <h2>Detalhamento</h2>
+        <table>
+          <thead><tr><th>Loja</th><th>Faturamento</th><th>Movimentações</th><th>Ticket médio</th><th>Rupturas</th></tr></thead>
+          <tbody id="tabelaLojas"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="painel">
+        <h2>Ranking do mês</h2>
+        <table>
+          <thead><tr><th>Posição</th><th>Loja</th><th>Faturamento</th></tr></thead>
+          <tbody id="tabelaRanking"></tbody>
+        </table>
+      </div>
+
+      <div class="painel">
+        <h2>Produtos mais vendidos na rede</h2>
+        <table>
+          <thead><tr><th>#</th><th>Produto</th><th>Qtd total</th><th>Valor estimado</th></tr></thead>
+          <tbody id="tabelaProdutosRede"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api-rede.js"></script>
+  <script src="/js/auth-rede.js"></script>
+  <script>
+    const moeda = (v) => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const escapar = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let grafico = null;
+
+    async function carregar() {
+      const mes = document.getElementById('filtroMes').value;
+      const data = await ApiRede.get('/api/rede/comparativo' + (mes ? '?mes=' + mes : ''));
+      if (!mes) document.getElementById('filtroMes').value = data.mes;
+
+      // Gráfico de barras
+      const ctx = document.getElementById('graficoComparativo');
+      if (grafico) grafico.destroy();
+      grafico = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.lojas.map((l) => l.nome),
+          datasets: [{
+            label: 'Faturamento estimado (R$) · ' + data.mes,
+            data: data.lojas.map((l) => l.faturamento),
+            backgroundColor: ['rgba(79,142,247,.75)', 'rgba(94,208,160,.75)', 'rgba(247,181,79,.75)', 'rgba(214,110,239,.75)', 'rgba(255,107,107,.75)'],
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          plugins: { legend: { labels: { color: '#93a3c0' } } },
+          scales: {
+            x: { ticks: { color: '#93a3c0' }, grid: { display: false } },
+            y: { ticks: { color: '#93a3c0' }, grid: { color: 'rgba(147,163,192,.1)' } },
+          },
+        },
+      });
+
+      document.getElementById('tabelaLojas').innerHTML = data.lojas.map((l) =>
+        '<tr><td>' + escapar(l.nome) + '</td><td>' + moeda(l.faturamento) + '</td><td>' + l.movimentacoes + '</td>' +
+        '<td>' + moeda(l.ticketMedio) + '</td><td>' + l.rupturas + '</td></tr>'
+      ).join('') || '<tr><td colspan="5" class="vazio">Sem lojas.</td></tr>';
+
+      document.getElementById('tabelaRanking').innerHTML = data.ranking.map((r) =>
+        '<tr><td>' + (r.posicao === 1 ? '🥇' : r.posicao === 2 ? '🥈' : r.posicao === 3 ? '🥉' : r.posicao + 'º') + '</td>' +
+        '<td>' + escapar(r.nome) + '</td><td>' + moeda(r.faturamento) + '</td></tr>'
+      ).join('');
+
+      document.getElementById('tabelaProdutosRede').innerHTML = data.produtosMaisVendidos.length
+        ? data.produtosMaisVendidos.map((p, i) =>
+            '<tr><td>' + (i + 1) + '</td><td>' + escapar(p.nome) + '</td><td>' + Number(p.quantidade).toLocaleString('pt-BR') + '</td><td>' + moeda(p.valor) + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="4" class="vazio">Sem saídas no período.</td></tr>';
+    }
+
+    (async () => {
+      const usuario = AuthRede.exigirLogin();
+      if (!usuario) return;
+      AuthRede.montarSidebar('comparativo.html');
+      carregar();
+    })();
+  </script>
+</body>
+</html>

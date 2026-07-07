@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Usuários</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Usuários</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="barra-acoes">
+        <button class="btn" onclick="abrirNovo()">Novo usuário</button>
+      </div>
+
+      <div class="painel">
+        <table>
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Criado em</th><th></th></tr></thead>
+          <tbody id="tabela"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-fundo" id="modalUsuario">
+    <div class="modal">
+      <h2 id="tituloModal">Novo usuário</h2>
+      <div id="erroModal" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="120"></div>
+        <div class="campo"><label>E-mail *</label><input id="f_email" type="email"></div>
+        <div class="campo"><label>Perfil *</label>
+          <select id="f_perfil"><option value="dono">dono</option><option value="gerente">gerente</option><option value="operador">operador</option></select>
+        </div>
+        <div class="campo cheio"><label id="rotuloSenha">Senha * (mínimo 6 caracteres)</label><input id="f_senha" type="password"></div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalUsuario')">Cancelar</button>
+        <button class="btn" onclick="salvar()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let editandoId = null;
+
+    async function carregar() {
+      const data = await API.get('/api/usuarios?limit=100');
+      const corpo = document.getElementById('tabela');
+      corpo.innerHTML = data.items.map((u) =>
+        '<tr><td>' + UI.escapar(u.nome) + '</td><td>' + UI.escapar(u.email) + '</td>' +
+        '<td><span class="tag neutro">' + u.perfil + '</span></td><td>' + UI.data(u.criadoEm) + '</td>' +
+        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(u) + ')\'>Editar</button> ' +
+        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(u.id) + ')\'>Desativar</button></td></tr>'
+      ).join('');
+    }
+
+    function abrirNovo() {
+      editandoId = null;
+      document.getElementById('tituloModal').textContent = 'Novo usuário';
+      document.getElementById('rotuloSenha').textContent = 'Senha * (mínimo 6 caracteres)';
+      document.getElementById('erroModal').classList.remove('visivel');
+      ['f_nome', 'f_email', 'f_senha'].forEach((id) => document.getElementById(id).value = '');
+      document.getElementById('f_perfil').value = 'operador';
+      UI.abrirModal('modalUsuario');
+    }
+
+    function editar(u) {
+      editandoId = u.id;
+      document.getElementById('tituloModal').textContent = 'Editar usuário';
+      document.getElementById('rotuloSenha').textContent = 'Nova senha (deixe em branco para manter)';
+      document.getElementById('erroModal').classList.remove('visivel');
+      document.getElementById('f_nome').value = u.nome;
+      document.getElementById('f_email').value = u.email;
+      document.getElementById('f_perfil').value = u.perfil;
+      document.getElementById('f_senha').value = '';
+      UI.abrirModal('modalUsuario');
+    }
+
+    async function salvar() {
+      const erroEl = document.getElementById('erroModal');
+      erroEl.classList.remove('visivel');
+      const body = {
+        nome: document.getElementById('f_nome').value.trim(),
+        email: document.getElementById('f_email').value.trim(),
+        perfil: document.getElementById('f_perfil').value,
+      };
+      const senha = document.getElementById('f_senha').value;
+      if (senha || !editandoId) body.senha = senha;
+      try {
+        if (editandoId) await API.put('/api/usuarios/' + editandoId, body);
+        else await API.post('/api/usuarios', body);
+        UI.fecharModal('modalUsuario');
+        carregar();
+      } catch (e) {
+        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroEl.classList.add('visivel');
+      }
+    }
+
+    async function remover(id) {
+      if (!confirm('Desativar este usuário? Ele perderá o acesso ao sistema.')) return;
+      try { await API.del('/api/usuarios/' + id); carregar(); } catch (e) { alert(e.message); }
+    }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      if (usuario.perfil !== 'dono') { window.location.href = '/index.html'; return; }
+      await Auth.montarSidebar('usuarios.html');
+      carregar();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Fornecedores</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Fornecedores</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+
+      <div class="barra-acoes">
+        <input type="search" id="busca" placeholder="Buscar por nome ou CNPJ">
+        <button class="btn" onclick="abrirNovo()">Novo fornecedor</button>
+      </div>
+
+      <div class="painel">
+        <table>
+          <thead><tr><th>Nome</th><th>CNPJ</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
+          <tbody id="tabela"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+        <div class="paginacao">
+          <button class="btn secundario pequeno" onclick="mudarPagina(-1)">Anterior</button>
+          <span id="infoPagina"></span>
+          <button class="btn secundario pequeno" onclick="mudarPagina(1)">Próxima</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-fundo" id="modalFornecedor">
+    <div class="modal">
+      <h2 id="tituloModal">Novo fornecedor</h2>
+      <div id="erroModal" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="200"></div>
+        <div class="campo"><label>CNPJ *</label><input id="f_cnpj" maxlength="18" placeholder="Somente números"></div>
+        <div class="campo"><label>Telefone</label><input id="f_telefone" maxlength="20"></div>
+        <div class="campo cheio"><label>E-mail</label><input id="f_email" type="email"></div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalFornecedor')">Cancelar</button>
+        <button class="btn" onclick="salvar()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    let pagina = 1, totalPaginas = 1, editandoId = null;
+
+    /** Validação de CNPJ no frontend (formato + dígitos verificadores). */
+    function cnpjValido(valor) {
+      const cnpj = String(valor || '').replace(/\D/g, '');
+      if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
+      const calc = (nums, pesos) => {
+        const soma = nums.reduce((acc, n, i) => acc + n * pesos[i], 0);
+        const resto = soma % 11;
+        return resto < 2 ? 0 : 11 - resto;
+      };
+      const n = cnpj.split('').map(Number);
+      return calc(n.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]) === n[12]
+        && calc(n.slice(0, 13), [6,5,4,3,2,9,8,7,6,5,4,3,2]) === n[13];
+    }
+
+    async function carregar() {
+      const busca = encodeURIComponent(document.getElementById('busca').value.trim());
+      const data = await API.get('/api/fornecedores?page=' + pagina + '&limit=20&search=' + busca);
+      totalPaginas = data.totalPages || 1;
+      document.getElementById('infoPagina').textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' fornecedores';
+      const corpo = document.getElementById('tabela');
+      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="5" class="vazio">Nenhum fornecedor encontrado.</td></tr>'; return; }
+      corpo.innerHTML = data.items.map((f) =>
+        '<tr><td>' + UI.escapar(f.nome) + '</td><td>' + f.cnpj + '</td>' +
+        '<td>' + UI.escapar(f.email || '-') + '</td><td>' + UI.escapar(f.telefone || '-') + '</td>' +
+        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(f.id) + ')\'>Editar</button> ' +
+        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(f.id) + ')\'>Excluir</button></td></tr>'
+      ).join('');
+    }
+
+    function mudarPagina(delta) {
+      const nova = pagina + delta;
+      if (nova < 1 || nova > totalPaginas) return;
+      pagina = nova; carregar();
+    }
+
+    function abrirNovo() {
+      editandoId = null;
+      document.getElementById('tituloModal').textContent = 'Novo fornecedor';
+      document.getElementById('erroModal').classList.remove('visivel');
+      ['f_nome', 'f_cnpj', 'f_telefone', 'f_email'].forEach((id) => document.getElementById(id).value = '');
+      UI.abrirModal('modalFornecedor');
+    }
+
+    async function editar(id) {
+      const f = await API.get('/api/fornecedores/' + id);
+      editandoId = id;
+      document.getElementById('tituloModal').textContent = 'Editar fornecedor';
+      document.getElementById('erroModal').classList.remove('visivel');
+      document.getElementById('f_nome').value = f.nome;
+      document.getElementById('f_cnpj').value = f.cnpj;
+      document.getElementById('f_telefone').value = f.telefone || '';
+      document.getElementById('f_email').value = f.email || '';
+      UI.abrirModal('modalFornecedor');
+    }
+
+    async function salvar() {
+      const erroEl = document.getElementById('erroModal');
+      erroEl.classList.remove('visivel');
+      const cnpj = document.getElementById('f_cnpj').value;
+      if (!cnpjValido(cnpj)) {
+        erroEl.textContent = 'CNPJ inválido: verifique os 14 dígitos.';
+        erroEl.classList.add('visivel');
+        return;
+      }
+      const body = {
+        nome: document.getElementById('f_nome').value.trim(),
+        cnpj: cnpj.replace(/\D/g, ''),
+        telefone: document.getElementById('f_telefone').value.trim(),
+        email: document.getElementById('f_email').value.trim(),
+      };
+      try {
+        if (editandoId) await API.put('/api/fornecedores/' + editandoId, body);
+        else await API.post('/api/fornecedores', body);
+        UI.fecharModal('modalFornecedor');
+        carregar();
+      } catch (e) {
+        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroEl.classList.add('visivel');
+      }
+    }
+
+    async function remover(id) {
+      if (!confirm('Desativar este fornecedor?')) return;
+      try { await API.del('/api/fornecedores/' + id); carregar(); } catch (e) { alert(e.message); }
+    }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('fornecedores.html');
+      document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
+      carregar();
+    })();
+  </script>
+</body>
+</html>
