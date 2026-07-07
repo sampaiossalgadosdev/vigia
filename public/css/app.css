@@ -51,10 +51,10 @@ button { font-family: inherit; cursor: pointer; }
   width: 230px; flex-shrink: 0;
   background: var(--verde-escuro); color: #d8e8e0;
   display: flex; flex-direction: column;
-  position: sticky; top: 56px; height: calc(100vh - 56px);
+  position: fixed; top: 0; left: 0; height: 100vh;
   transition: width 220ms ease, opacity 220ms ease;
   overflow: hidden;
-  z-index: 20;
+  z-index: 200;
 }
 .sidebar .logo {
   padding: 22px 20px 16px; font-size: 22px; font-weight: 800;
@@ -75,7 +75,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .badge.oculto { display: none; }
 
-.conteudo { flex: 1; padding: 24px 28px; max-width: 1240px; transition: margin-left 220ms ease; }
+.conteudo { flex: 1; padding: 24px 28px; max-width: 1240px; margin-left: 230px; transition: margin-left 220ms ease; }
 
 .topo {
   display: flex; justify-content: space-between; align-items: center;
@@ -187,7 +187,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
 .navbar-topo {
   position: fixed;
   top: 0;
-  left: 0;
+  left: 230px;
   right: 0;
   height: 56px;
   background: #1e3a5f;
@@ -198,7 +198,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   padding: 0 18px;
   z-index: 100;
   box-shadow: 0 2px 10px rgba(0,0,0,.16);
+  transition: left 220ms ease;
 }
+
+body.sidebar-collapsed .navbar-topo { left: 0; }
 
 .navbar-topo .navbar-brand,
 .navbar-topo .navbar-user {
@@ -207,18 +210,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   gap: 10px;
 }
 
-.navbar-toggle {
-  width: 36px;
-  height: 36px;
+.sidebar-toggle {
+  position: fixed;
+  top: 12px;
+  left: 186px;
+  width: 32px;
+  height: 32px;
   border: 0;
   border-radius: 8px;
   background: rgba(255,255,255,.12);
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  z-index: 210;
+  transition: left 220ms ease;
 }
+.sidebar-toggle:hover { background: rgba(255,255,255,.22); }
+
+body.sidebar-collapsed .sidebar-toggle { left: 12px; }
 
 .navbar-brand-title {
   font-weight: 700;
@@ -245,5 +256,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   .layout { flex-direction: column; min-height: auto; }
   .sidebar { width: 100%; height: auto; position: static; top: auto; }
   .sidebar.collapsed { width: 100%; }
+  .conteudo { margin-left: 0; }
+  .navbar-topo { left: 0; }
+  .sidebar-toggle { left: 12px; }
+  body.sidebar-collapsed .sidebar-toggle { left: 12px; }
   .form-grid { grid-template-columns: 1fr; }
 }

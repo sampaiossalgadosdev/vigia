@@ -8,8 +8,8 @@
   }
 
   function lerTenant(usuario) {
-    if (!usuario) return 'VIGIA';
-    return usuario.tenant?.nome || usuario.tenantName || usuario.tenant?.name || 'VIGIA';
+    if (!usuario) return '';
+    return usuario.tenant?.nome || usuario.tenantName || usuario.tenant?.name || '';
   }
 
   function lerNomeUsuario(usuario) {
@@ -29,11 +29,8 @@
     navbar.id = 'vigiaNavbar';
     navbar.className = 'navbar-topo';
     navbar.innerHTML = [
-      '<button type="button" class="navbar-toggle" id="navbarToggle" aria-label="Alternar sidebar">',
-      '<span class="navbar-toggle-icon">☰</span>',
-      '</button>',
       '<div class="navbar-brand">',
-      '<span class="navbar-brand-title" id="navbarTenant">VIGIA</span>',
+      '<span class="navbar-brand-title" id="navbarTenant"></span>',
       '</div>',
       '<div class="navbar-user">',
       '<span class="navbar-user-name" id="navbarUserName">Usuário</span>',
@@ -44,6 +41,20 @@
 
     document.body.insertBefore(navbar, document.body.firstChild);
     return navbar;
+  }
+
+  function garantirToggleSidebar() {
+    if (document.getElementById('navbarToggle')) return document.getElementById('navbarToggle');
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'navbarToggle';
+    toggle.className = 'sidebar-toggle';
+    toggle.setAttribute('aria-label', 'Alternar sidebar');
+    toggle.innerHTML = '<span class="navbar-toggle-icon">☰</span>';
+
+    document.body.insertBefore(toggle, document.body.firstChild);
+    return toggle;
   }
 
   function atualizarEstadoToggle() {
@@ -102,6 +113,7 @@
   function initNavbar() {
     const usuario = lerUsuario();
     garantirNavbar();
+    garantirToggleSidebar();
     preencherDados(usuario);
     sincronizarEstadoSidebar();
     ligarEventos();
