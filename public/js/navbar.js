@@ -19,7 +19,24 @@
 
   function lerPerfil(usuario) {
     if (!usuario) return 'usuário';
-    return usuario.perfil || usuario.role || 'usuário';
+    if (usuario.isDono) return 'Dono';
+    return usuario.perfilNome || usuario.perfil || usuario.role || 'usuário';
+  }
+
+  /** Painel da Rede só é oferecido ao Dono de um tenant no plano pro. */
+  function podeAcessarRede(usuario) {
+    return !!(usuario && usuario.isDono && usuario.tenant && usuario.tenant.plano === 'pro');
+  }
+
+  async function acessarPainelDaRede() {
+    try {
+      const data = await window.API.post('/api/rede/sso', {});
+      localStorage.setItem('rede_token', data.accessToken);
+      localStorage.setItem('rede_usuario', JSON.stringify(data.superusuario));
+      window.location.href = '/rede/index.html';
+    } catch (e) {
+      alert(e.message || 'Não foi possível acessar o Painel da Rede');
+    }
   }
 
   function garantirNavbar() {
@@ -88,6 +105,23 @@
     if (tenant) tenant.textContent = lerTenant(usuario);
     if (userName) userName.textContent = lerNomeUsuario(usuario);
     if (userProfile) userProfile.textContent = lerPerfil(usuario);
+
+    // O botão só é criado no DOM quando o usuário tem direito de acesso —
+    // não é apenas escondido via CSS.
+    const redeBtnExistente = document.getElementById('navbarRede');
+    if (podeAcessarRede(usuario)) {
+      if (!redeBtnExistente) {
+        const redeBtn = document.createElement('button');
+        redeBtn.type = 'button';
+        redeBtn.id = 'navbarRede';
+        redeBtn.className = 'btn secundario pequeno';
+        redeBtn.textContent = 'Painel da Rede';
+        redeBtn.addEventListener('click', acessarPainelDaRede);
+        document.getElementById('navbarLogout').insertAdjacentElement('beforebegin', redeBtn);
+      }
+    } else if (redeBtnExistente) {
+      redeBtnExistente.remove();
+    }
   }
 
   function ligarEventos() {

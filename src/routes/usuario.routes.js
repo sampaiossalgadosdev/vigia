@@ -1,20 +1,22 @@
 /**
  * Arquivo: usuario.routes.js
- * Responsabilidade: Definir os endpoints /api/usuarios com controle de perfil
- * (listar: dono/gerente; criar/editar/excluir: só dono).
+ * Responsabilidade: Definir os endpoints /api/usuarios, controlados pela
+ * matriz de permissões do módulo "usuarios" (o Dono sempre passa).
  */
 const { Router } = require('express');
 const controller = require('../controllers/usuario.controller');
 const validator = require('../validators/usuario.validator');
 const { auth } = require('../middlewares/auth');
-const { role } = require('../middlewares/role');
+const { exigePermissao } = require('../middlewares/permissao.middleware');
 
 const router = Router();
 router.use(auth);
 
-router.get('/', role(['dono', 'gerente']), controller.listar);
-router.post('/', role(['dono']), validator.criar, controller.criar);
-router.put('/:id', role(['dono']), validator.atualizar, controller.atualizar);
-router.delete('/:id', role(['dono']), controller.remover);
+const gestao = exigePermissao('usuarios');
+
+router.get('/', gestao, controller.listar);
+router.post('/', gestao, validator.criar, controller.criar);
+router.put('/:id', gestao, validator.atualizar, controller.atualizar);
+router.delete('/:id', gestao, controller.remover);
 
 module.exports = router;

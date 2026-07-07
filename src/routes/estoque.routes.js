@@ -6,20 +6,20 @@
 const { Router } = require('express');
 const controller = require('../controllers/estoque.controller');
 const { auth } = require('../middlewares/auth');
-const { role } = require('../middlewares/role');
+const { exigePermissao } = require('../middlewares/permissao.middleware');
 const { uploadXml } = require('../middlewares/upload');
 
 const router = Router();
 router.use(auth);
 
-const gestao = role(['dono', 'gerente']);
+const gestao = exigePermissao('estoque');
 
 router.post('/nfe/upload', gestao, uploadXml.single('arquivo'), controller.uploadNfe);
 router.post('/nfe/confirmar/:nfeId', gestao, controller.confirmarNfe);
-router.get('/nfe', controller.listarNfes);
-router.get('/nfe/:id', controller.detalharNfe);
+router.get('/nfe', gestao, controller.listarNfes);
+router.get('/nfe/:id', gestao, controller.detalharNfe);
 router.post('/nfe/:nfeId/itens/:itemId/vincular', gestao, controller.vincularItem);
-router.get('/movimentacoes', controller.movimentacoes);
-router.get('/pendentes', controller.pendentes);
+router.get('/movimentacoes', gestao, controller.movimentacoes);
+router.get('/pendentes', gestao, controller.pendentes);
 
 module.exports = router;

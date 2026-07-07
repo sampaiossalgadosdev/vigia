@@ -36,7 +36,7 @@
         <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="120"></div>
         <div class="campo"><label>E-mail *</label><input id="f_email" type="email"></div>
         <div class="campo"><label>Perfil *</label>
-          <select id="f_perfil"><option value="dono">dono</option><option value="gerente">gerente</option><option value="operador">operador</option></select>
+          <select id="f_perfil"></select>
         </div>
         <div class="campo cheio"><label id="rotuloSenha">Senha * (mínimo 6 caracteres)</label><input id="f_senha" type="password"></div>
       </div>
@@ -52,16 +52,29 @@
   <script>
     initNavbar();
     let editandoId = null;
+    let perfisDisponiveis = [];
+
+    async function carregarPerfis() {
+      const data = await API.get('/api/perfis?limit=100');
+      perfisDisponiveis = data.items;
+      document.getElementById('f_perfil').innerHTML = perfisDisponiveis
+        .map((p) => '<option value="' + p.id + '">' + UI.escapar(p.nome) + '</option>')
+        .join('');
+    }
 
     async function carregar() {
       const data = await API.get('/api/usuarios?limit=100');
       const corpo = document.getElementById('tabela');
-      corpo.innerHTML = data.items.map((u) =>
-        '<tr><td>' + UI.escapar(u.nome) + '</td><td>' + UI.escapar(u.email) + '</td>' +
-        '<td><span class="tag neutro">' + u.perfil + '</span></td><td>' + UI.data(u.criadoEm) + '</td>' +
-        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(u) + ')\'>Editar</button> ' +
-        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(u.id) + ')\'>Desativar</button></td></tr>'
-      ).join('');
+      corpo.innerHTML = data.items.map((u) => {
+        const rotuloPerfil = u.isDono ? 'Dono' : (u.perfil ? u.perfil.nome : '-');
+        const acoes = u.isDono
+          ? '<span class="tag neutro">acesso total</span>'
+          : '<button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(u) + ')\'>Editar</button> ' +
+            '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(u.id) + ')\'>Desativar</button>';
+        return '<tr><td>' + UI.escapar(u.nome) + '</td><td>' + UI.escapar(u.email) + '</td>' +
+          '<td><span class="tag neutro">' + UI.escapar(rotuloPerfil) + '</span></td><td>' + UI.data(u.criadoEm) + '</td>' +
+          '<td>' + acoes + '</td></tr>';
+      }).join('');
     }
 
     function abrirNovo() {
@@ -70,7 +83,6 @@
       document.getElementById('rotuloSenha').textContent = 'Senha * (mínimo 6 caracteres)';
       document.getElementById('erroModal').classList.remove('visivel');
       ['f_nome', 'f_email', 'f_senha'].forEach((id) => document.getElementById(id).value = '');
-      document.getElementById('f_perfil').value = 'operador';
       UI.abrirModal('modalUsuario');
     }
 
@@ -81,7 +93,7 @@
       document.getElementById('erroModal').classList.remove('visivel');
       document.getElementById('f_nome').value = u.nome;
       document.getElementById('f_email').value = u.email;
-      document.getElementById('f_perfil').value = u.perfil;
+      document.getElementById('f_perfil').value = u.perfil ? u.perfil.id : '';
       document.getElementById('f_senha').value = '';
       UI.abrirModal('modalUsuario');
     }
@@ -92,7 +104,7 @@
       const body = {
         nome: document.getElementById('f_nome').value.trim(),
         email: document.getElementById('f_email').value.trim(),
-        perfil: document.getElementById('f_perfil').value,
+        perfilId: document.getElementById('f_perfil').value,
       };
       const senha = document.getElementById('f_senha').value;
       if (senha || !editandoId) body.senha = senha;
@@ -115,8 +127,13 @@
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
-      if (usuario.perfil !== 'dono') { window.location.href = '/index.html'; return; }
+      const permissaoUsuarios = usuario.permissoes && usuario.permissoes.usuarios;
+      if (!usuario.isDono && (!permissaoUsuarios || permissaoUsuarios === 'bloqueado')) {
+        window.location.href = '/index.html';
+        return;
+      }
       await Auth.montarSidebar('usuarios.html');
+      await carregarPerfis();
       carregar();
     })();
   </script>

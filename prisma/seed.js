@@ -11,6 +11,36 @@ const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
+const MODULOS = ['dashboard', 'produtos', 'fornecedores', 'estoque', 'usuarios', 'perfis', 'vendas', 'promocoes', 'caixa', 'relatorios', 'ia'];
+
+/**
+ * Cria os dois Perfis padrão de um tenant (Gerente e Operador de Caixa),
+ * cada um com sua matriz de permissões por módulo.
+ */
+async function criarPerfisPadrao(tenantId) {
+  const gerente = await prisma.perfil.create({
+    data: {
+      tenantId, nome: 'Gerente', descricao: 'Acesso completo à retaguarda, exceto usuários e perfis.',
+      permissoes: {
+        create: MODULOS.map((modulo) => ({
+          modulo, nivel: ['usuarios', 'perfis'].includes(modulo) ? 'bloqueado' : 'acesso_completo',
+        })),
+      },
+    },
+  });
+  const operador = await prisma.perfil.create({
+    data: {
+      tenantId, nome: 'Operador de Caixa', descricao: 'Opera pelo PDV; somente leitura na retaguarda.',
+      permissoes: {
+        create: MODULOS.map((modulo) => ({
+          modulo, nivel: ['usuarios', 'perfis'].includes(modulo) ? 'bloqueado' : 'somente_leitura',
+        })),
+      },
+    },
+  });
+  return { gerente, operador };
+}
+
 /**
  * Gera um CNPJ válido (14 dígitos) a partir de uma base de 12 dígitos,
  * calculando os dois dígitos verificadores.
@@ -36,12 +66,14 @@ async function criarTenant({ nome, cnpjBase, email, regimeTributario, plano, sen
     data: { nome, cnpj: gerarCnpj(cnpjBase), email, plano, regimeTributario },
   });
 
+  const { gerente, operador } = await criarPerfisPadrao(tenant.id);
+
   const dominio = email.split('@')[1];
   await prisma.usuario.createMany({
     data: [
-      { tenantId: tenant.id, nome: 'Dono ' + nome, email: 'dono@' + dominio, senha: senhaHash, perfil: 'dono' },
-      { tenantId: tenant.id, nome: 'Gerente ' + nome, email: 'gerente@' + dominio, senha: senhaHash, perfil: 'gerente' },
-      { tenantId: tenant.id, nome: 'Operador ' + nome, email: 'operador@' + dominio, senha: senhaHash, perfil: 'operador' },
+      { tenantId: tenant.id, nome: 'Dono ' + nome, email: 'dono@' + dominio, senha: senhaHash, isDono: true },
+      { tenantId: tenant.id, nome: 'Gerente ' + nome, email: 'gerente@' + dominio, senha: senhaHash, perfilId: gerente.id },
+      { tenantId: tenant.id, nome: 'Operador ' + nome, email: 'operador@' + dominio, senha: senhaHash, perfilId: operador.id },
     ],
   });
 
@@ -154,7 +186,7 @@ async function main() {
     cnpjBase: '112223330001',
     email: 'contato@silva.com.br',
     regimeTributario: 'simples',
-    plano: 'basico',
+    plano: 'pro',
     senhaHash: senhaPadrao,
     sufixoEan: '11',
   });
@@ -165,7 +197,7 @@ async function main() {
     cnpjBase: '114447770001',
     email: 'contato@costa.com.br',
     regimeTributario: 'presumido',
-    plano: 'basico',
+    plano: 'standard',
     senhaHash: senhaPadrao,
     sufixoEan: '22',
   });

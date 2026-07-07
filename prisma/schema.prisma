@@ -46,20 +46,27 @@ model SuperusuarioTenant {
   @@index([tenantId])
 }
 
+// ─── PLANO DO TENANT ──────────────────────────────────────
+enum PlanoTenant {
+  standard
+  pro
+}
+
 // ─── TENANT ───────────────────────────────────────────────
 model Tenant {
-  id               String   @id @default(uuid())
+  id               String      @id @default(uuid())
   nome             String
-  cnpj             String   @unique
+  cnpj             String      @unique
   email            String
   telefone         String?
-  plano            String   @default("basico")
-  regimeTributario String   @default("simples")
-  ativo            Boolean  @default(true)
-  criadoEm         DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  plano            PlanoTenant @default(standard)
+  regimeTributario String      @default("simples")
+  ativo            Boolean     @default(true)
+  criadoEm         DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   usuarios      Usuario[]
+  perfis        Perfil[]
   produtos      Produto[]
   categorias    Categoria[]
   fornecedores  Fornecedor[]
@@ -90,6 +97,60 @@ model RefreshToken {
   @@index([usuarioId])
 }
 
+// ─── PERFIL (papel customizável por tenant) ──────────────
+// "Dono" não é um Perfil: é um papel fixo (Usuario.isDono),
+// criado junto com o tenant, com acesso total automático.
+model Perfil {
+  id           String   @id @default(uuid())
+  tenantId     String
+  nome         String
+  descricao    String?
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id])
+  permissoes PermissaoPerfil[]
+  usuarios   Usuario[]
+
+  @@unique([tenantId, nome])
+  @@index([tenantId])
+}
+
+enum ModuloSistema {
+  dashboard
+  produtos
+  fornecedores
+  estoque
+  usuarios
+  perfis
+  vendas
+  promocoes
+  caixa
+  relatorios
+  ia
+}
+
+enum NivelPermissao {
+  acesso_completo // GET, POST, PUT, DELETE
+  edicao_leitura // GET, PUT
+  somente_insercao // GET, POST
+  somente_leitura // GET
+  bloqueado // nenhum acesso — módulo nem aparece no menu
+}
+
+model PermissaoPerfil {
+  id       String         @id @default(uuid())
+  perfilId String
+  modulo   ModuloSistema
+  nivel    NivelPermissao @default(bloqueado)
+
+  perfil Perfil @relation(fields: [perfilId], references: [id])
+
+  @@unique([perfilId, modulo])
+  @@index([perfilId])
+}
+
 // ─── USUÁRIO ──────────────────────────────────────────────
 model Usuario {
   id        String   @id @default(uuid())
@@ -97,16 +158,18 @@ model Usuario {
   nome      String
   email     String
   senha     String
-  perfil    String // dono | gerente | operador
+  isDono    Boolean  @default(false) // acesso total, não usa Perfil
+  perfilId  String? // obrigatório quando isDono = false
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  perfil Perfil? @relation(fields: [perfilId], references: [id])
 
   @@unique([tenantId, email])
   @@index([tenantId])
-  @@index([perfil])
+  @@index([perfilId])
 }
 
 // ─── CATEGORIA ────────────────────────────────────────────

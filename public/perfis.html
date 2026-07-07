@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Perfis</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Perfis</h1>
+      </div>
+
+      <div class="barra-acoes">
+        <button class="btn" onclick="abrirNovo()">Novo perfil</button>
+      </div>
+
+      <div class="painel">
+        <table>
+          <thead><tr><th>Nome</th><th>Descrição</th><th>Usuários</th><th></th></tr></thead>
+          <tbody id="tabela"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-fundo" id="modalPerfil">
+    <div class="modal" style="max-width: 760px">
+      <h2 id="tituloModal">Novo perfil</h2>
+      <div id="erroModal" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="80"></div>
+        <div class="campo cheio"><label>Descrição</label><input id="f_descricao" maxlength="255"></div>
+      </div>
+
+      <div style="overflow-x:auto; margin-top: 10px">
+        <table>
+          <thead>
+            <tr>
+              <th>Módulo</th>
+              <th>Acesso completo</th>
+              <th>Edição e leitura</th>
+              <th>Somente inserção</th>
+              <th>Somente leitura</th>
+              <th>Bloqueado</th>
+            </tr>
+          </thead>
+          <tbody id="matrizPermissoes"></tbody>
+        </table>
+      </div>
+
+      <div class="rodape">
+        <button class="btn secundario" onclick="UI.fecharModal('modalPerfil')">Cancelar</button>
+        <button class="btn" onclick="salvar()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    initNavbar();
+    let editandoId = null;
+
+    const MODULOS = [
+      ['dashboard', 'Dashboard'],
+      ['produtos', 'Produtos'],
+      ['fornecedores', 'Fornecedores'],
+      ['estoque', 'Estoque / NF-e'],
+      ['vendas', 'Vendas'],
+      ['promocoes', 'Promoções'],
+      ['caixa', 'Caixa'],
+      ['relatorios', 'Relatórios'],
+      ['ia', 'IA'],
+      ['usuarios', 'Usuários'],
+      ['perfis', 'Perfis'],
+    ];
+    const NIVEIS = ['acesso_completo', 'edicao_leitura', 'somente_insercao', 'somente_leitura', 'bloqueado'];
+
+    function montarMatriz(permissoesAtuais) {
+      const mapa = {};
+      (permissoesAtuais || []).forEach((p) => { mapa[p.modulo] = p.nivel; });
+      const corpo = document.getElementById('matrizPermissoes');
+      corpo.innerHTML = MODULOS.map(([modulo, rotulo]) => {
+        const nivelAtual = mapa[modulo] || 'bloqueado';
+        const celulas = NIVEIS.map((nivel) =>
+          '<td style="text-align:center"><input type="radio" name="mod_' + modulo + '" value="' + nivel + '"' +
+          (nivel === nivelAtual ? ' checked' : '') + '></td>'
+        ).join('');
+        return '<tr><td>' + UI.escapar(rotulo) + '</td>' + celulas + '</tr>';
+      }).join('');
+    }
+
+    function lerMatriz() {
+      return MODULOS.map(([modulo]) => {
+        const marcado = document.querySelector('input[name="mod_' + modulo + '"]:checked');
+        return { modulo, nivel: marcado ? marcado.value : 'bloqueado' };
+      });
+    }
+
+    async function carregar() {
+      const data = await API.get('/api/perfis?limit=100');
+      const corpo = document.getElementById('tabela');
+      if (!data.items.length) {
+        corpo.innerHTML = '<tr><td colspan="4" class="vazio">Nenhum perfil cadastrado.</td></tr>';
+        return;
+      }
+      corpo.innerHTML = data.items.map((p) =>
+        '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + UI.escapar(p.descricao || '-') + '</td>' +
+        '<td>' + p.totalUsuarios + '</td>' +
+        '<td><button class="btn secundario pequeno" onclick="editar(' + JSON.stringify(p.id) + ')">Editar</button> ' +
+        '<button class="btn perigo pequeno" onclick="remover(' + JSON.stringify(p.id) + ')">Excluir</button></td></tr>'
+      ).join('');
+    }
+
+    function abrirNovo() {
+      editandoId = null;
+      document.getElementById('tituloModal').textContent = 'Novo perfil';
+      document.getElementById('erroModal').classList.remove('visivel');
+      document.getElementById('f_nome').value = '';
+      document.getElementById('f_descricao').value = '';
+      montarMatriz([]);
+      UI.abrirModal('modalPerfil');
+    }
+
+    async function editar(id) {
+      const perfil = await API.get('/api/perfis/' + id);
+      editandoId = perfil.id;
+      document.getElementById('tituloModal').textContent = 'Editar perfil';
+      document.getElementById('erroModal').classList.remove('visivel');
+      document.getElementById('f_nome').value = perfil.nome;
+      document.getElementById('f_descricao').value = perfil.descricao || '';
+      montarMatriz(perfil.permissoes);
+      UI.abrirModal('modalPerfil');
+    }
+
+    async function salvar() {
+      const erroEl = document.getElementById('erroModal');
+      erroEl.classList.remove('visivel');
+      const body = {
+        nome: document.getElementById('f_nome').value.trim(),
+        descricao: document.getElementById('f_descricao').value.trim(),
+        permissoes: lerMatriz(),
+      };
+      try {
+        if (editandoId) await API.put('/api/perfis/' + editandoId, body);
+        else await API.post('/api/perfis', body);
+        UI.fecharModal('modalPerfil');
+        carregar();
+      } catch (e) {
+        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroEl.classList.add('visivel');
+      }
+    }
+
+    async function remover(id) {
+      if (!confirm('Excluir este perfil? Usuários vinculados a ele impedem a exclusão.')) return;
+      try { await API.del('/api/perfis/' + id); carregar(); } catch (e) { alert(e.message); }
+    }
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      const permissaoPerfis = usuario.permissoes && usuario.permissoes.perfis;
+      if (!usuario.isDono && (!permissaoPerfis || permissaoPerfis === 'bloqueado')) {
+        window.location.href = '/index.html';
+        return;
+      }
+      await Auth.montarSidebar('perfis.html');
+      carregar();
+    })();
+  </script>
+</body>
+</html>

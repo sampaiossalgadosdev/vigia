@@ -17,10 +17,7 @@ const { AppError } = require('../utils/response');
  * lookup por jti) no banco.
  */
 async function gerarPar(usuario) {
-  const accessToken = gerarAccessToken(
-    { sub: usuario.id, tenantId: usuario.tenantId, perfil: usuario.perfil },
-    'tenant'
-  );
+  const accessToken = gerarAccessToken({ sub: usuario.id, tenantId: usuario.tenantId }, 'tenant');
   const { token: refreshToken, jti } = gerarRefreshToken({ sub: usuario.id });
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await usuarioRepo.salvarRefreshToken({
@@ -31,6 +28,30 @@ async function gerarPar(usuario) {
     expiresAt,
   });
   return { accessToken, refreshToken };
+}
+
+/**
+ * Monta o mapa { modulo: nivel } a partir do Perfil do usuário (vazio para o Dono).
+ */
+function mapaPermissoes(usuario) {
+  const permissoes = {};
+  if (usuario.perfil) for (const p of usuario.perfil.permissoes) permissoes[p.modulo] = p.nivel;
+  return permissoes;
+}
+
+/**
+ * Formato de usuário exposto ao frontend: sem senha, com isDono/perfil/permissões.
+ */
+function usuarioPublico(usuario) {
+  return {
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    isDono: usuario.isDono,
+    perfilId: usuario.perfilId,
+    perfilNome: usuario.isDono ? 'Dono' : usuario.perfil ? usuario.perfil.nome : null,
+    permissoes: mapaPermissoes(usuario),
+  };
 }
 
 /**
@@ -51,8 +72,8 @@ async function login(email, senha, ip) {
     return {
       ...tokens,
       usuario: {
-        id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil,
-        tenant: { id: usuario.tenant.id, nome: usuario.tenant.nome },
+        ...usuarioPublico(usuario),
+        tenant: { id: usuario.tenant.id, nome: usuario.tenant.nome, plano: usuario.tenant.plano },
       },
     };
   }
@@ -86,7 +107,10 @@ async function refresh(refreshToken) {
   const tokens = await gerarPar(usuario);
   return {
     ...tokens,
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil },
+    usuario: {
+      ...usuarioPublico(usuario),
+      tenant: { id: usuario.tenant.id, nome: usuario.tenant.nome, plano: usuario.tenant.plano },
+    },
   };
 }
 

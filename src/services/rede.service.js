@@ -10,11 +10,12 @@
  * utils/jwt, utils/bcrypt.
  * Não realiza acesso HTTP nem acesso direto ao Prisma.
  */
+const crypto = require('crypto');
 const redeRepo = require('../repositories/rede.repository');
 const sugestaoRepo = require('../repositories/sugestao.repository');
 const superadminRepo = require('../repositories/superadmin.repository');
 const { gerarAccessToken } = require('../utils/jwt');
-const { comparar } = require('../utils/bcrypt');
+const { comparar, gerarHash } = require('../utils/bcrypt');
 const { AppError, paginado } = require('../utils/response');
 
 function inicioDoDia(d = new Date()) {
@@ -170,4 +171,35 @@ async function listarSugestoes(superusuario, pag) {
   return paginado(items, total, pag.page, pag.limit);
 }
 
-module.exports = { login, lojas, loja, comparativo, enviarSugestao, listarSugestoes };
+/**
+ * Ponte de acesso do Dono (plano pro) ao Painel da Rede, sem exigir um
+ * segundo login: encontra (ou cria) o Superusuário correspondente ao e-mail
+ * do Dono, garante o vínculo com o tenant atual e emite um token 'rede'.
+ * A senha do Superusuário criado aqui é aleatória e não é entregue ao
+ * usuário — o acesso à rede só acontece via esta ponte, a partir do login
+ * do tenant.
+ */
+async function sso(usuarioTenant, tenant) {
+  if (!usuarioTenant.isDono) throw new AppError('Apenas o Dono pode acessar o Painel da Rede', 403);
+  if (tenant.plano !== 'pro') throw new AppError('O plano deste supermercado não inclui o Painel da Rede', 403);
+
+  let superusuario = await superadminRepo.buscarSuperusuarioPorEmail(usuarioTenant.email);
+  if (!superusuario) {
+    superusuario = await superadminRepo.criarSuperusuario({
+      nome: usuarioTenant.nome,
+      email: usuarioTenant.email,
+      senha: await gerarHash(crypto.randomUUID()),
+    });
+  }
+  if (!superusuario.ativo) throw new AppError('O acesso à rede está inativo. Fale com o suporte.', 403);
+
+  await superadminRepo.atrelarTenants(superusuario.id, [tenant.id]);
+
+  const accessToken = gerarAccessToken({ sub: superusuario.id }, 'rede');
+  return {
+    accessToken,
+    superusuario: { id: superusuario.id, nome: superusuario.nome, email: superusuario.email },
+  };
+}
+
+module.exports = { login, lojas, loja, comparativo, enviarSugestao, listarSugestoes, sso };

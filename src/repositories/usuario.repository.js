@@ -11,7 +11,10 @@ async function listar(tenantId, { skip, take, order }) {
   const [items, total] = await Promise.all([
     prisma.usuario.findMany({
       where, skip, take, orderBy: { nome: order },
-      select: { id: true, nome: true, email: true, perfil: true, ativo: true, criadoEm: true },
+      select: {
+        id: true, nome: true, email: true, isDono: true, ativo: true, criadoEm: true,
+        perfil: { select: { id: true, nome: true } },
+      },
     }),
     prisma.usuario.count({ where }),
   ]);
@@ -19,11 +22,17 @@ async function listar(tenantId, { skip, take, order }) {
 }
 
 async function buscarPorId(tenantId, id) {
-  return prisma.usuario.findFirst({ where: { id, tenantId } });
+  return prisma.usuario.findFirst({
+    where: { id, tenantId },
+    include: { tenant: true, perfil: { include: { permissoes: true } } },
+  });
 }
 
 async function buscarPorEmailGlobal(email) {
-  return prisma.usuario.findMany({ where: { email, ativo: true }, include: { tenant: true } });
+  return prisma.usuario.findMany({
+    where: { email, ativo: true },
+    include: { tenant: true, perfil: { include: { permissoes: true } } },
+  });
 }
 
 async function buscarPorEmailNoTenant(tenantId, email) {

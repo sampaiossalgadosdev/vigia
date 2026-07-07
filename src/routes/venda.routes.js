@@ -1,16 +1,18 @@
 const { Router } = require('express');
 const controller = require('../controllers/venda.controller');
 const { auth } = require('../middlewares/auth');
-const { role } = require('../middlewares/role');
+const { exigePermissao } = require('../middlewares/permissao.middleware');
 
 const router = Router();
 router.use(auth);
-const gerenteOuDono = role(['dono', 'gerente']);
+const gestao = exigePermissao('vendas');
 
-router.get('/', controller.listar);
-router.get('/:id', controller.detalhar);
+// Registro/sync de vendas é operação de PDV: qualquer usuário autenticado do
+// tenant pode vender, independente da matriz de permissões da retaguarda.
+router.get('/', gestao, controller.listar);
+router.get('/:id', gestao, controller.detalhar);
 router.post('/', controller.registrar);
-router.post('/:id/cancelar', gerenteOuDono, controller.cancelar);
+router.post('/:id/cancelar', gestao, controller.cancelar);
 router.post('/sync', controller.sync);
 
 module.exports = router;

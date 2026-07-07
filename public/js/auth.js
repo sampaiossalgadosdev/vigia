@@ -84,30 +84,42 @@ const Auth = (() => {
   }
 
   /**
-   * Injeta a sidebar padrão, marca o link ativo, esconde módulos por perfil
-   * e busca o badge de sugestões pendentes.
+   * Um módulo aparece no menu se o usuário for Dono, ou se o Perfil dele
+   * tiver qualquer nível de permissão diferente de "bloqueado" nesse módulo.
+   */
+  function temAcessoAoModulo(usuario, modulo) {
+    if (!usuario) return false;
+    if (usuario.isDono) return true;
+    const nivel = (usuario.permissoes || {})[modulo];
+    return !!nivel && nivel !== 'bloqueado';
+  }
+
+  /**
+   * Injeta a sidebar padrão, marca o link ativo, esconde módulos sem
+   * permissão e busca o badge de sugestões pendentes.
    */
   async function montarSidebar(paginaAtiva) {
     const usuario = usuarioAtual();
     const el = document.getElementById('sidebar');
     if (!el) return;
     const links = [
-      ['index.html', 'Dashboard'],
-      ['produtos.html', 'Produtos'],
-      ['fornecedores.html', 'Fornecedores'],
-      ['estoque.html', 'Estoque / NF-e'],
-      ['vendas.html', 'Vendas'],
-      ['promocoes.html', 'Promoções'],
-      ['caixa.html', 'Caixa'],
-      ['relatorios.html', 'Relatórios'],
-      ['ia.html', 'IA'],
-      ['usuarios.html', 'Usuários'],
+      ['index.html', 'Dashboard', 'dashboard'],
+      ['produtos.html', 'Produtos', 'produtos'],
+      ['fornecedores.html', 'Fornecedores', 'fornecedores'],
+      ['estoque.html', 'Estoque / NF-e', 'estoque'],
+      ['vendas.html', 'Vendas', 'vendas'],
+      ['promocoes.html', 'Promoções', 'promocoes'],
+      ['caixa.html', 'Caixa', 'caixa'],
+      ['relatorios.html', 'Relatórios', 'relatorios'],
+      ['ia.html', 'IA', 'ia'],
+      ['usuarios.html', 'Usuários', 'usuarios'],
+      ['perfis.html', 'Perfis', 'perfis'],
     ];
     el.innerHTML =
       '<div class="logo">VIGIA<small>Varejo Inteligente</small></div>' +
       '<nav>' +
       links
-        .filter(([href]) => href !== 'usuarios.html' || (usuario && usuario.perfil === 'dono'))
+        .filter(([, , modulo]) => temAcessoAoModulo(usuario, modulo))
         .map(([href, rotulo]) => {
           const badge = href === 'index.html' ? ' <span id="badgeSugestoes" class="badge oculto"></span>' : '';
           return '<a href="/' + href + '" class="' + (href === paginaAtiva ? 'ativo' : '') + '" data-page="' + href + '">' + rotulo + badge + '</a>';
@@ -129,7 +141,7 @@ const Auth = (() => {
 
     const topo = document.getElementById('usuarioArea');
     if (topo && usuario)
-      topo.innerHTML = '<span>' + usuario.nome + ' · ' + usuario.perfil + '</span>' +
+      topo.innerHTML = '<span>' + usuario.nome + ' · ' + (usuario.isDono ? 'Dono' : (usuario.perfilNome || 'usuário')) + '</span>' +
         '<button class="btn secundario pequeno" onclick="Auth.logout()">Sair</button>';
 
     try {

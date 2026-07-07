@@ -39,6 +39,7 @@ app.use('/api/produtos', require('./routes/produto.routes'));
 app.use('/api/fornecedores', require('./routes/fornecedor.routes'));
 app.use('/api/estoque', require('./routes/estoque.routes'));
 app.use('/api/usuarios', require('./routes/usuario.routes'));
+app.use('/api/perfis', require('./routes/perfil.routes'));
 app.use('/api/sugestoes', require('./routes/sugestao.routes'));
 app.use('/api/superadmin', require('./routes/superadmin.routes'));
 app.use('/api/rede', require('./routes/rede.routes'));

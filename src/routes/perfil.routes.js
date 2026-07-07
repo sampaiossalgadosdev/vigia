@@ -1,18 +1,19 @@
 /**
- * Arquivo: fornecedor.routes.js
- * Responsabilidade: Definir os endpoints /api/fornecedores e encadear
- * middlewares e controller. Nenhuma lógica de negócio aqui.
+ * Arquivo: perfil.routes.js
+ * Responsabilidade: Definir os endpoints /api/perfis, controlados pela
+ * matriz de permissões do módulo "perfis" (o Dono sempre passa; os Perfis
+ * padrão vêm com "perfis" bloqueado, então na prática só o Dono gerencia).
  */
 const { Router } = require('express');
-const controller = require('../controllers/fornecedor.controller');
-const validator = require('../validators/fornecedor.validator');
+const controller = require('../controllers/perfil.controller');
+const validator = require('../validators/perfil.validator');
 const { auth } = require('../middlewares/auth');
 const { exigePermissao } = require('../middlewares/permissao.middleware');
 
 const router = Router();
 router.use(auth);
 
-const gestao = exigePermissao('fornecedores');
+const gestao = exigePermissao('perfis');
 
 router.get('/', gestao, controller.listar);
 router.get('/:id', gestao, controller.detalhar);

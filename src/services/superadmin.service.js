@@ -16,6 +16,8 @@ const { comparar, gerarHash } = require('../utils/bcrypt');
 const { validarCnpj, limparCnpj } = require('../utils/cnpj');
 const { AppError, paginado } = require('../utils/response');
 
+const PLANOS = ['standard', 'pro'];
+
 async function login(email, senha) {
   const admin = await superadminRepo.buscarAdminPorEmail(email);
   if (!admin || !admin.ativo || !(await comparar(senha, admin.senha)))
@@ -45,9 +47,11 @@ async function criarTenant(body) {
   const existente = await superadminRepo.buscarTenantPorCnpj(cnpj);
   if (existente) throw new AppError('Já existe um tenant com este CNPJ', 409);
 
+  if (body.plano && !PLANOS.includes(body.plano)) throw new AppError('Plano deve ser standard ou pro', 422);
+
   const tenant = await superadminRepo.criarTenant({
     nome: body.nome, cnpj, email: body.email, telefone: body.telefone || null,
-    plano: body.plano || 'basico', regimeTributario: body.regimeTributario || 'simples',
+    plano: body.plano || 'standard', regimeTributario: body.regimeTributario || 'simples',
   });
 
   let dono = null;
@@ -57,7 +61,7 @@ async function criarTenant(body) {
       nome: body.dono.nome || 'Dono ' + tenant.nome,
       email: body.dono.email,
       senha: await gerarHash(body.dono.senha),
-      perfil: 'dono',
+      isDono: true,
     });
   }
   await auditoriaRepo.registrar({
@@ -75,7 +79,10 @@ async function atualizarTenant(id, body) {
   if (body.nome) dados.nome = body.nome;
   if (body.email) dados.email = body.email;
   if (body.telefone !== undefined) dados.telefone = body.telefone || null;
-  if (body.plano) dados.plano = body.plano;
+  if (body.plano) {
+    if (!PLANOS.includes(body.plano)) throw new AppError('Plano deve ser standard ou pro', 422);
+    dados.plano = body.plano;
+  }
   if (body.regimeTributario) dados.regimeTributario = body.regimeTributario;
   if (body.ativo !== undefined) dados.ativo = body.ativo === true || body.ativo === 'true';
   if (body.cnpj) {

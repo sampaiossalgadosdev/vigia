@@ -32,4 +32,8 @@ const listarSugestoes = asyncHandler(async (req, res) => {
   success(res, await service.listarSugestoes(req.superusuario, { ...pag, take: pag.limit }));
 });
 
-module.exports = { login, lojas, loja, comparativo, enviarSugestao, listarSugestoes };
+const sso = asyncHandler(async (req, res) => {
+  success(res, await service.sso(req.usuario, req.tenant));
+});
+
+module.exports = { login, lojas, loja, comparativo, enviarSugestao, listarSugestoes, sso };
