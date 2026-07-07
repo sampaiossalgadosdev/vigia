@@ -70,6 +70,9 @@ model Tenant {
   auditoria     Auditoria[]
   refreshTokens RefreshToken[]
   decisoesIA    DecisaoIA[]
+  vendas        Venda[]
+  promocoes     Promocao[]
+  caixas        Caixa[]
 }
 
 // ─── REFRESH TOKEN ────────────────────────────────────────
@@ -149,6 +152,8 @@ model Produto {
   itensNfe      NfeItem[]
   movimentacoes MovimentacaoEstoque[]
   decisoesIA    DecisaoIA[]
+  itensVenda    VendaItem[]
+  promocoes     Promocao[]
 
   @@unique([tenantId, ean])
   @@index([tenantId])
@@ -301,4 +306,129 @@ model DecisaoIA {
 
   @@index([tenantId])
   @@index([tenantId, produtoId])
+}
+
+// ─── VENDA ────────────────────────────────────────────────
+model Venda {
+  id                  String            @id @default(uuid())
+  tenantId            String
+  operadorId          String?
+  total               Decimal           @db.Decimal(10, 2)
+  subtotal            Decimal           @db.Decimal(10, 2)
+  desconto            Decimal           @default(0) @db.Decimal(10, 2)
+  troco               Decimal           @default(0) @db.Decimal(10, 2)
+  cpfConsumidor       String?
+  chaveNfce           String?
+  status              String            @default("concluida") // concluida | cancelada | pendente_sync
+  canceladoEm         DateTime?
+  canceladoPor        String?
+  motivoCancelamento  String?
+  criadoEm            DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  tenant         Tenant            @relation(fields: [tenantId], references: [id])
+  itens          VendaItem[]
+  pagamentos     VendaPagamento[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, criadoEm])
+  @@index([operadorId])
+}
+
+model VendaItem {
+  id            String   @id @default(uuid())
+  vendaId       String
+  produtoId     String
+  quantidade    Decimal  @db.Decimal(10, 3)
+  precoUnitario Decimal  @db.Decimal(10, 2)
+  custoUnitario Decimal  @db.Decimal(10, 2)
+  desconto      Decimal  @default(0) @db.Decimal(10, 2)
+  subtotal      Decimal  @db.Decimal(10, 2)
+  total         Decimal  @db.Decimal(10, 2)
+  promocaoId    String?
+
+  venda     Venda    @relation(fields: [vendaId], references: [id])
+  produto   Produto  @relation(fields: [produtoId], references: [id])
+  promocao  Promocao? @relation(fields: [promocaoId], references: [id])
+
+  @@index([vendaId])
+  @@index([produtoId])
+}
+
+model VendaPagamento {
+  id      String  @id @default(uuid())
+  vendaId String
+  forma   String  // dinheiro | credito | debito | pix | voucher | outros
+  valor   Decimal @db.Decimal(10, 2)
+
+  venda Venda @relation(fields: [vendaId], references: [id])
+
+  @@index([vendaId])
+}
+
+// ─── PROMOÇÃO ─────────────────────────────────────────────
+model Promocao {
+  id          String      @id @default(uuid())
+  tenantId    String
+  produtoId   String
+  nome        String
+  tipo        String      // percentual | valor_fixo | leve_pague
+  desconto    Decimal     @db.Decimal(10, 2)
+  leveQtd     Int?
+  pagueQtd    Int?
+  dataInicio  DateTime
+  dataFim     DateTime
+  ativa       Boolean     @default(true)
+  criadoEm    DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  produto     Produto     @relation(fields: [produtoId], references: [id])
+  itensVenda  VendaItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, produtoId, ativa])
+  @@index([tenantId, dataFim])
+}
+
+// ─── CAIXA (fechamento diário) ────────────────────────────
+model Caixa {
+  id               String    @id @default(uuid())
+  tenantId         String
+  operadorId       String?
+  abertoEm         DateTime  @default(now())
+  fechadoEm        DateTime?
+  valorAbertura    Decimal   @db.Decimal(10, 2)
+  valorFechamento  Decimal?  @db.Decimal(10, 2)
+  totalVendas      Decimal   @default(0) @db.Decimal(10, 2)
+  totalDinheiro    Decimal   @default(0) @db.Decimal(10, 2)
+  totalCartao      Decimal   @default(0) @db.Decimal(10, 2)
+  totalPix         Decimal   @default(0) @db.Decimal(10, 2)
+  diferenca        Decimal?  @db.Decimal(10, 2)
+  status           String    @default("aberto") // aberto | fechado
+  observacao       String?
+  updatedAt        DateTime  @updatedAt
+
+  tenant           Tenant     @relation(fields: [tenantId], references: [id])
+  sangrias         Sangria[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Sangria {
+  id         String   @id @default(uuid())
+  caixaId    String
+  tenantId   String
+  tipo       String   // sangria | suprimento
+  valor      Decimal  @db.Decimal(10, 2)
+  motivo     String?
+  operadorId String?
+  criadoEm   DateTime @default(now())
+
+  caixa      Caixa    @relation(fields: [caixaId], references: [id])
+
+  @@index([caixaId])
+  @@index([tenantId])
 }

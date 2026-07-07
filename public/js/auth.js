@@ -61,6 +61,11 @@ const Auth = (() => {
       ['produtos.html', 'Produtos'],
       ['fornecedores.html', 'Fornecedores'],
       ['estoque.html', 'Estoque / NF-e'],
+      ['vendas.html', 'Vendas'],
+      ['promocoes.html', 'Promoções'],
+      ['caixa.html', 'Caixa'],
+      ['relatorios.html', 'Relatórios'],
+      ['ia.html', 'IA'],
       ['usuarios.html', 'Usuários'],
     ];
     el.innerHTML =

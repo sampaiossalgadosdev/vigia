@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Caixa</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Caixa</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="rotulo">Status</div><div class="valor" id="statusCaixa">—</div></div>
+        <div class="card"><div class="rotulo">Vendas do dia</div><div class="valor" id="vendasDia">—</div></div>
+      </div>
+      <div class="barra-acoes">
+        <button class="btn" onclick="abrirCaixa()">Abrir caixa</button>
+        <button class="btn secundario" onclick="sangria()">Sangria / suprimento</button>
+        <button class="btn secundario" onclick="fecharCaixa()">Fechar caixa</button>
+      </div>
+      <div class="painel"><h2>Histórico</h2><table><thead><tr><th>Data</th><th>Status</th><th>Fechamento</th></tr></thead><tbody id="historicoCaixa"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table></div>
+    </main>
+  </div>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    async function carregar() {
+      const atual = await API.get('/api/caixa/atual');
+      document.getElementById('statusCaixa').textContent = atual.status === 'fechado' ? 'Fechado' : 'Aberto';
+      document.getElementById('vendasDia').textContent = UI.moeda(atual.totalVendas || 0);
+      const hist = await API.get('/api/caixa/historico?limit=10');
+      const corpo = document.getElementById('historicoCaixa');
+      if (!hist.items.length) { corpo.innerHTML = '<tr><td colspan="3" class="vazio">Nenhum caixa fechado.</td></tr>'; return; }
+      corpo.innerHTML = hist.items.map((c) => '<tr><td>' + UI.data(c.fechadoEm) + '</td><td>' + c.status + '</td><td>' + UI.moeda(c.valorFechamento) + '</td></tr>').join('');
+    }
+    async function abrirCaixa() { const valor = prompt('Valor de abertura'); if (valor === null) return; await API.post('/api/caixa/abrir', { valorAbertura: valor }); await carregar(); }
+    async function sangria() { const tipo = prompt('Tipo (sangria/suprimento)'); const valor = prompt('Valor'); const motivo = prompt('Motivo'); if (valor === null) return; await API.post('/api/caixa/sangria', { tipo, valor, motivo }); await carregar(); }
+    async function fecharCaixa() { const valor = prompt('Valor de fechamento'); if (valor === null) return; await API.post('/api/caixa/fechar', { valorFechamento: valor }); await carregar(); }
+    (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('caixa.html'); await carregar(); })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Vendas</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Vendas</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+      <div class="barra-acoes">
+        <input id="inicio" type="date">
+        <input id="fim" type="date">
+        <select id="statusFiltro">
+          <option value="">Todos</option>
+          <option value="concluida">Concluídas</option>
+          <option value="cancelada">Canceladas</option>
+        </select>
+        <button class="btn" onclick="carregar()">Filtrar</button>
+      </div>
+      <div class="painel">
+        <table>
+          <thead><tr><th>ID</th><th>Data</th><th>Status</th><th>Total</th><th></th></tr></thead>
+          <tbody id="tabelaVendas"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    async function carregar() {
+      const params = new URLSearchParams({ page: 1, limit: 20 });
+      if (document.getElementById('inicio').value) params.set('inicio', document.getElementById('inicio').value);
+      if (document.getElementById('fim').value) params.set('fim', document.getElementById('fim').value);
+      if (document.getElementById('statusFiltro').value) params.set('status', document.getElementById('statusFiltro').value);
+      const data = await API.get('/api/vendas?' + params.toString());
+      const corpo = document.getElementById('tabelaVendas');
+      if (!data.items.length) { corpo.innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
+      corpo.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" onclick="detalhar(\'' + v.id + '\')">Detalhes</button></td></tr>').join('');
+    }
+    async function detalhar(id) {
+      const venda = await API.get('/api/vendas/' + id);
+      alert('Venda ' + venda.id + '\nTotal: ' + UI.moeda(venda.total) + '\nItens: ' + venda.itens.length);
+    }
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('vendas.html');
+      await carregar();
+    })();
+  </script>
+</body>
+</html>

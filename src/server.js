@@ -42,6 +42,12 @@ app.use('/api/usuarios', require('./routes/usuario.routes'));
 app.use('/api/sugestoes', require('./routes/sugestao.routes'));
 app.use('/api/superadmin', require('./routes/superadmin.routes'));
 app.use('/api/rede', require('./routes/rede.routes'));
+app.use('/api/vendas', require('./routes/venda.routes'));
+app.use('/api/promocoes', require('./routes/promocao.routes'));
+app.use('/api/caixa', require('./routes/caixa.routes'));
+app.use('/api/relatorios', require('./routes/relatorio.routes'));
+app.use('/api/sync', require('./routes/sync.routes'));
+app.use('/api/ia', require('./routes/ia.routes'));
 
 // Healthcheck
 app.get('/api/health', (req, res) => res.json({ success: true, data: { status: 'ok' } }));

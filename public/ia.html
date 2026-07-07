@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · IA</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Sugestões de IA</h1>
+        <div class="usuario-area" id="usuarioArea"></div>
+      </div>
+      <div class="barra-acoes"><button class="btn" onclick="gerar()">Gerar sugestões de promoção</button></div>
+      <div class="painel"><h2>Sugestões</h2><div id="listaSugestoes"></div></div>
+      <div class="painel"><h2>Histórico</h2><div id="historicoIa"></div></div>
+    </main>
+  </div>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+    async function gerar() {
+      const data = await API.post('/api/ia/sugestoes', {});
+      document.getElementById('listaSugestoes').innerHTML = data.sugestoes.map((s) => '<div class="card" style="margin-bottom:10px"><strong>' + UI.escapar(s.produto) + '</strong><div>Desconto: ' + s.desconto + '%</div><div>' + UI.escapar(s.justificativa) + '</div></div>').join('');
+      await carregarHistorico();
+    }
+    async function carregarHistorico() {
+      const data = await API.get('/api/ia/sugestoes/historico');
+      document.getElementById('historicoIa').innerHTML = data.map((d) => '<div class="card" style="margin-bottom:10px"><div>' + UI.data(d.criadoEm) + '</div><div>' + UI.escapar(d.resultadoMargem || '') + '</div></div>').join('');
+    }
+    (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('ia.html'); await carregarHistorico(); })();
+  </script>
+</body>
+</html>

@@ -53,7 +53,7 @@ Acesse:
 
 | Contexto | E-mail | Senha |
 |---|---|---|
-| Superadmin | admin@sistema.com | Admin@123 |
+| Superadmin | admin@sistema.com |   |
 | Superusuário (rede) | rede@exemplo.com | Rede@123 |
 | Dono — Supermercado Silva | dono@silva.com.br | Senha@123 |
 | Gerente — Silva | gerente@silva.com.br | Senha@123 |

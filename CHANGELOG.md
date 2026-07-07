@@ -25,5 +25,13 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 ### Observações
 - Faturamento do painel de rede é estimado por saídas de estoque × preço atual (sem PDV na Parte 1).
 
-## [Não lançado]
-- Parte 2: PDV Electron+React+SQLite offline-first, vendas, NFC-e (Nuvem Fiscal/Focus NFe), sincronização bidirecional.
+## [2.0.0] — Parte 2
+
+### Adicionado
+- Módulo de vendas com registro, cancelamento e sincronização offline
+- Módulo de promoções com validação de conflito
+- Módulo de caixa com abertura, fechamento, sangria e suprimento
+- Relatórios: vendas, margem, giro, DRE simplificado, estoque crítico
+- Sincronização com PDV Electron (produtos, promoções, vendas offline)
+- Sugestões de IA via Claude API baseadas em histórico de decisões
+- Novas páginas: vendas, promoções, caixa, relatórios, IA
