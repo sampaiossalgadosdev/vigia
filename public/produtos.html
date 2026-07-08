@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Produtos</title>
   <link rel="stylesheet" href="/css/app.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script src="/js/navbar.js"></script>
 </head>
 <body>
@@ -25,7 +25,10 @@
         <table class="tabela-clicavel">
           <thead>
             <tr>
-              <th class="col-check"><input type="checkbox" id="checkTodos"></th>
+              <th class="col-check">
+                <button id="btnExcluirSelecionados" class="btn-icone perigo" style="display:none" title="Excluir selecionados"><i class="fa-solid fa-trash-can"></i></button>
+                <input type="checkbox" id="checkTodos">
+              </th>
               <th class="ordenavel" data-coluna="nome">Nome <i class="fa-solid fa-sort"></i></th>
               <th class="ordenavel" data-coluna="grupo">Grupo <i class="fa-solid fa-sort"></i></th>
               <th class="ordenavel" data-coluna="valor">Valor <i class="fa-solid fa-sort"></i></th>
@@ -137,12 +140,14 @@
     let orderBy = 'nome', order = 'asc';
     // Filtros por coluna, combinados com AND na query string (ver produto.repository.js).
     const filtros = { nome: '', grupo: '', valor: '', custoMedio: '', estoqueTotal: '', unidade: '', codigoReferencia: '', situacao: 'ativo' };
+    // Ids marcados via checkbox na página atual, pra exclusão em lote.
+    const selecionados = new Set();
 
     // Referências capturadas na injeção do script: se o usuário navegar para
     // outra página antes de um fetch terminar, buscar por id retornaria null;
     // nos elementos órfãos a escrita tardia é um no-op inofensivo.
     const $ = (id) => document.getElementById(id);
-    const tabela = $('tabela'), infoPagina = $('infoPagina'), checkTodos = $('checkTodos');
+    const tabela = $('tabela'), infoPagina = $('infoPagina'), checkTodos = $('checkTodos'), btnExcluirSelecionados = $('btnExcluirSelecionados');
     const tituloModal = $('tituloModal'), erroModal = $('erroModal'), campoPlu = $('campoPlu'), campoCodigoRef = $('campoCodigoRef');
     const fEan = $('f_ean'), fNome = $('f_nome'), fMarca = $('f_marca'), fNcm = $('f_ncm'),
           fUnidade = $('f_unidade'), fPreco = $('f_preco'), fCusto = $('f_custo'),
@@ -171,10 +176,19 @@
       });
     }
 
+    function atualizarBotaoExcluirSelecionados() {
+      btnExcluirSelecionados.style.display = selecionados.size > 0 ? 'inline-block' : 'none';
+    }
+
     async function carregar() {
       const data = await API.get('/api/produtos?' + construirQuery());
       totalPaginas = data.totalPages || 1;
       infoPagina.textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
+      // Cada recarga (página, filtro, ordenação) troca as linhas visíveis,
+      // então a seleção anterior deixa de fazer sentido.
+      selecionados.clear();
+      checkTodos.checked = false;
+      atualizarBotaoExcluirSelecionados();
       if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="10" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
       tabela.innerHTML = data.items.map((p) =>
         '<tr data-id="' + p.id + '">' +
@@ -188,8 +202,8 @@
         '<td>' + (p.codigoReferencia || '-') + '</td>' +
         '<td><span class="tag ' + (p.ativo ? 'ok' : 'neutro') + '">' + (p.ativo ? 'Ativo' : 'Inativo') + '</span></td>' +
         '<td class="col-acoes"><div class="acoes-linha">' +
-        '<button data-acao="copiar" data-id="' + p.id + '" title="Copiar"><i class="fa-regular fa-copy"></i></button>' +
-        '<button class="perigo" data-acao="excluir" data-id="' + p.id + '" title="Excluir"><i class="fa-regular fa-trash-can"></i></button>' +
+        '<button data-acao="copiar" data-id="' + p.id + '" title="Copiar"><i class="fa-solid fa-copy"></i></button>' +
+        '<button class="perigo" data-acao="excluir" data-id="' + p.id + '" title="Excluir"><i class="fa-solid fa-trash-can"></i></button>' +
         '</div></td></tr>'
       ).join('');
     }
@@ -374,10 +388,32 @@
     });
     atualizarIconesOrdenacao();
 
-    // "Selecionar todos" só marca/desmarca as linhas visíveis — sem ação em
-    // lote amarrada ainda (nenhuma foi especificada), fica pronto pra futuro.
+    // "Selecionar todos" marca/desmarca as linhas visíveis e entra na seleção.
     checkTodos.addEventListener('change', () => {
-      tabela.querySelectorAll('.check-produto').forEach((cb) => { cb.checked = checkTodos.checked; });
+      tabela.querySelectorAll('.check-produto').forEach((cb) => {
+        cb.checked = checkTodos.checked;
+        if (checkTodos.checked) selecionados.add(cb.dataset.id);
+        else selecionados.delete(cb.dataset.id);
+      });
+      atualizarBotaoExcluirSelecionados();
+    });
+
+    // Checkbox de uma linha: entra/sai da seleção e mostra/esconde a lixeira
+    // de exclusão em lote (ao lado do checkbox "selecionar todos").
+    tabela.addEventListener('change', (ev) => {
+      const cb = ev.target.closest('.check-produto');
+      if (!cb) return;
+      if (cb.checked) selecionados.add(cb.dataset.id);
+      else selecionados.delete(cb.dataset.id);
+      atualizarBotaoExcluirSelecionados();
+    });
+
+    btnExcluirSelecionados.addEventListener('click', () => {
+      const ids = [...selecionados];
+      UI.confirmarAcao(
+        'Desativar ' + ids.length + ' produto(s) selecionado(s)? Eles sairão das listagens (soft delete).',
+        async () => { await Promise.all(ids.map((id) => API.del('/api/produtos/' + id))); carregar(); }
+      );
     });
 
     // Clique na linha abre a edição, exceto no checkbox e nas ações (que já

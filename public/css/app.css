@@ -118,9 +118,10 @@ th.ordenavel.ativa i { color: var(--verde); }
 .tabela-clicavel tbody tr { cursor: pointer; }
 .col-check, .col-acoes { cursor: default; }
 .acoes-linha { display: flex; gap: 12px; }
-.acoes-linha button { background: none; border: none; padding: 4px; color: var(--cinza); font-size: 15px; }
-.acoes-linha button:hover { color: var(--verde); }
-.acoes-linha button.perigo:hover { color: var(--alerta); }
+.acoes-linha button, .btn-icone { background: none; border: none; padding: 4px; color: var(--cinza); font-size: 15px; }
+.acoes-linha button:hover, .btn-icone:hover { color: var(--verde); }
+.acoes-linha button.perigo:hover, .btn-icone.perigo:hover { color: var(--alerta); }
+.col-check { display: flex; align-items: center; gap: 8px; }
 
 /* ─── Botões e formulários ─── */
 .btn {
