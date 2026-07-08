@@ -67,12 +67,26 @@ const Auth = (() => {
       const clone = main.cloneNode(true);
       parent.replaceChild(clone, container);
 
-      document.querySelectorAll('script[data-dynamic]').forEach((script) => script.remove());
+      // Remove conteúdo dinâmico da navegação anterior (modais e script da página).
+      document.querySelectorAll('[data-dynamic]').forEach((el) => el.remove());
+
+      // Reproduz elementos fora do <main> (ex.: modais), que não fazem parte
+      // do layout fixo e por isso não são trazidos ao trocar só o <main>.
+      Array.from(doc.body.children).forEach((el) => {
+        if (el.tagName === 'SCRIPT' || el.classList.contains('layout')) return;
+        const extra = el.cloneNode(true);
+        extra.setAttribute('data-dynamic', 'true');
+        document.body.appendChild(extra);
+      });
+
+      // Só reexecuta o script inline da própria página. navbar.js/api.js/auth.js
+      // usam const no escopo global e já estão carregados: reinjetá-los quebra
+      // a página com "Identifier já foi declarado".
       Array.from(doc.querySelectorAll('script')).forEach((script) => {
+        if (script.src) return;
         const novo = document.createElement('script');
         novo.setAttribute('data-dynamic', 'true');
-        if (script.src) novo.src = script.src;
-        else novo.textContent = script.textContent;
+        novo.textContent = script.textContent;
         document.body.appendChild(novo);
       });
 
