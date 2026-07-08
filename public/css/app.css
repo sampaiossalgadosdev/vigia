@@ -62,7 +62,7 @@ button { font-family: inherit; cursor: pointer; }
   border-bottom: 1px solid rgba(255,255,255,.12);
 }
 .sidebar .logo small { display: block; font-size: 10px; letter-spacing: 1px; font-weight: 400; color: #9fc4b4; margin-top: 4px; }
-.sidebar nav { flex: 1; padding: 12px 0; }
+.sidebar nav { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 0; }
 .sidebar nav a {
   display: flex; align-items: center; justify-content: space-between;
   padding: 11px 20px; color: #cfe3d9; font-size: 14px;
@@ -201,7 +201,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   transition: left 220ms ease;
 }
 
-body.sidebar-collapsed .navbar-topo { left: 0; }
+body.sidebar-collapsed .navbar-topo { left: 0; padding-left: 62px; }
 
 .navbar-topo .navbar-brand,
 .navbar-topo .navbar-user {
@@ -257,7 +257,7 @@ body.sidebar-collapsed .sidebar-toggle { left: 12px; }
   .sidebar { width: 100%; height: auto; position: static; top: auto; }
   .sidebar.collapsed { width: 100%; }
   .conteudo { margin-left: 0; }
-  .navbar-topo { left: 0; }
+  .navbar-topo { left: 0; padding-left: 62px; }
   .sidebar-toggle { left: 12px; }
   body.sidebar-collapsed .sidebar-toggle { left: 12px; }
   .form-grid { grid-template-columns: 1fr; }
