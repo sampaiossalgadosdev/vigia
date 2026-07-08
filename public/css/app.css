@@ -75,7 +75,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .badge.oculto { display: none; }
 
-.conteudo { flex: 1; padding: 24px 28px; max-width: 1240px; margin-left: 230px; transition: margin-left 220ms ease; }
+.conteudo { flex: 1; min-width: 0; padding: 24px 28px; margin-left: 230px; transition: margin-left 220ms ease; }
 
 .topo {
   display: flex; justify-content: space-between; align-items: center;
@@ -126,6 +126,14 @@ th.ordenavel.ativa i { color: var(--verde); }
 .col-check { width: 1%; white-space: nowrap; }
 .col-check input[type="checkbox"] { width: auto; vertical-align: middle; }
 .col-check .btn-icone { vertical-align: middle; margin-right: 6px; }
+
+/* ─── Tabela de produtos: prioriza a coluna Nome ───
+   As demais colunas encolhem limitando os inputs de filtro (são eles que
+   definem a largura mínima de cada coluna no layout automático da tabela). */
+.tabela-produtos th[data-coluna="nome"] { width: 30%; }
+.tabela-produtos .linha-filtros input { max-width: 110px; }
+.tabela-produtos .linha-filtros th:nth-child(2) input { max-width: none; } /* filtro do Nome */
+.tabela-produtos .linha-filtros select { max-width: 110px; }
 
 /* ─── Botões e formulários ─── */
 .btn {
