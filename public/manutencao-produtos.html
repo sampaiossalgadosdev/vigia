@@ -81,10 +81,13 @@
       <div class="painel">
         <h2>Preços</h2>
         <div class="form-grid">
-          <div class="campo"><label>Preço desejado (R$)</label><input id="m_precoDesejado" type="number" step="0.01" min="0.01" placeholder="Preço que pretende praticar"></div>
-          <div class="campo"><label>Preço atual (última NF-e)</label><input id="m_precoAtual" readonly></div>
-          <div class="campo"><label>Custo médio</label><input id="m_custoMedio" readonly></div>
-          <div class="campo"><label>Preço à vista (R$) *</label><input id="m_precoAVista" type="number" step="0.01" min="0.01"></div>
+          <div class="campo"><label>Preço médio</label><input id="m_precoMedio" readonly></div>
+          <div class="campo"><label>Preço atual da última compra</label><input id="m_precoAtual" readonly></div>
+        </div>
+        <div class="form-grid tres">
+          <div class="campo"><label>Markup desejado (%)</label><input id="m_markupDesejado" type="number" step="0.1" placeholder="Ex: 30"></div>
+          <div class="campo"><label>Markup atual (%)</label><input id="m_markupAtual" readonly></div>
+          <div class="campo"><label>Preço atual (venda) (R$) *</label><input id="m_precoVenda" type="number" step="0.01" min="0.01"></div>
         </div>
       </div>
 
@@ -112,6 +115,8 @@
     const $ = (id) => document.getElementById(id);
     const erroGeral = $('erroGeral');
     const produtoId = new URLSearchParams(window.location.search).get('id');
+    // Base do cálculo de markup (markup = preço/preçoMédio − 1); definido no carregar().
+    let precoMedioNum = 0;
 
     // Aba onde cada campo validável vive, pra apontar o erro mesmo que o
     // usuário esteja em outra aba na hora de salvar.
@@ -160,10 +165,17 @@
       $('m_ultFornecedor').value = ultima.fornecedor || '-';
       $('m_ultData').value = dataBr(ultima.data);
       // Preços
-      $('m_precoDesejado').value = produto.precoDesejado || '';
+      precoMedioNum = Number(produto.custoMedio || 0);
+      $('m_precoMedio').value = UI.moeda(produto.custoMedio);
       $('m_precoAtual').value = ultima.preco != null ? UI.moeda(ultima.preco) : 'Sem compras registradas';
-      $('m_custoMedio').value = UI.moeda(produto.custoMedio);
-      $('m_precoAVista').value = produto.preco || '';
+      $('m_precoVenda').value = produto.preco || '';
+      $('m_markupAtual').value = precoMedioNum > 0 && produto.preco
+        ? ((Number(produto.preco) / precoMedioNum - 1) * 100).toFixed(1).replace('.', ',') + '%'
+        : '-';
+      if (!(precoMedioNum > 0)) {
+        $('m_markupDesejado').disabled = true;
+        $('m_markupDesejado').placeholder = 'Sem preço médio (nenhuma compra)';
+      }
       // Códigos
       $('m_ean').value = produto.ean || '';
       $('m_codRef').value = produto.codigoReferencia || '';
@@ -190,10 +202,8 @@
       const cfop = $('m_cfop').value.trim();
       if (cfop && !/^\d{4}$/.test(cfop)) invalido('m_cfop', 'tributarias', 'CFOP deve ter exatamente 4 dígitos');
 
-      const precoAVista = Number($('m_precoAVista').value);
-      if (!$('m_precoAVista').value || !(precoAVista > 0)) invalido('m_precoAVista', 'precos', 'Preço à vista é obrigatório e deve ser maior que zero');
-      const precoDesejado = $('m_precoDesejado').value;
-      if (precoDesejado && !(Number(precoDesejado) > 0)) invalido('m_precoDesejado', 'precos', 'Preço desejado deve ser maior que zero');
+      const precoVenda = Number($('m_precoVenda').value);
+      if (!$('m_precoVenda').value || !(precoVenda > 0)) invalido('m_precoVenda', 'precos', 'Preço atual (venda) é obrigatório e deve ser maior que zero');
 
       const ean = $('m_ean').value.trim();
       if (!/^\d{8}$|^\d{12,14}$/.test(ean)) invalido('m_ean', 'codigos', 'EAN é obrigatório (8, 12, 13 ou 14 dígitos numéricos)');
@@ -225,8 +235,7 @@
         configTributaria: $('m_configTrib').value,
         cfop: $('m_cfop').value.trim(),
         origem: $('m_origem').value,
-        precoDesejado: $('m_precoDesejado').value,
-        preco: $('m_precoAVista').value, // Preço à vista É o preço de venda vigente (decisão de projeto)
+        preco: $('m_precoVenda').value, // preço de venda vigente (o PDV usa este)
         ean: $('m_ean').value.trim(),
         codigoReferencia: $('m_codRef').value.trim(),
       };
@@ -243,6 +252,20 @@
         btn.disabled = false; btn.textContent = 'Salvar';
       }
     }
+
+    // Mão dupla markup ↔ preço: digitar o markup desejado calcula o preço de
+    // venda sobre o preço médio; digitar o preço recalcula o markup. Setar
+    // .value via código não dispara 'input', então não há loop.
+    $('m_markupDesejado').addEventListener('input', () => {
+      const mk = Number($('m_markupDesejado').value);
+      if (!(precoMedioNum > 0) || $('m_markupDesejado').value === '' || Number.isNaN(mk)) return;
+      $('m_precoVenda').value = (precoMedioNum * (1 + mk / 100)).toFixed(2);
+    });
+    $('m_precoVenda').addEventListener('input', () => {
+      const preco = Number($('m_precoVenda').value);
+      if (!(precoMedioNum > 0) || !(preco > 0)) return;
+      $('m_markupDesejado').value = ((preco / precoMedioNum - 1) * 100).toFixed(1);
+    });
 
     $('btnSalvar').addEventListener('click', salvar);
     $('btnCancelar').addEventListener('click', () => { window.location.href = 'produtos.html'; });

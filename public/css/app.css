@@ -160,6 +160,7 @@ th.ordenavel.ativa i { color: var(--azul); }
 .btn.pequeno { padding: 5px 10px; font-size: 12px; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid.tres { grid-template-columns: 1fr 1fr 1fr; }
 .form-grid .cheio { grid-column: 1 / -1; }
 label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--cinza); }
 input, select, textarea {
@@ -309,5 +310,5 @@ body.sidebar-collapsed .sidebar-toggle { left: 12px; }
   .navbar-topo { left: 0; padding-left: 62px; }
   .sidebar-toggle { left: 12px; }
   body.sidebar-collapsed .sidebar-toggle { left: 12px; }
-  .form-grid { grid-template-columns: 1fr; }
+  .form-grid, .form-grid.tres { grid-template-columns: 1fr; }
 }
