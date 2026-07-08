@@ -16,7 +16,7 @@
 }
 
 body .login-pagina.login-fundo {
-  background: var(--login-navy) url('/img/login-fundo.jpg') center / cover no-repeat;
+  background: var(--login-navy) url('/img/login-fundo.png') center / cover no-repeat;
   justify-content: flex-end;
   align-items: flex-start;
 }
