@@ -17,8 +17,8 @@
 
       <div class="barra-acoes">
         <input type="search" id="busca" placeholder="Buscar por nome, EAN, marca ou PLU">
-        <button class="btn" onclick="abrirNovo()">Novo produto</button>
-        <button class="btn secundario" onclick="UI.abrirModal('modalImportar')">Importar em lote</button>
+        <button class="btn" id="btnNovoProduto">Novo produto</button>
+        <button class="btn secundario" id="btnAbrirImportar">Importar em lote</button>
       </div>
 
       <div class="painel">
@@ -27,9 +27,9 @@
           <tbody id="tabela"><tr><td colspan="8" class="vazio">Carregando...</td></tr></tbody>
         </table>
         <div class="paginacao">
-          <button class="btn secundario pequeno" onclick="mudarPagina(-1)">Anterior</button>
+          <button class="btn secundario pequeno" id="btnPaginaAnterior">Anterior</button>
           <span id="infoPagina"></span>
-          <button class="btn secundario pequeno" onclick="mudarPagina(1)">Próxima</button>
+          <button class="btn secundario pequeno" id="btnPaginaProxima">Próxima</button>
         </div>
       </div>
     </main>
@@ -59,8 +59,8 @@
         <div class="campo" id="campoPlu" style="display:none"><label>PLU (4 a 6 dígitos) *</label><input id="f_plu" maxlength="6"></div>
       </div>
       <div class="rodape">
-        <button class="btn secundario" onclick="UI.fecharModal('modalProduto')">Cancelar</button>
-        <button class="btn" id="btnSalvar" onclick="salvar()">Salvar</button>
+        <button class="btn secundario" id="btnCancelarProduto">Cancelar</button>
+        <button class="btn" id="btnSalvar">Salvar</button>
       </div>
     </div>
   </div>
@@ -74,9 +74,9 @@
         1) Baixe o modelo · 2) Preencha e envie (CSV ou XLSX, até 5.000 linhas / 10MB) · 3) Confira a prévia · 4) Confirme.
       </p>
       <div class="barra-acoes">
-        <button class="btn secundario" onclick="baixarModelo()">Baixar modelo.xlsx</button>
+        <button class="btn secundario" id="btnBaixarModelo">Baixar modelo.xlsx</button>
         <input type="file" id="arquivoImportar" accept=".csv,.xlsx,.xls">
-        <button class="btn" onclick="enviarPreview()">Gerar prévia</button>
+        <button class="btn" id="btnGerarPreview">Gerar prévia</button>
       </div>
       <div id="areaPreview" style="display:none">
         <p id="resumoPreview" style="font-weight:600;margin:10px 0"></p>
@@ -87,11 +87,11 @@
           </table>
         </div>
         <div class="rodape">
-          <button class="btn" id="btnConfirmarImportacao" onclick="confirmarImportacao()">Confirmar importação</button>
+          <button class="btn" id="btnConfirmarImportacao">Confirmar importação</button>
         </div>
       </div>
       <div class="rodape">
-        <button class="btn secundario" onclick="UI.fecharModal('modalImportar')">Fechar</button>
+        <button class="btn secundario" id="btnFecharImportar">Fechar</button>
       </div>
     </div>
   </div>
@@ -99,12 +99,9 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null, tokenImportacao = null;
-
-    document.getElementById('f_peso').addEventListener('change', (ev) => {
-      document.getElementById('campoPlu').style.display = ev.target.checked ? 'block' : 'none';
-    });
 
     async function carregar() {
       const busca = encodeURIComponent(document.getElementById('busca').value.trim());
@@ -119,8 +116,8 @@
         '<td>' + UI.moeda(p.preco) + '</td><td>' + UI.moeda(p.custoMedio) + '</td>' +
         '<td>' + (Number(p.estoqueQtd) <= Number(p.estoqueMin) ? '<span class="tag erro">' + p.estoqueQtd + '</span>' : p.estoqueQtd) + '</td>' +
         '<td>' + (p.categoria ? UI.escapar(p.categoria.nome) : '-') + '</td>' +
-        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(p.id) + ')\'>Editar</button> ' +
-        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(p.id) + ')\'>Excluir</button></td></tr>'
+        '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + p.id + '">Editar</button> ' +
+        '<button class="btn perigo pequeno" data-acao="remover" data-id="' + p.id + '">Excluir</button></td></tr>'
       ).join('');
     }
 
@@ -244,13 +241,35 @@
       }
     }
 
+    // ─── Eventos ───
+    document.getElementById('btnNovoProduto').addEventListener('click', abrirNovo);
+    document.getElementById('btnAbrirImportar').addEventListener('click', () => UI.abrirModal('modalImportar'));
+    document.getElementById('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
+    document.getElementById('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+    document.getElementById('btnCancelarProduto').addEventListener('click', () => UI.fecharModal('modalProduto'));
+    document.getElementById('btnSalvar').addEventListener('click', salvar);
+    document.getElementById('btnBaixarModelo').addEventListener('click', baixarModelo);
+    document.getElementById('btnGerarPreview').addEventListener('click', enviarPreview);
+    document.getElementById('btnConfirmarImportacao').addEventListener('click', confirmarImportacao);
+    document.getElementById('btnFecharImportar').addEventListener('click', () => UI.fecharModal('modalImportar'));
+    document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
+    document.getElementById('f_peso').addEventListener('change', (ev) => {
+      document.getElementById('campoPlu').style.display = ev.target.checked ? 'block' : 'none';
+    });
+    document.getElementById('tabela').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao]');
+      if (!btn) return;
+      if (btn.dataset.acao === 'editar') editar(btn.dataset.id);
+      if (btn.dataset.acao === 'remover') remover(btn.dataset.id);
+    });
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('produtos.html');
-      document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
       carregar();
     })();
+  })();
   </script>
 </body>
 </html>

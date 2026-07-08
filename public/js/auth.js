@@ -154,9 +154,11 @@ const Auth = (() => {
     });
 
     const topo = document.getElementById('usuarioArea');
-    if (topo && usuario)
-      topo.innerHTML = '<span>' + usuario.nome + ' · ' + (usuario.isDono ? 'Dono' : (usuario.perfilNome || 'usuário')) + '</span>' +
-        '<button class="btn secundario pequeno" onclick="Auth.logout()">Sair</button>';
+    if (topo && usuario) {
+      topo.innerHTML = '<span>' + UI.escapar(usuario.nome) + ' · ' + (usuario.isDono ? 'Dono' : UI.escapar(usuario.perfilNome || 'usuário')) + '</span>' +
+        '<button class="btn secundario pequeno" data-acao="sair">Sair</button>';
+      topo.querySelector('[data-acao="sair"]').addEventListener('click', logout);
+    }
 
     try {
       const data = await API.get('/api/sugestoes?limit=1');

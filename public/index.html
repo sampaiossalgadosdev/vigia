@@ -40,6 +40,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     async function carregarDashboard() {
       try {
@@ -64,7 +65,7 @@
             '<strong>' + UI.escapar(s.titulo) + '</strong>' +
             '<div style="font-size:13px;color:var(--cinza);margin-top:4px">' + UI.escapar(s.mensagem) + '</div>' +
             (s.status === 'pendente'
-              ? '<button class="btn secundario pequeno" style="margin-top:6px" onclick="marcarLida(\'' + s.id + '\')">Marcar como lida</button>'
+              ? '<button class="btn secundario pequeno" style="margin-top:6px" data-acao="marcar-lida" data-id="' + s.id + '">Marcar como lida</button>'
               : '') +
             '</div>'
           ).join('');
@@ -88,12 +89,18 @@
       catch (e) { alert(e.message); }
     }
 
+    document.getElementById('listaSugestoes').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao="marcar-lida"]');
+      if (btn) marcarLida(btn.dataset.id);
+    });
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('index.html');
       await carregarDashboard();
     })();
+  })();
   </script>
 </body>
 </html>

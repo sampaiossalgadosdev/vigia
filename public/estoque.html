@@ -16,9 +16,9 @@
       </div>
 
       <div class="abas">
-        <button class="ativa" data-aba="upload" onclick="trocarAba('upload')">Upload de XML</button>
-        <button data-aba="pendentes" onclick="trocarAba('pendentes')">Itens pendentes <span id="badgePendentes" class="badge oculto"></span></button>
-        <button data-aba="historico" onclick="trocarAba('historico')">Histórico de NF-es</button>
+        <button class="ativa" data-aba="upload">Upload de XML</button>
+        <button data-aba="pendentes">Itens pendentes <span id="badgePendentes" class="badge oculto"></span></button>
+        <button data-aba="historico">Histórico de NF-es</button>
       </div>
 
       <!-- Aba 1: upload XML -->
@@ -39,7 +39,7 @@
             <tbody id="itensNfe"></tbody>
           </table>
           <div class="rodape" style="display:flex;justify-content:flex-end;margin-top:14px">
-            <button class="btn" id="btnConfirmarNfe" onclick="confirmarNfe()">Confirmar entrada</button>
+            <button class="btn" id="btnConfirmarNfe">Confirmar entrada</button>
           </div>
         </div>
       </div>
@@ -58,7 +58,7 @@
       <!-- Aba 3: histórico -->
       <div class="aba-conteudo" id="aba-historico">
         <div class="barra-acoes">
-          <select id="filtroStatus" onchange="carregarHistorico()">
+          <select id="filtroStatus">
             <option value="">Todas</option>
             <option value="pendente">Pendentes</option>
             <option value="confirmada">Confirmadas</option>
@@ -89,8 +89,8 @@
         <table><tbody id="resultadosVincular"></tbody></table>
       </div>
       <div class="rodape">
-        <button class="btn secundario" onclick="cadastrarDoItem()">Cadastrar novo produto com dados do XML</button>
-        <button class="btn secundario" onclick="UI.fecharModal('modalVincular')">Fechar</button>
+        <button class="btn secundario" id="btnCadastrarDoItem">Cadastrar novo produto com dados do XML</button>
+        <button class="btn secundario" id="btnFecharVincular">Fechar</button>
       </div>
     </div>
   </div>
@@ -98,8 +98,11 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     let nfeAtual = null, itemVinculando = null;
+    // Itens pendentes carregados, indexados por id (evita serializar objetos no HTML).
+    const itensPendentes = new Map();
 
     function trocarAba(aba) {
       document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
@@ -167,12 +170,14 @@
     async function carregarPendentes() {
       const data = await API.get('/api/estoque/pendentes');
       const corpo = document.getElementById('tabelaPendentes');
+      itensPendentes.clear();
+      data.itens.forEach((i) => itensPendentes.set(i.id, i));
       if (data.itens.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhum item pendente.</td></tr>'; return; }
       corpo.innerHTML = data.itens.map((i) =>
         '<tr><td>' + i.nfe.numeroNfe + ' <span class="tag ' + (i.nfe.status === 'confirmada' ? 'ok' : 'neutro') + '">' + i.nfe.status + '</span></td>' +
         '<td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td>' +
-        '<td><button class="btn pequeno" onclick=\'abrirVincular(' + JSON.stringify(i) + ')\'>Vincular / Cadastrar</button></td></tr>'
+        '<td><button class="btn pequeno" data-acao="vincular" data-id="' + i.id + '">Vincular / Cadastrar</button></td></tr>'
       ).join('');
     }
 
@@ -201,7 +206,7 @@
       const data = await API.get('/api/produtos?limit=8&search=' + encodeURIComponent(termo));
       document.getElementById('resultadosVincular').innerHTML = data.items.map((p) =>
         '<tr><td>' + UI.escapar(p.nome) + '<br><small>' + p.ean + '</small></td>' +
-        '<td style="text-align:right"><button class="btn pequeno" onclick=\'vincular(' + JSON.stringify(p.id) + ')\'>Vincular</button></td></tr>'
+        '<td style="text-align:right"><button class="btn pequeno" data-acao="vincular-produto" data-id="' + p.id + '">Vincular</button></td></tr>'
       ).join('');
     });
 
@@ -250,7 +255,7 @@
       const corpo = document.getElementById('tabelaHistorico');
       if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma NF-e encontrada.</td></tr>'; return; }
       corpo.innerHTML = data.items.map((n) =>
-        '<tr onclick=\'verNfe(' + JSON.stringify(n.id) + ')\' style="cursor:pointer">' +
+        '<tr data-id="' + n.id + '" style="cursor:pointer">' +
         '<td>' + n.numeroNfe + '</td><td>' + UI.escapar(n.fornecedor ? n.fornecedor.nome : '-') + '</td>' +
         '<td>' + UI.data(n.dataEmissao) + '</td><td>' + UI.moeda(n.valorTotal) + '</td><td>' + n._count.itens + '</td>' +
         '<td><span class="tag ' + (n.status === 'confirmada' ? 'ok' : n.status === 'pendente' ? 'pendente' : 'erro') + '">' + n.status + '</span></td></tr>'
@@ -264,12 +269,36 @@
       document.getElementById('painelNfe').scrollIntoView({ behavior: 'smooth' });
     }
 
+    // ─── Eventos ───
+    document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
+    });
+    document.getElementById('btnConfirmarNfe').addEventListener('click', confirmarNfe);
+    document.getElementById('filtroStatus').addEventListener('change', carregarHistorico);
+    document.getElementById('btnCadastrarDoItem').addEventListener('click', cadastrarDoItem);
+    document.getElementById('btnFecharVincular').addEventListener('click', () => UI.fecharModal('modalVincular'));
+    document.getElementById('tabelaPendentes').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao="vincular"]');
+      if (!btn) return;
+      const item = itensPendentes.get(btn.dataset.id);
+      if (item) abrirVincular(item);
+    });
+    document.getElementById('resultadosVincular').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao="vincular-produto"]');
+      if (btn) vincular(btn.dataset.id);
+    });
+    document.getElementById('tabelaHistorico').addEventListener('click', (ev) => {
+      const linha = ev.target.closest('tr[data-id]');
+      if (linha) verNfe(linha.dataset.id);
+    });
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('estoque.html');
       atualizarBadgePendentes();
     })();
+  })();
   </script>
 </body>
 </html>

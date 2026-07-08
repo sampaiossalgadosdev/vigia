@@ -17,7 +17,7 @@
 
       <div class="barra-acoes">
         <input type="search" id="busca" placeholder="Buscar por nome ou CNPJ">
-        <button class="btn" onclick="abrirNovo()">Novo fornecedor</button>
+        <button class="btn" id="btnNovoFornecedor">Novo fornecedor</button>
       </div>
 
       <div class="painel">
@@ -26,9 +26,9 @@
           <tbody id="tabela"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
         </table>
         <div class="paginacao">
-          <button class="btn secundario pequeno" onclick="mudarPagina(-1)">Anterior</button>
+          <button class="btn secundario pequeno" id="btnPaginaAnterior">Anterior</button>
           <span id="infoPagina"></span>
-          <button class="btn secundario pequeno" onclick="mudarPagina(1)">Próxima</button>
+          <button class="btn secundario pequeno" id="btnPaginaProxima">Próxima</button>
         </div>
       </div>
     </main>
@@ -45,8 +45,8 @@
         <div class="campo cheio"><label>E-mail</label><input id="f_email" type="email"></div>
       </div>
       <div class="rodape">
-        <button class="btn secundario" onclick="UI.fecharModal('modalFornecedor')">Cancelar</button>
-        <button class="btn" onclick="salvar()">Salvar</button>
+        <button class="btn secundario" id="btnCancelarFornecedor">Cancelar</button>
+        <button class="btn" id="btnSalvar">Salvar</button>
       </div>
     </div>
   </div>
@@ -54,6 +54,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null;
 
@@ -81,8 +82,8 @@
       corpo.innerHTML = data.items.map((f) =>
         '<tr><td>' + UI.escapar(f.nome) + '</td><td>' + f.cnpj + '</td>' +
         '<td>' + UI.escapar(f.email || '-') + '</td><td>' + UI.escapar(f.telefone || '-') + '</td>' +
-        '<td><button class="btn secundario pequeno" onclick=\'editar(' + JSON.stringify(f.id) + ')\'>Editar</button> ' +
-        '<button class="btn perigo pequeno" onclick=\'remover(' + JSON.stringify(f.id) + ')\'>Excluir</button></td></tr>'
+        '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + f.id + '">Editar</button> ' +
+        '<button class="btn perigo pequeno" data-acao="remover" data-id="' + f.id + '">Excluir</button></td></tr>'
       ).join('');
     }
 
@@ -143,13 +144,27 @@
       try { await API.del('/api/fornecedores/' + id); carregar(); } catch (e) { alert(e.message); }
     }
 
+    // ─── Eventos ───
+    document.getElementById('btnNovoFornecedor').addEventListener('click', abrirNovo);
+    document.getElementById('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
+    document.getElementById('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+    document.getElementById('btnCancelarFornecedor').addEventListener('click', () => UI.fecharModal('modalFornecedor'));
+    document.getElementById('btnSalvar').addEventListener('click', salvar);
+    document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
+    document.getElementById('tabela').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao]');
+      if (!btn) return;
+      if (btn.dataset.acao === 'editar') editar(btn.dataset.id);
+      if (btn.dataset.acao === 'remover') remover(btn.dataset.id);
+    });
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('fornecedores.html');
-      document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
       carregar();
     })();
+  })();
   </script>
 </body>
 </html>

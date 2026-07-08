@@ -15,12 +15,12 @@
         <h1>Relatórios</h1>
       </div>
       <div class="abas">
-        <button class="ativa" data-aba="dia" onclick="trocarAba('dia')">Vendas do dia</button>
-        <button data-aba="periodo" onclick="trocarAba('periodo')">Período</button>
-        <button data-aba="produtos" onclick="trocarAba('produtos')">Produtos</button>
-        <button data-aba="margem" onclick="trocarAba('margem')">Margem</button>
-        <button data-aba="dre" onclick="trocarAba('dre')">DRE</button>
-        <button data-aba="estoque" onclick="trocarAba('estoque')">Estoque crítico</button>
+        <button class="ativa" data-aba="dia">Vendas do dia</button>
+        <button data-aba="periodo">Período</button>
+        <button data-aba="produtos">Produtos</button>
+        <button data-aba="margem">Margem</button>
+        <button data-aba="dre">DRE</button>
+        <button data-aba="estoque">Estoque crítico</button>
       </div>
       <div class="aba-conteudo ativa" id="aba-dia"><div class="cards"><div class="card"><div class="rotulo">Receita</div><div class="valor" id="receitaDia">—</div></div><div class="card"><div class="rotulo">Vendas</div><div class="valor" id="qtdDia">—</div></div></div></div>
       <div class="aba-conteudo" id="aba-periodo"><div class="painel"><table><thead><tr><th>Data</th><th>Total</th></tr></thead><tbody id="tabelaPeriodo"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody></table></div></div>
@@ -33,6 +33,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     function trocarAba(aba) { document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba)); document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba)); }
     async function carregar() {
@@ -50,7 +51,11 @@
       const estoque = await API.get('/api/relatorios/estoque-critico');
       document.getElementById('tabelaEstoque').innerHTML = estoque.map((p) => '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + p.estoqueQtd + '</td><td>' + p.estoqueMin + '</td></tr>').join('');
     }
+    document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
+    });
     (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('relatorios.html'); await carregar(); })();
+  })();
   </script>
 </body>
 </html>

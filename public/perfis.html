@@ -16,7 +16,7 @@
       </div>
 
       <div class="barra-acoes">
-        <button class="btn" onclick="abrirNovo()">Novo perfil</button>
+        <button class="btn" id="btnNovoPerfil">Novo perfil</button>
       </div>
 
       <div class="painel">
@@ -54,8 +54,8 @@
       </div>
 
       <div class="rodape">
-        <button class="btn secundario" onclick="UI.fecharModal('modalPerfil')">Cancelar</button>
-        <button class="btn" onclick="salvar()">Salvar</button>
+        <button class="btn secundario" id="btnCancelarPerfil">Cancelar</button>
+        <button class="btn" id="btnSalvar">Salvar</button>
       </div>
     </div>
   </div>
@@ -63,6 +63,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     let editandoId = null;
 
@@ -112,8 +113,8 @@
       corpo.innerHTML = data.items.map((p) =>
         '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + UI.escapar(p.descricao || '-') + '</td>' +
         '<td>' + p.totalUsuarios + '</td>' +
-        '<td><button class="btn secundario pequeno" onclick="editar(' + JSON.stringify(p.id) + ')">Editar</button> ' +
-        '<button class="btn perigo pequeno" onclick="remover(' + JSON.stringify(p.id) + ')">Excluir</button></td></tr>'
+        '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + p.id + '">Editar</button> ' +
+        '<button class="btn perigo pequeno" data-acao="remover" data-id="' + p.id + '">Excluir</button></td></tr>'
       ).join('');
     }
 
@@ -162,6 +163,17 @@
       try { await API.del('/api/perfis/' + id); carregar(); } catch (e) { alert(e.message); }
     }
 
+    // ─── Eventos ───
+    document.getElementById('btnNovoPerfil').addEventListener('click', abrirNovo);
+    document.getElementById('btnCancelarPerfil').addEventListener('click', () => UI.fecharModal('modalPerfil'));
+    document.getElementById('btnSalvar').addEventListener('click', salvar);
+    document.getElementById('tabela').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao]');
+      if (!btn) return;
+      if (btn.dataset.acao === 'editar') editar(btn.dataset.id);
+      if (btn.dataset.acao === 'remover') remover(btn.dataset.id);
+    });
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
@@ -173,6 +185,7 @@
       await Auth.montarSidebar('perfis.html');
       carregar();
     })();
+  })();
   </script>
 </body>
 </html>

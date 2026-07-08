@@ -19,9 +19,9 @@
         <div class="card"><div class="rotulo">Vendas do dia</div><div class="valor" id="vendasDia">—</div></div>
       </div>
       <div class="barra-acoes">
-        <button class="btn" onclick="abrirCaixa()">Abrir caixa</button>
-        <button class="btn secundario" onclick="sangria()">Sangria / suprimento</button>
-        <button class="btn secundario" onclick="fecharCaixa()">Fechar caixa</button>
+        <button class="btn" id="btnAbrirCaixa">Abrir caixa</button>
+        <button class="btn secundario" id="btnSangria">Sangria / suprimento</button>
+        <button class="btn secundario" id="btnFecharCaixa">Fechar caixa</button>
       </div>
       <div class="painel"><h2>Histórico</h2><table><thead><tr><th>Data</th><th>Status</th><th>Fechamento</th></tr></thead><tbody id="historicoCaixa"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table></div>
     </main>
@@ -29,6 +29,7 @@
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     async function carregar() {
       const atual = await API.get('/api/caixa/atual');
@@ -42,7 +43,11 @@
     async function abrirCaixa() { const valor = prompt('Valor de abertura'); if (valor === null) return; await API.post('/api/caixa/abrir', { valorAbertura: valor }); await carregar(); }
     async function sangria() { const tipo = prompt('Tipo (sangria/suprimento)'); const valor = prompt('Valor'); const motivo = prompt('Motivo'); if (valor === null) return; await API.post('/api/caixa/sangria', { tipo, valor, motivo }); await carregar(); }
     async function fecharCaixa() { const valor = prompt('Valor de fechamento'); if (valor === null) return; await API.post('/api/caixa/fechar', { valorFechamento: valor }); await carregar(); }
+    document.getElementById('btnAbrirCaixa').addEventListener('click', abrirCaixa);
+    document.getElementById('btnSangria').addEventListener('click', sangria);
+    document.getElementById('btnFecharCaixa').addEventListener('click', fecharCaixa);
     (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('caixa.html'); await carregar(); })();
+  })();
   </script>
 </body>
 </html>

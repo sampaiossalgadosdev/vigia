@@ -15,7 +15,7 @@
         <h1>Promoções</h1>
       </div>
       <div class="barra-acoes">
-        <button class="btn" onclick="abrirNova()">Nova promoção</button>
+        <button class="btn" id="btnNovaPromocao">Nova promoção</button>
       </div>
       <div class="painel">
         <table>
@@ -37,21 +37,21 @@
         <div class="campo"><label>Leve qtd</label><input id="f_leve" type="number"></div>
         <div class="campo"><label>Pague qtd</label><input id="f_pague" type="number"></div>
       </div>
-      <div class="rodape"><button class="btn secundario" onclick="UI.fecharModal('modalPromocao')">Cancelar</button><button class="btn" onclick="salvar()">Salvar</button></div>
+      <div class="rodape"><button class="btn secundario" id="btnCancelarPromocao">Cancelar</button><button class="btn" id="btnSalvar">Salvar</button></div>
     </div>
   </div>
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script>
+  (() => {
     initNavbar();
     let produtoSelecionado = null;
     async function carregar() {
       const data = await API.get('/api/promocoes');
       const corpo = document.getElementById('tabelaPromocoes');
       if (!data.items.length) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma promoção cadastrada.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((p) => '<tr><td>' + UI.escapar(p.produto?.nome || '-') + '</td><td>' + p.tipo + '</td><td>' + p.desconto + '</td><td>' + UI.data(p.dataInicio) + ' a ' + UI.data(p.dataFim) + '</td><td><span class="tag ' + (p.ativa ? 'ok' : 'neutro') + '">' + (p.ativa ? 'ativa' : 'encerrada') + '</span></td><td><button class="btn secundario pequeno" onclick="encerrar(\'' + p.id + '\')">Encerrar</button></td></tr>').join('');
+      corpo.innerHTML = data.items.map((p) => '<tr><td>' + UI.escapar(p.produto?.nome || '-') + '</td><td>' + p.tipo + '</td><td>' + p.desconto + '</td><td>' + UI.data(p.dataInicio) + ' a ' + UI.data(p.dataFim) + '</td><td><span class="tag ' + (p.ativa ? 'ok' : 'neutro') + '">' + (p.ativa ? 'ativa' : 'encerrada') + '</span></td><td><button class="btn secundario pequeno" data-acao="encerrar" data-id="' + p.id + '">Encerrar</button></td></tr>').join('');
     }
-    function abrirNova() { UI.abrirModal('modalPromocao'); }
     async function salvar() {
       const body = { produtoId: produtoSelecionado?.id || document.getElementById('f_produto').value, nome: 'Promoção', tipo: document.getElementById('f_tipo').value, desconto: document.getElementById('f_desconto').value, dataInicio: document.getElementById('f_inicio').value, dataFim: document.getElementById('f_fim').value, leveQtd: document.getElementById('f_leve').value || null, pagueQtd: document.getElementById('f_pague').value || null };
       await API.post('/api/promocoes', body);
@@ -59,12 +59,20 @@
       await carregar();
     }
     async function encerrar(id) { await API.del('/api/promocoes/' + id); await carregar(); }
+    document.getElementById('btnNovaPromocao').addEventListener('click', () => UI.abrirModal('modalPromocao'));
+    document.getElementById('btnCancelarPromocao').addEventListener('click', () => UI.fecharModal('modalPromocao'));
+    document.getElementById('btnSalvar').addEventListener('click', salvar);
+    document.getElementById('tabelaPromocoes').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao="encerrar"]');
+      if (btn) encerrar(btn.dataset.id);
+    });
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('promocoes.html');
       await carregar();
     })();
+  })();
   </script>
 </body>
 </html>
