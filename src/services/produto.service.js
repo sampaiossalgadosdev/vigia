@@ -18,13 +18,16 @@ function normalizar(body) {
   const dados = {};
   // codigoReferencia fica fora daqui de propósito: é gerado sozinho na criação
   // (ver criar()) e só pode ser alterado manualmente na edição (ver atualizar()).
-  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'imagemUrl', 'categoriaId'];
+  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'imagemUrl', 'categoriaId', 'cfop', 'origem', 'configTributaria'];
   for (const campo of campos) if (body[campo] !== undefined) dados[campo] = body[campo] || null;
   if (dados.nome === null) delete dados.nome;
   if (dados.ean === null) delete dados.ean;
   if (dados.unidade === null) dados.unidade = 'UN';
   for (const campo of ['preco', 'custoMedio', 'estoqueQtd', 'estoqueMin'])
     if (body[campo] !== undefined && body[campo] !== null && body[campo] !== '') dados[campo] = Number(body[campo]);
+  // Preço desejado é opcional e pode ser limpo (null) na edição.
+  if (body.precoDesejado !== undefined)
+    dados.precoDesejado = body.precoDesejado === null || body.precoDesejado === '' ? null : Number(body.precoDesejado);
   if (body.vendidoPorPeso !== undefined)
     dados.vendidoPorPeso = body.vendidoPorPeso === true || body.vendidoPorPeso === 'true';
   if (dados.vendidoPorPeso === false) dados.plu = null;
@@ -130,6 +133,26 @@ async function sync(tenantId, desde) {
   return { produtos, sincronizadoEm: new Date().toISOString() };
 }
 
+/**
+ * Última entrada por NF-e confirmada do produto: preço unitário pago,
+ * fornecedor e data. Retorna campos nulos quando nunca houve compra.
+ */
+async function ultimaCompra(tenantId, id) {
+  await detalhar(tenantId, id); // garante que o produto existe no tenant
+  const item = await produtoRepo.ultimaCompra(tenantId, id);
+  if (!item) return { preco: null, fornecedor: null, data: null, numeroNfe: null };
+  return {
+    preco: item.valorUnitario,
+    fornecedor: item.nfe.fornecedor ? item.nfe.fornecedor.nome : null,
+    data: item.nfe.dataEmissao,
+    numeroNfe: item.nfe.numeroNfe,
+  };
+}
+
+async function listarCategorias(tenantId) {
+  return produtoRepo.listarCategorias(tenantId);
+}
+
 async function alertas(tenantId) {
   const itens = await produtoRepo.alertasEstoque(tenantId);
   return {
@@ -139,4 +162,4 @@ async function alertas(tenantId) {
   };
 }
 
-module.exports = { listar, detalhar, criar, atualizar, remover, sync, alertas };
+module.exports = { listar, detalhar, criar, atualizar, remover, sync, alertas, ultimaCompra, listarCategorias };

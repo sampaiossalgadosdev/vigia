@@ -53,7 +53,16 @@ const alertas = asyncHandler(async (req, res) => {
   success(res, await service.alertas(req.tenantId));
 });
 
+const ultimaCompra = asyncHandler(async (req, res) => {
+  success(res, await service.ultimaCompra(req.tenantId, req.params.id));
+});
+
+const listarCategorias = asyncHandler(async (req, res) => {
+  success(res, await service.listarCategorias(req.tenantId));
+});
+
 module.exports = {
   listar, detalhar, criar, atualizar, remover,
   baixarModelo, importarPreview, importarConfirmar, sync, alertas,
+  ultimaCompra, listarCategorias,
 };

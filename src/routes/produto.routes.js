@@ -21,9 +21,11 @@ router.post('/importar/preview', gestao, uploadPlanilha.single('arquivo'), contr
 router.post('/importar/confirmar', gestao, controller.importarConfirmar);
 router.get('/sync', gestao, controller.sync);
 router.get('/estoque/alertas', gestao, controller.alertas);
+router.get('/categorias', gestao, controller.listarCategorias);
 
 router.get('/', gestao, controller.listar);
 router.get('/:id', gestao, controller.detalhar);
+router.get('/:id/ultima-compra', gestao, controller.ultimaCompra);
 router.post('/', gestao, validator.criar, controller.criar);
 router.put('/:id', gestao, validator.atualizar, controller.atualizar);
 router.delete('/:id', gestao, controller.remover);

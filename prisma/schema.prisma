@@ -202,7 +202,11 @@ model Produto {
   unidade          String   @default("UN") // UN | KG | CX | L | PC | FD
   vendidoPorPeso   Boolean  @default(false)
   preco            Decimal  @db.Decimal(10, 2)
+  precoDesejado    Decimal? @db.Decimal(10, 2) // preço que o gerente pretende praticar (não é o vigente)
   custoMedio       Decimal  @default(0) @db.Decimal(10, 2)
+  cfop             String? // 4 dígitos, ex: 5102
+  origem           String? // nacional | importado
+  configTributaria String? // tributado_integral | substituicao_tributaria | isento | nao_tributado
   estoqueQtd       Decimal  @default(0) @db.Decimal(10, 3)
   estoqueMin       Decimal  @default(0) @db.Decimal(10, 3)
   imagemUrl        String?

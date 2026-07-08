@@ -32,6 +32,12 @@ const regrasBase = (opcional = false) => {
       .matches(/^\d{4,6}$/)
       .withMessage('PLU é obrigatório (4 a 6 dígitos) quando o produto é vendido por peso'),
     body('marca').optional({ values: 'falsy' }).isString().trim().isLength({ max: 100 }),
+    body('precoDesejado').optional({ values: 'falsy' }).isFloat({ gt: 0, max: 999999.99 }).withMessage('Preço desejado deve ser maior que zero e no máximo 999999.99'),
+    body('cfop').optional({ values: 'falsy' }).matches(/^\d{4}$/).withMessage('CFOP deve ter exatamente 4 dígitos'),
+    body('origem').optional({ values: 'falsy' }).isIn(['nacional', 'importado']).withMessage('Origem deve ser nacional ou importado'),
+    body('configTributaria').optional({ values: 'falsy' })
+      .isIn(['tributado_integral', 'substituicao_tributaria', 'isento', 'nao_tributado'])
+      .withMessage('Configuração tributária inválida'),
   ];
 };
 

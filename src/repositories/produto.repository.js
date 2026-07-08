@@ -137,6 +137,36 @@ async function contar(tenantId) {
   return prisma.produto.count({ where: { tenantId, ativo: true } });
 }
 
+/**
+ * Última compra do produto via NF-e confirmada: item mais recente pela data
+ * de emissão da nota, com preço unitário pago e fornecedor.
+ */
+async function ultimaCompra(tenantId, produtoId) {
+  return prisma.nfeItem.findFirst({
+    where: { produtoId, nfe: { tenantId, status: 'confirmada' } },
+    orderBy: { nfe: { dataEmissao: 'desc' } },
+    select: {
+      valorUnitario: true,
+      quantidade: true,
+      nfe: {
+        select: {
+          numeroNfe: true,
+          dataEmissao: true,
+          fornecedor: { select: { id: true, nome: true } },
+        },
+      },
+    },
+  });
+}
+
+async function listarCategorias(tenantId) {
+  return prisma.categoria.findMany({
+    where: { tenantId, ativo: true },
+    orderBy: { nome: 'asc' },
+    select: { id: true, nome: true },
+  });
+}
+
 async function buscarCategoria(tenantId, categoriaId) {
   return prisma.categoria.findFirst({ where: { id: categoriaId, tenantId, ativo: true } });
 }
@@ -150,5 +180,5 @@ async function buscarOuCriarCategoria(tx, tenantId, nome) {
 module.exports = {
   listar, buscarPorId, buscarPorEan, buscarPorEans, buscarPorCodigoReferencia, criar,
   criarComCodigoSequencial, atualizar, criarVarios, sync, alertasEstoque, contar,
-  buscarCategoria, buscarOuCriarCategoria,
+  buscarCategoria, buscarOuCriarCategoria, ultimaCompra, listarCategorias,
 };

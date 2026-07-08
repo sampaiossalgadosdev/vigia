@@ -242,16 +242,8 @@
       UI.abrirModal('modalProduto');
     }
 
-    async function editar(id) {
-      const p = await API.get('/api/produtos/' + id);
-      editandoId = id;
-      tituloModal.textContent = 'Editar produto';
-      UI.limparErro(erroModal);
-      preencher(p);
-      fCodigoRef.value = p.codigoReferencia || '';
-      campoCodigoRef.style.display = 'block';
-      UI.abrirModal('modalProduto');
-    }
+    // Edição migrou pra página dedicada de Manutenção de Produtos;
+    // o modal desta tela ficou só pra criação (Novo produto / Copiar).
 
     /**
      * Pré-preenche o formulário de "Novo produto" com os dados do produto
@@ -420,8 +412,8 @@
       );
     });
 
-    // Clique na linha abre a edição, exceto no checkbox e nas ações (que já
-    // tratam o próprio clique e retornam antes de chegar aqui).
+    // Clique na linha abre a Manutenção de Produtos, exceto no checkbox e nas
+    // ações (que já tratam o próprio clique e retornam antes de chegar aqui).
     tabela.addEventListener('click', (ev) => {
       const btnAcao = ev.target.closest('button[data-acao]');
       if (btnAcao) {
@@ -431,7 +423,7 @@
       }
       if (ev.target.closest('.col-check')) return;
       const linha = ev.target.closest('tr[data-id]');
-      if (linha) editar(linha.dataset.id);
+      if (linha) window.location.href = 'manutencao-produtos.html?id=' + linha.dataset.id;
     });
 
     (async () => {

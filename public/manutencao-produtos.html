@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Manutenção de Produtos</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Manutenção de Produtos</h1>
+        <span id="subtituloProduto" style="color:var(--cinza);font-size:14px"></span>
+      </div>
+
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <!-- Painel 1: abas -->
+      <div class="painel">
+        <div class="abas">
+          <button class="ativa" data-aba="cadastrais">Dados Cadastrais</button>
+          <button data-aba="tributarias">Informações Tributárias</button>
+          <button data-aba="estoque">Estoque e Fornecedor</button>
+        </div>
+
+        <!-- Aba 1: Dados Cadastrais (form-grid deixa espaço pra novos campos) -->
+        <div class="aba-conteudo ativa" id="aba-cadastrais">
+          <div class="form-grid">
+            <div class="campo cheio"><label>Nome *</label><input id="m_nome" maxlength="200"></div>
+            <div class="campo"><label>Grupo *</label>
+              <select id="m_categoria"><option value="">Carregando...</option></select>
+            </div>
+            <div class="campo"><label>Unidade de medida *</label>
+              <select id="m_unidade"><option>UN</option><option>KG</option><option>CX</option><option>L</option><option>PC</option><option>FD</option></select>
+            </div>
+            <div class="campo"><label>Marca</label><input id="m_marca" maxlength="100"></div>
+          </div>
+        </div>
+
+        <!-- Aba 2: Informações Tributárias -->
+        <div class="aba-conteudo" id="aba-tributarias">
+          <div class="form-grid">
+            <div class="campo"><label>NCM (8 dígitos)</label><input id="m_ncm" maxlength="8" placeholder="Ex: 21069090"></div>
+            <div class="campo"><label>Configuração tributária</label>
+              <select id="m_configTrib">
+                <option value="">Não informada</option>
+                <option value="tributado_integral">Tributado integral</option>
+                <option value="substituicao_tributaria">Substituição tributária</option>
+                <option value="isento">Isento</option>
+                <option value="nao_tributado">Não tributado</option>
+              </select>
+            </div>
+            <div class="campo"><label>CFOP (4 dígitos)</label><input id="m_cfop" maxlength="4" placeholder="Ex: 5102"></div>
+            <div class="campo"><label>Origem</label>
+              <select id="m_origem">
+                <option value="">Não informada</option>
+                <option value="nacional">Nacional</option>
+                <option value="importado">Importado</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Aba 3: Estoque e Fornecedor (somente leitura) -->
+        <div class="aba-conteudo" id="aba-estoque">
+          <div class="form-grid">
+            <div class="campo"><label>Estoque total</label><input id="m_estoqueTotal" readonly></div>
+            <div class="campo"><label>Preço da última compra</label><input id="m_ultPreco" readonly></div>
+            <div class="campo"><label>Fornecedor da última compra</label><input id="m_ultFornecedor" readonly></div>
+            <div class="campo"><label>Data da última compra</label><input id="m_ultData" readonly></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Painel 2: Preços (sempre visível) -->
+      <div class="painel">
+        <h2>Preços</h2>
+        <div class="form-grid">
+          <div class="campo"><label>Preço desejado (R$)</label><input id="m_precoDesejado" type="number" step="0.01" min="0.01" placeholder="Preço que pretende praticar"></div>
+          <div class="campo"><label>Preço atual (última NF-e)</label><input id="m_precoAtual" readonly></div>
+          <div class="campo"><label>Custo médio</label><input id="m_custoMedio" readonly></div>
+          <div class="campo"><label>Preço à vista (R$) *</label><input id="m_precoAVista" type="number" step="0.01" min="0.01"></div>
+        </div>
+      </div>
+
+      <!-- Painel 3: Códigos -->
+      <div class="painel">
+        <h2>Códigos</h2>
+        <div class="form-grid">
+          <div class="campo"><label>EAN *</label><input id="m_ean" maxlength="14"></div>
+          <div class="campo"><label>Cód. Ref.</label><input id="m_codRef" maxlength="20"></div>
+        </div>
+      </div>
+
+      <div class="rodape" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:24px">
+        <button class="btn secundario" id="btnCancelar">Cancelar</button>
+        <button class="btn" id="btnSalvar">Salvar</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+    const erroGeral = $('erroGeral');
+    const produtoId = new URLSearchParams(window.location.search).get('id');
+
+    // Aba onde cada campo validável vive, pra apontar o erro mesmo que o
+    // usuário esteja em outra aba na hora de salvar.
+    const ABAS_ROTULO = { cadastrais: 'Dados Cadastrais', tributarias: 'Informações Tributárias', estoque: 'Estoque e Fornecedor', precos: 'Preços', codigos: 'Códigos' };
+
+    function trocarAba(nome) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === nome));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + nome));
+    }
+    document.querySelectorAll('.abas button').forEach((b) => b.addEventListener('click', () => trocarAba(b.dataset.aba)));
+
+    async function carregarCategorias(selecionadaId) {
+      const categorias = await API.get('/api/produtos/categorias');
+      $('m_categoria').innerHTML = '<option value="">Selecione...</option>' +
+        categorias.map((c) => '<option value="' + c.id + '">' + UI.escapar(c.nome) + '</option>').join('');
+      if (selecionadaId) $('m_categoria').value = selecionadaId;
+    }
+
+    function dataBr(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      return d.toLocaleDateString('pt-BR');
+    }
+
+    async function carregar() {
+      const [produto, ultima] = await Promise.all([
+        API.get('/api/produtos/' + produtoId),
+        API.get('/api/produtos/' + produtoId + '/ultima-compra'),
+      ]);
+      await carregarCategorias(produto.categoriaId);
+
+      $('subtituloProduto').textContent = produto.nome + ' · EAN ' + produto.ean;
+
+      // Aba 1
+      $('m_nome').value = produto.nome || '';
+      $('m_unidade').value = produto.unidade || 'UN';
+      $('m_marca').value = produto.marca || '';
+      // Aba 2
+      $('m_ncm').value = produto.ncm || '';
+      $('m_configTrib').value = produto.configTributaria || '';
+      $('m_cfop').value = produto.cfop || '';
+      $('m_origem').value = produto.origem || '';
+      // Aba 3 (somente leitura)
+      $('m_estoqueTotal').value = produto.estoqueQtd + ' ' + (produto.unidade || '');
+      $('m_ultPreco').value = ultima.preco != null ? UI.moeda(ultima.preco) : 'Sem compras registradas';
+      $('m_ultFornecedor').value = ultima.fornecedor || '-';
+      $('m_ultData').value = dataBr(ultima.data);
+      // Preços
+      $('m_precoDesejado').value = produto.precoDesejado || '';
+      $('m_precoAtual').value = ultima.preco != null ? UI.moeda(ultima.preco) : 'Sem compras registradas';
+      $('m_custoMedio').value = UI.moeda(produto.custoMedio);
+      $('m_precoAVista').value = produto.preco || '';
+      // Códigos
+      $('m_ean').value = produto.ean || '';
+      $('m_codRef').value = produto.codigoReferencia || '';
+    }
+
+    /**
+     * Valida todos os campos de todas as abas de uma vez. Retorna a lista de
+     * erros com a aba de origem; a primeira aba com erro é aberta pro usuário.
+     */
+    function validar() {
+      const erros = [];
+      document.querySelectorAll('.campo.invalido').forEach((c) => c.classList.remove('invalido'));
+      const invalido = (id, aba, msg) => {
+        $(id).closest('.campo').classList.add('invalido');
+        erros.push({ aba, msg });
+      };
+
+      if ($('m_nome').value.trim().length < 2) invalido('m_nome', 'cadastrais', 'Nome é obrigatório (mínimo 2 caracteres)');
+      if (!$('m_categoria').value) invalido('m_categoria', 'cadastrais', 'Grupo é obrigatório');
+      if (!$('m_unidade').value) invalido('m_unidade', 'cadastrais', 'Unidade é obrigatória');
+
+      const ncm = $('m_ncm').value.trim();
+      if (ncm && !/^\d{8}$/.test(ncm)) invalido('m_ncm', 'tributarias', 'NCM deve ter exatamente 8 dígitos numéricos');
+      const cfop = $('m_cfop').value.trim();
+      if (cfop && !/^\d{4}$/.test(cfop)) invalido('m_cfop', 'tributarias', 'CFOP deve ter exatamente 4 dígitos');
+
+      const precoAVista = Number($('m_precoAVista').value);
+      if (!$('m_precoAVista').value || !(precoAVista > 0)) invalido('m_precoAVista', 'precos', 'Preço à vista é obrigatório e deve ser maior que zero');
+      const precoDesejado = $('m_precoDesejado').value;
+      if (precoDesejado && !(Number(precoDesejado) > 0)) invalido('m_precoDesejado', 'precos', 'Preço desejado deve ser maior que zero');
+
+      const ean = $('m_ean').value.trim();
+      if (!/^\d{8}$|^\d{12,14}$/.test(ean)) invalido('m_ean', 'codigos', 'EAN é obrigatório (8, 12, 13 ou 14 dígitos numéricos)');
+
+      // Marca nas abas os erros (painéis Preços/Códigos estão sempre visíveis).
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('com-erro', erros.some((e) => e.aba === b.dataset.aba)));
+      return erros;
+    }
+
+    async function salvar() {
+      UI.limparErro(erroGeral);
+      const erros = validar();
+      if (erros.length) {
+        erroGeral.innerHTML = 'Corrija antes de salvar:<br>' +
+          erros.map((e) => '· <strong>' + ABAS_ROTULO[e.aba] + '</strong>: ' + UI.escapar(e.msg)).join('<br>');
+        erroGeral.classList.add('visivel');
+        const primeiraAbaComErro = erros.find((e) => ABAS_ROTULO[e.aba] && document.querySelector('.abas button[data-aba="' + e.aba + '"]'));
+        if (primeiraAbaComErro) trocarAba(primeiraAbaComErro.aba);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      const body = {
+        nome: $('m_nome').value.trim(),
+        categoriaId: $('m_categoria').value,
+        unidade: $('m_unidade').value,
+        marca: $('m_marca').value.trim(),
+        ncm: $('m_ncm').value.trim(),
+        configTributaria: $('m_configTrib').value,
+        cfop: $('m_cfop').value.trim(),
+        origem: $('m_origem').value,
+        precoDesejado: $('m_precoDesejado').value,
+        preco: $('m_precoAVista').value, // Preço à vista É o preço de venda vigente (decisão de projeto)
+        ean: $('m_ean').value.trim(),
+        codigoReferencia: $('m_codRef').value.trim(),
+      };
+
+      const btn = $('btnSalvar');
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      try {
+        await API.put('/api/produtos/' + produtoId, body);
+        window.location.href = 'produtos.html';
+      } catch (e) {
+        UI.erro(erroGeral, e);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } finally {
+        btn.disabled = false; btn.textContent = 'Salvar';
+      }
+    }
+
+    $('btnSalvar').addEventListener('click', salvar);
+    $('btnCancelar').addEventListener('click', () => { window.location.href = 'produtos.html'; });
+
+    (async () => {
+      if (!produtoId) { window.location.href = 'produtos.html'; return; }
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('produtos.html');
+      try {
+        await carregar();
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      }
+    })();
+  })();
+  </script>
+</body>
+</html>

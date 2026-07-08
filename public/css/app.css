@@ -197,6 +197,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); bord
 .abas button.ativa { color: var(--azul); border-bottom-color: var(--azul); font-weight: 700; }
 .aba-conteudo { display: none; }
 .aba-conteudo.ativa { display: block; }
+/* Aba contendo campo inválido: sinalizada mesmo se o usuário estiver em outra. */
+.abas button.com-erro { color: var(--alerta); }
+.abas button.com-erro::after { content: ' •'; font-weight: 700; }
+
+/* ─── Manutenção de produtos ─── */
+input[readonly] { background: #f1f4f9; color: var(--cinza); cursor: default; }
+input[readonly]:focus { outline: none; border-color: var(--linha); }
+.campo.invalido input, .campo.invalido select { border-color: var(--alerta); }
+.campo.invalido label { color: var(--alerta); }
 
 /* ─── Login ─── */
 .login-pagina {
