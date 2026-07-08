@@ -1,0 +1,83 @@
+/*
+ * Arquivo: login-background.css
+ * Responsabilidade: Fundo ilustrado (arte VIGIA) e card glass compartilhados
+ * pelas telas de login da retaguarda (login.html) e do Painel da Rede
+ * (rede/login.html). Carregar SEMPRE depois de app.css e rede.css — algumas
+ * regras vencem as deles por ordem de carga em empate de especificidade.
+ *
+ * A arte de referência (2752x1536) tem o diagrama + logo nos ~75% esquerdos;
+ * o card de login ocupa a coluna dos 25% direitos, a partir de ~36% da altura.
+ */
+:root {
+  --login-navy: #0b1220;
+  --login-ciano: #38bdf8;
+  --login-texto: #e8f1f8;
+  --login-suave: #9fb6c9;
+}
+
+body .login-pagina.login-fundo {
+  background: var(--login-navy) url('/img/login-fundo.jpg') center / cover no-repeat;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+/* Card centralizado na coluna direita (22% de largura dentro dos 25% finais)
+   e deslocado para baixo, ocupando a faixa entre ~36% e ~90% da altura. */
+.login-fundo .login-caixa {
+  width: 22%;
+  min-width: 320px;
+  max-width: 420px;
+  margin: 36vh 1.5% 10vh;
+  background: rgba(11, 18, 32, .55);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+  color: var(--login-texto);
+}
+
+.login-fundo .login-caixa .marca strong { color: #fff; }
+.login-fundo .login-caixa .marca span { color: var(--login-suave); }
+.login-fundo .login-caixa label { color: var(--login-suave); }
+
+.login-fundo .login-caixa input {
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .22);
+  color: var(--login-texto);
+}
+.login-fundo .login-caixa input::placeholder { color: #7e93a6; }
+.login-fundo .login-caixa input:focus { outline-color: var(--login-ciano); border-color: var(--login-ciano); }
+
+.login-fundo .login-caixa .btn {
+  background: linear-gradient(135deg, var(--login-ciano), #4f8ef7);
+  color: #06121f;
+  font-weight: 700;
+}
+.login-fundo .login-caixa .btn:hover { filter: brightness(1.08); }
+
+/* Campo de senha com botão de mostrar/ocultar. */
+.campo-senha { position: relative; }
+.campo-senha input { padding-right: 42px; }
+.toggle-senha {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; padding: 6px; font-size: 14px;
+  color: var(--login-suave);
+}
+.toggle-senha:hover { color: #fff; }
+
+/* Telas estreitas: a arte lateral não cabe — fundo navy sólido e card
+   centralizado na tela inteira. */
+@media (max-width: 900px) {
+  body .login-pagina.login-fundo {
+    background: linear-gradient(160deg, #0b1220, #14304d);
+    justify-content: center;
+    align-items: center;
+  }
+  .login-fundo .login-caixa {
+    width: 100%;
+    max-width: 380px;
+    min-width: 0;
+    margin: 16px;
+  }
+}

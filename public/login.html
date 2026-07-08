@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Entrar</title>
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="/css/login-background.css">
 </head>
 <body class="sem-navbar">
-  <div class="login-pagina">
+  <div class="login-pagina login-fundo">
     <div class="login-caixa">
       <div class="marca">
         <strong>VIGIA</strong>
@@ -20,7 +22,10 @@
       </div>
       <div class="campo">
         <label for="senha">Senha</label>
-        <input type="password" id="senha" autocomplete="current-password" placeholder="Sua senha">
+        <div class="campo-senha">
+          <input type="password" id="senha" autocomplete="current-password" placeholder="Sua senha">
+          <button type="button" class="toggle-senha" id="toggleSenha" aria-label="Mostrar senha"><i class="fa-solid fa-eye"></i></button>
+        </div>
       </div>
       <button class="btn" id="btnEntrar" style="width:100%">Entrar</button>
     </div>
@@ -48,6 +53,14 @@
 
     document.getElementById('btnEntrar').addEventListener('click', entrar);
     document.getElementById('senha').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') entrar(); });
+
+    document.getElementById('toggleSenha').addEventListener('click', (ev) => {
+      const campo = document.getElementById('senha');
+      const mostrar = campo.type === 'password';
+      campo.type = mostrar ? 'text' : 'password';
+      ev.currentTarget.setAttribute('aria-label', mostrar ? 'Ocultar senha' : 'Mostrar senha');
+      ev.currentTarget.querySelector('i').className = mostrar ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+    });
 
     // Se já houver refresh token válido, pula direto para o dashboard
     (async () => { if (await API.renovar()) window.location.href = '/index.html'; })();
