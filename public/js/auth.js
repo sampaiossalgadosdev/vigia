@@ -188,4 +188,26 @@ const UI = {
   abrirModal: (id) => document.getElementById(id).classList.add('aberto'),
   fecharModal: (id) => document.getElementById(id).classList.remove('aberto'),
   escapar: (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+
+  /**
+   * Exibe uma mensagem de erro num elemento .msg-erro. Aceita uma string
+   * simples ou o erro lançado por api.js (usa e.message + e.errors, quando houver).
+   */
+  erro: (el, mensagemOuErro) => {
+    const texto = mensagemOuErro && mensagemOuErro.message
+      ? mensagemOuErro.message + (mensagemOuErro.errors && mensagemOuErro.errors.length ? ': ' + mensagemOuErro.errors.join('; ') : '')
+      : String(mensagemOuErro);
+    el.textContent = texto;
+    el.classList.add('visivel');
+  },
+  limparErro: (el) => el.classList.remove('visivel'),
+
+  /**
+   * Padrão dos botões "Excluir/Desativar": confirma com o usuário e executa
+   * a ação; erro vira alert (essas ações não têm um painel de erro dedicado).
+   */
+  confirmarAcao: async (mensagem, acao) => {
+    if (!confirm(mensagem)) return;
+    try { await acao(); } catch (e) { alert(e.message); }
+  },
 };

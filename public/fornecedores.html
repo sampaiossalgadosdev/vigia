@@ -103,7 +103,7 @@
     function abrirNovo() {
       editandoId = null;
       tituloModal.textContent = 'Novo fornecedor';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       [fNome, fCnpj, fTelefone, fEmail].forEach((campo) => campo.value = '');
       UI.abrirModal('modalFornecedor');
     }
@@ -112,7 +112,7 @@
       const f = await API.get('/api/fornecedores/' + id);
       editandoId = id;
       tituloModal.textContent = 'Editar fornecedor';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       fNome.value = f.nome;
       fCnpj.value = f.cnpj;
       fTelefone.value = f.telefone || '';
@@ -121,11 +121,10 @@
     }
 
     async function salvar() {
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       const cnpj = fCnpj.value;
       if (!cnpjValido(cnpj)) {
-        erroModal.textContent = 'CNPJ inválido: verifique os 14 dígitos.';
-        erroModal.classList.add('visivel');
+        UI.erro(erroModal, 'CNPJ inválido: verifique os 14 dígitos.');
         return;
       }
       const body = {
@@ -140,14 +139,15 @@
         UI.fecharModal('modalFornecedor');
         carregar();
       } catch (e) {
-        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroModal.classList.add('visivel');
+        UI.erro(erroModal, e);
       }
     }
 
-    async function remover(id) {
-      if (!confirm('Desativar este fornecedor?')) return;
-      try { await API.del('/api/fornecedores/' + id); carregar(); } catch (e) { alert(e.message); }
+    function remover(id) {
+      return UI.confirmarAcao('Desativar este fornecedor?', async () => {
+        await API.del('/api/fornecedores/' + id);
+        carregar();
+      });
     }
 
     // ─── Eventos ───

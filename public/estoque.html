@@ -135,14 +135,14 @@
     inputXml.addEventListener('change', () => { if (inputXml.files.length) enviarXml(inputXml.files[0]); });
 
     async function enviarXml(arquivo) {
-      erroUpload.classList.remove('visivel');
+      UI.limparErro(erroUpload);
       const form = new FormData();
       form.append('arquivo', arquivo);
       try {
         const nfe = await API.post('/api/estoque/nfe/upload', form);
         mostrarNfe(nfe);
       } catch (e) {
-        erroUpload.textContent = e.message; erroUpload.classList.add('visivel');
+        UI.erro(erroUpload, e);
       }
     }
 
@@ -202,7 +202,7 @@
       itemVinculando = item;
       infoItem.textContent =
         'Item: ' + item.descricao + ' · EAN do XML: ' + item.ean + ' · ' + item.quantidade + ' ' + item.unidade;
-      erroVincular.classList.remove('visivel');
+      UI.limparErro(erroVincular);
       buscaVincular.value = '';
       resultadosVincular.innerHTML = '';
       UI.abrirModal('modalVincular');
@@ -219,25 +219,24 @@
     });
 
     async function vincular(produtoId) {
-      erroVincular.classList.remove('visivel');
+      UI.limparErro(erroVincular);
       try {
         await API.post('/api/estoque/nfe/' + itemVinculando.nfe.id + '/itens/' + itemVinculando.id + '/vincular', { produtoId });
         UI.fecharModal('modalVincular');
         carregarPendentes();
         atualizarBadgePendentes();
       } catch (e) {
-        erroVincular.textContent = e.message; erroVincular.classList.add('visivel');
+        UI.erro(erroVincular, e);
       }
     }
 
     /** Cria um produto novo com os dados do item do XML e vincula em seguida. */
     async function cadastrarDoItem() {
-      erroVincular.classList.remove('visivel');
+      UI.limparErro(erroVincular);
       const i = itemVinculando;
       const eanNumerico = /^\d{8}$|^\d{12,14}$/.test(i.ean) ? i.ean : null;
       if (!eanNumerico) {
-        erroVincular.textContent = 'O item do XML não possui EAN válido. Cadastre o produto manualmente em Produtos e depois vincule aqui.';
-        erroVincular.classList.add('visivel');
+        UI.erro(erroVincular, 'O item do XML não possui EAN válido. Cadastre o produto manualmente em Produtos e depois vincule aqui.');
         return;
       }
       const preco = prompt('Preço de venda (R$) para "' + i.descricao + '":', (Number(i.valorUnitario) * 1.3).toFixed(2));
@@ -249,8 +248,7 @@
         });
         await vincular(produto.id);
       } catch (e) {
-        erroVincular.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroVincular.classList.add('visivel');
+        UI.erro(erroVincular, e);
       }
     }
 

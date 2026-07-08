@@ -93,7 +93,7 @@
       editandoId = null;
       tituloModal.textContent = 'Novo usuário';
       rotuloSenha.textContent = 'Senha * (mínimo 6 caracteres)';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       [fNome, fEmail, fSenha].forEach((campo) => campo.value = '');
       UI.abrirModal('modalUsuario');
     }
@@ -102,7 +102,7 @@
       editandoId = u.id;
       tituloModal.textContent = 'Editar usuário';
       rotuloSenha.textContent = 'Nova senha (deixe em branco para manter)';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       fNome.value = u.nome;
       fEmail.value = u.email;
       fPerfil.value = u.perfil ? u.perfil.id : '';
@@ -111,7 +111,7 @@
     }
 
     async function salvar() {
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       const body = {
         nome: fNome.value.trim(),
         email: fEmail.value.trim(),
@@ -125,14 +125,15 @@
         UI.fecharModal('modalUsuario');
         carregar();
       } catch (e) {
-        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroModal.classList.add('visivel');
+        UI.erro(erroModal, e);
       }
     }
 
-    async function remover(id) {
-      if (!confirm('Desativar este usuário? Ele perderá o acesso ao sistema.')) return;
-      try { await API.del('/api/usuarios/' + id); carregar(); } catch (e) { alert(e.message); }
+    function remover(id) {
+      return UI.confirmarAcao('Desativar este usuário? Ele perderá o acesso ao sistema.', async () => {
+        await API.del('/api/usuarios/' + id);
+        carregar();
+      });
     }
 
     // ─── Eventos ───

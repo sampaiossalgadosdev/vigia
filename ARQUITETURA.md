@@ -108,3 +108,19 @@ Sem PDV ainda, não existe tabela de vendas. As métricas usam `MovimentacaoEsto
 - **XML original guardado** na coluna `xmlOriginal` (auditoria fiscal e reprocessamento futuro).
 - **Decimal do Prisma** para todo valor monetário e quantidade de estoque (nunca Float).
 - **Frontend sem framework**: páginas HTML independentes com dois wrappers (`API` tenant e `ApiRede`), montagem de sidebar via JS e escape manual de HTML em toda renderização de dados.
+
+## 10. Convenção das páginas do tenant (SPA sem framework)
+
+A retaguarda do tenant (`index.html` até `perfis.html`) navega sem recarregar a página: `Auth.carregarPagina()` (`public/js/auth.js`) busca o HTML da página de destino, troca só o `<main class="conteudo">`, reproduz elementos que ficam fora dele (modais) e reexecuta o `<script>` inline da página. Isso impõe regras que **toda página nova precisa seguir**:
+
+1. **Script da página sempre inline, sem `src`, envolto numa IIFE**: `<script>(() => { ... })();</script>`. Sem IIFE, um `let`/`const` no topo do arquivo quebra com "Identifier já foi declarado" ao revisitar a mesma página na mesma sessão. `navbar.js`/`api.js`/`auth.js` continuam como `<script src="...">` de propósito — são carregados uma vez só e nunca reinjetados (ver `carregarPagina`).
+2. **Capturar toda referência de DOM usada por uma função `async` antes do primeiro `await`**, num bloco `const $ = (id) => document.getElementById(id);` no topo da IIFE. Se o usuário navegar para outra página enquanto um `fetch` está pendente, buscar o elemento só depois do `await` retorna `null`. Elemento capturado antes continua sendo um objeto válido: escrever nele depois de "órfão" vira no-op, não exceção.
+3. **Modais (e qualquer markup fora de `<main class="conteudo">`) são clonados à parte** pelo loader — não dependem de estarem dentro do `<main>`, mas precisam ser filhos diretos do `<body>` na página de origem.
+4. **Nada de `onclick="..."` inline.** Botões estáticos usam `id` + `addEventListener`; linhas geradas dinamicamente (tabelas) usam delegação de evento no container pai com `data-acao`/`data-id`, lidas num único listener.
+5. **Objetos de linha não vão para o HTML.** Em vez de `onclick='editar(${JSON.stringify(obj)})'`, guarda-se um `Map<id, objeto>` em memória e o handler delegado busca por `data-id` (ver `estoque.html` e `usuarios.html`).
+6. **Padrões de modal/erro/exclusão usam os helpers de `UI`** (`public/js/auth.js`), em vez de repetir o código em cada página:
+   - `UI.limparErro(el)` / `UI.erro(el, mensagemOuErro)` — mensagemOuErro aceita string ou o erro lançado por `api.js` (usa `.message` + `.errors`, quando houver).
+   - `UI.confirmarAcao(mensagem, acaoAsync)` — `confirm()` + try/catch com `alert(e.message)`, usado nos botões "Excluir/Desativar".
+   - `UI.abrirModal(id)` / `UI.fecharModal(id)`, `UI.escapar(texto)`, `UI.moeda`/`UI.numero`/`UI.data` para formatação.
+
+`public/superadmin.html` e `public/rede/*` ficam fora dessas regras de propósito: são apps com reload completo de página, não passam pelo `carregarPagina`.

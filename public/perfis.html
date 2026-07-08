@@ -126,7 +126,7 @@
     function abrirNovo() {
       editandoId = null;
       tituloModal.textContent = 'Novo perfil';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       fNome.value = '';
       fDescricao.value = '';
       montarMatriz([]);
@@ -137,7 +137,7 @@
       const perfil = await API.get('/api/perfis/' + id);
       editandoId = perfil.id;
       tituloModal.textContent = 'Editar perfil';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       fNome.value = perfil.nome;
       fDescricao.value = perfil.descricao || '';
       montarMatriz(perfil.permissoes);
@@ -145,7 +145,7 @@
     }
 
     async function salvar() {
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       const body = {
         nome: fNome.value.trim(),
         descricao: fDescricao.value.trim(),
@@ -157,14 +157,15 @@
         UI.fecharModal('modalPerfil');
         carregar();
       } catch (e) {
-        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroModal.classList.add('visivel');
+        UI.erro(erroModal, e);
       }
     }
 
-    async function remover(id) {
-      if (!confirm('Excluir este perfil? Usuários vinculados a ele impedem a exclusão.')) return;
-      try { await API.del('/api/perfis/' + id); carregar(); } catch (e) { alert(e.message); }
+    function remover(id) {
+      return UI.confirmarAcao('Excluir este perfil? Usuários vinculados a ele impedem a exclusão.', async () => {
+        await API.del('/api/perfis/' + id);
+        carregar();
+      });
     }
 
     // ─── Eventos ───

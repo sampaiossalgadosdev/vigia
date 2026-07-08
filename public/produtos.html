@@ -159,7 +159,7 @@
     function abrirNovo() {
       editandoId = null;
       tituloModal.textContent = 'Novo produto';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       preencher({});
       UI.abrirModal('modalProduto');
     }
@@ -168,7 +168,7 @@
       const p = await API.get('/api/produtos/' + id);
       editandoId = id;
       tituloModal.textContent = 'Editar produto';
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       preencher(p);
       UI.abrirModal('modalProduto');
     }
@@ -188,21 +188,22 @@
         vendidoPorPeso: fPeso.checked,
         plu: fPlu.value.trim(),
       };
-      erroModal.classList.remove('visivel');
+      UI.limparErro(erroModal);
       try {
         if (editandoId) await API.put('/api/produtos/' + editandoId, body);
         else await API.post('/api/produtos', body);
         UI.fecharModal('modalProduto');
         carregar();
       } catch (e) {
-        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroModal.classList.add('visivel');
+        UI.erro(erroModal, e);
       }
     }
 
-    async function remover(id) {
-      if (!confirm('Desativar este produto? Ele sairá das listagens (soft delete).')) return;
-      try { await API.del('/api/produtos/' + id); carregar(); } catch (e) { alert(e.message); }
+    function remover(id) {
+      return UI.confirmarAcao('Desativar este produto? Ele sairá das listagens (soft delete).', async () => {
+        await API.del('/api/produtos/' + id);
+        carregar();
+      });
     }
 
     // ─── Importação em lote ───
@@ -215,8 +216,8 @@
     }
 
     async function enviarPreview() {
-      erroImportar.classList.remove('visivel');
-      if (!arquivoImportar.files.length) { erroImportar.textContent = 'Selecione um arquivo CSV ou XLSX.'; erroImportar.classList.add('visivel'); return; }
+      UI.limparErro(erroImportar);
+      if (!arquivoImportar.files.length) { UI.erro(erroImportar, 'Selecione um arquivo CSV ou XLSX.'); return; }
       const form = new FormData();
       form.append('arquivo', arquivoImportar.files[0]);
       try {
@@ -233,12 +234,12 @@
         areaPreview.style.display = 'block';
         btnConfirmarImportacao.disabled = data.validos === 0;
       } catch (e) {
-        erroImportar.textContent = e.message; erroImportar.classList.add('visivel');
+        UI.erro(erroImportar, e);
       }
     }
 
     async function confirmarImportacao() {
-      erroImportar.classList.remove('visivel');
+      UI.limparErro(erroImportar);
       try {
         const resultado = await API.post('/api/produtos/importar/confirmar', { tokenImportacao });
         alert('Importação concluída: ' + resultado.inseridos + ' inseridos, ' + resultado.ignorados + ' ignorados.');
@@ -246,7 +247,7 @@
         areaPreview.style.display = 'none';
         carregar();
       } catch (e) {
-        erroImportar.textContent = e.message; erroImportar.classList.add('visivel');
+        UI.erro(erroImportar, e);
       }
     }
 
