@@ -57,20 +57,27 @@
     // Usuários carregados, indexados por id (evita serializar objetos no HTML).
     const usuariosCarregados = new Map();
 
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const tabela = $('tabela'), tituloModal = $('tituloModal'), erroModal = $('erroModal'),
+          rotuloSenha = $('rotuloSenha'), fPerfil = $('f_perfil');
+    const fNome = $('f_nome'), fEmail = $('f_email'), fSenha = $('f_senha');
+
     async function carregarPerfis() {
       const data = await API.get('/api/perfis?limit=100');
       perfisDisponiveis = data.items;
-      document.getElementById('f_perfil').innerHTML = perfisDisponiveis
+      fPerfil.innerHTML = perfisDisponiveis
         .map((p) => '<option value="' + p.id + '">' + UI.escapar(p.nome) + '</option>')
         .join('');
     }
 
     async function carregar() {
       const data = await API.get('/api/usuarios?limit=100');
-      const corpo = document.getElementById('tabela');
       usuariosCarregados.clear();
       data.items.forEach((u) => usuariosCarregados.set(u.id, u));
-      corpo.innerHTML = data.items.map((u) => {
+      tabela.innerHTML = data.items.map((u) => {
         const rotuloPerfil = u.isDono ? 'Dono' : (u.perfil ? u.perfil.nome : '-');
         const acoes = u.isDono
           ? '<span class="tag neutro">acesso total</span>'
@@ -84,34 +91,33 @@
 
     function abrirNovo() {
       editandoId = null;
-      document.getElementById('tituloModal').textContent = 'Novo usuário';
-      document.getElementById('rotuloSenha').textContent = 'Senha * (mínimo 6 caracteres)';
-      document.getElementById('erroModal').classList.remove('visivel');
-      ['f_nome', 'f_email', 'f_senha'].forEach((id) => document.getElementById(id).value = '');
+      tituloModal.textContent = 'Novo usuário';
+      rotuloSenha.textContent = 'Senha * (mínimo 6 caracteres)';
+      erroModal.classList.remove('visivel');
+      [fNome, fEmail, fSenha].forEach((campo) => campo.value = '');
       UI.abrirModal('modalUsuario');
     }
 
     function editar(u) {
       editandoId = u.id;
-      document.getElementById('tituloModal').textContent = 'Editar usuário';
-      document.getElementById('rotuloSenha').textContent = 'Nova senha (deixe em branco para manter)';
-      document.getElementById('erroModal').classList.remove('visivel');
-      document.getElementById('f_nome').value = u.nome;
-      document.getElementById('f_email').value = u.email;
-      document.getElementById('f_perfil').value = u.perfil ? u.perfil.id : '';
-      document.getElementById('f_senha').value = '';
+      tituloModal.textContent = 'Editar usuário';
+      rotuloSenha.textContent = 'Nova senha (deixe em branco para manter)';
+      erroModal.classList.remove('visivel');
+      fNome.value = u.nome;
+      fEmail.value = u.email;
+      fPerfil.value = u.perfil ? u.perfil.id : '';
+      fSenha.value = '';
       UI.abrirModal('modalUsuario');
     }
 
     async function salvar() {
-      const erroEl = document.getElementById('erroModal');
-      erroEl.classList.remove('visivel');
+      erroModal.classList.remove('visivel');
       const body = {
-        nome: document.getElementById('f_nome').value.trim(),
-        email: document.getElementById('f_email').value.trim(),
-        perfilId: document.getElementById('f_perfil').value,
+        nome: fNome.value.trim(),
+        email: fEmail.value.trim(),
+        perfilId: fPerfil.value,
       };
-      const senha = document.getElementById('f_senha').value;
+      const senha = fSenha.value;
       if (senha || !editandoId) body.senha = senha;
       try {
         if (editandoId) await API.put('/api/usuarios/' + editandoId, body);
@@ -119,8 +125,8 @@
         UI.fecharModal('modalUsuario');
         carregar();
       } catch (e) {
-        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroEl.classList.add('visivel');
+        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroModal.classList.add('visivel');
       }
     }
 
@@ -130,10 +136,10 @@
     }
 
     // ─── Eventos ───
-    document.getElementById('btnNovoUsuario').addEventListener('click', abrirNovo);
-    document.getElementById('btnCancelarUsuario').addEventListener('click', () => UI.fecharModal('modalUsuario'));
-    document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('tabela').addEventListener('click', (ev) => {
+    $('btnNovoUsuario').addEventListener('click', abrirNovo);
+    $('btnCancelarUsuario').addEventListener('click', () => UI.fecharModal('modalUsuario'));
+    $('btnSalvar').addEventListener('click', salvar);
+    tabela.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao]');
       if (!btn) return;
       if (btn.dataset.acao === 'editar') {

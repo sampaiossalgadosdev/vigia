@@ -42,6 +42,14 @@
   <script>
   (() => {
     initNavbar();
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const cardHoje = $('cardHoje'), cardProdutos = $('cardProdutos'),
+          cardAlertas = $('cardAlertas'), cardSugestoes = $('cardSugestoes'),
+          listaSugestoes = $('listaSugestoes'), tabelaMovs = $('tabelaMovs');
+
     async function carregarDashboard() {
       try {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -51,15 +59,14 @@
           API.get('/api/sugestoes?limit=5'),
           API.get('/api/estoque/movimentacoes?tipo=saida&inicio=' + hoje.toISOString() + '&limit=100'),
         ]);
-        document.getElementById('cardProdutos').textContent = UI.numero(produtos.total);
-        document.getElementById('cardAlertas').textContent = UI.numero(alertas.total);
-        document.getElementById('cardSugestoes').textContent = UI.numero(sugestoes.pendentes);
-        document.getElementById('cardHoje').textContent = UI.numero(movsHoje.total) + ' mov.';
+        cardProdutos.textContent = UI.numero(produtos.total);
+        cardAlertas.textContent = UI.numero(alertas.total);
+        cardSugestoes.textContent = UI.numero(sugestoes.pendentes);
+        cardHoje.textContent = UI.numero(movsHoje.total) + ' mov.';
 
-        const lista = document.getElementById('listaSugestoes');
-        if (sugestoes.items.length === 0) lista.textContent = 'Nenhuma sugestão recebida.';
+        if (sugestoes.items.length === 0) listaSugestoes.textContent = 'Nenhuma sugestão recebida.';
         else
-          lista.innerHTML = sugestoes.items.map((s) =>
+          listaSugestoes.innerHTML = sugestoes.items.map((s) =>
             '<div style="padding:10px 0;border-bottom:1px solid var(--linha)">' +
             '<span class="tag ' + (s.status === 'pendente' ? 'pendente' : 'neutro') + '">' + s.tipo + '</span> ' +
             '<strong>' + UI.escapar(s.titulo) + '</strong>' +
@@ -73,10 +80,9 @@
 
       try {
         const movs = await API.get('/api/estoque/movimentacoes?limit=5');
-        const corpo = document.getElementById('tabelaMovs');
-        if (movs.items.length === 0) corpo.innerHTML = '<tr><td colspan="5" class="vazio">Sem movimentações ainda.</td></tr>';
+        if (movs.items.length === 0) tabelaMovs.innerHTML = '<tr><td colspan="5" class="vazio">Sem movimentações ainda.</td></tr>';
         else
-          corpo.innerHTML = movs.items.map((m) =>
+          tabelaMovs.innerHTML = movs.items.map((m) =>
             '<tr><td>' + UI.data(m.criadoEm) + '</td><td>' + UI.escapar(m.produto.nome) + '</td>' +
             '<td><span class="tag ' + (m.tipo === 'entrada' ? 'ok' : 'neutro') + '">' + m.tipo + '</span></td>' +
             '<td>' + m.quantidade + ' ' + m.produto.unidade + '</td><td>' + m.origem + '</td></tr>'
@@ -89,7 +95,7 @@
       catch (e) { alert(e.message); }
     }
 
-    document.getElementById('listaSugestoes').addEventListener('click', (ev) => {
+    listaSugestoes.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao="marcar-lida"]');
       if (btn) marcarLida(btn.dataset.id);
     });

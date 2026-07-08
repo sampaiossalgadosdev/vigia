@@ -46,23 +46,30 @@
   (() => {
     initNavbar();
     let produtoSelecionado = null;
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const tabelaPromocoes = $('tabelaPromocoes');
+    const fProduto = $('f_produto'), fTipo = $('f_tipo'), fDesconto = $('f_desconto'),
+          fInicio = $('f_inicio'), fFim = $('f_fim'), fLeve = $('f_leve'), fPague = $('f_pague');
+
     async function carregar() {
       const data = await API.get('/api/promocoes');
-      const corpo = document.getElementById('tabelaPromocoes');
-      if (!data.items.length) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma promoção cadastrada.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((p) => '<tr><td>' + UI.escapar(p.produto?.nome || '-') + '</td><td>' + p.tipo + '</td><td>' + p.desconto + '</td><td>' + UI.data(p.dataInicio) + ' a ' + UI.data(p.dataFim) + '</td><td><span class="tag ' + (p.ativa ? 'ok' : 'neutro') + '">' + (p.ativa ? 'ativa' : 'encerrada') + '</span></td><td><button class="btn secundario pequeno" data-acao="encerrar" data-id="' + p.id + '">Encerrar</button></td></tr>').join('');
+      if (!data.items.length) { tabelaPromocoes.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma promoção cadastrada.</td></tr>'; return; }
+      tabelaPromocoes.innerHTML = data.items.map((p) => '<tr><td>' + UI.escapar(p.produto?.nome || '-') + '</td><td>' + p.tipo + '</td><td>' + p.desconto + '</td><td>' + UI.data(p.dataInicio) + ' a ' + UI.data(p.dataFim) + '</td><td><span class="tag ' + (p.ativa ? 'ok' : 'neutro') + '">' + (p.ativa ? 'ativa' : 'encerrada') + '</span></td><td><button class="btn secundario pequeno" data-acao="encerrar" data-id="' + p.id + '">Encerrar</button></td></tr>').join('');
     }
     async function salvar() {
-      const body = { produtoId: produtoSelecionado?.id || document.getElementById('f_produto').value, nome: 'Promoção', tipo: document.getElementById('f_tipo').value, desconto: document.getElementById('f_desconto').value, dataInicio: document.getElementById('f_inicio').value, dataFim: document.getElementById('f_fim').value, leveQtd: document.getElementById('f_leve').value || null, pagueQtd: document.getElementById('f_pague').value || null };
+      const body = { produtoId: produtoSelecionado?.id || fProduto.value, nome: 'Promoção', tipo: fTipo.value, desconto: fDesconto.value, dataInicio: fInicio.value, dataFim: fFim.value, leveQtd: fLeve.value || null, pagueQtd: fPague.value || null };
       await API.post('/api/promocoes', body);
       UI.fecharModal('modalPromocao');
       await carregar();
     }
     async function encerrar(id) { await API.del('/api/promocoes/' + id); await carregar(); }
-    document.getElementById('btnNovaPromocao').addEventListener('click', () => UI.abrirModal('modalPromocao'));
-    document.getElementById('btnCancelarPromocao').addEventListener('click', () => UI.fecharModal('modalPromocao'));
-    document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('tabelaPromocoes').addEventListener('click', (ev) => {
+    $('btnNovaPromocao').addEventListener('click', () => UI.abrirModal('modalPromocao'));
+    $('btnCancelarPromocao').addEventListener('click', () => UI.fecharModal('modalPromocao'));
+    $('btnSalvar').addEventListener('click', salvar);
+    tabelaPromocoes.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao="encerrar"]');
       if (btn) encerrar(btn.dataset.id);
     });

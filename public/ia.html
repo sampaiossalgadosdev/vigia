@@ -24,16 +24,22 @@
   <script>
   (() => {
     initNavbar();
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const listaSugestoes = $('listaSugestoes'), historicoIa = $('historicoIa');
+
     async function gerar() {
       const data = await API.post('/api/ia/sugestoes', {});
-      document.getElementById('listaSugestoes').innerHTML = data.sugestoes.map((s) => '<div class="card" style="margin-bottom:10px"><strong>' + UI.escapar(s.produto) + '</strong><div>Desconto: ' + s.desconto + '%</div><div>' + UI.escapar(s.justificativa) + '</div></div>').join('');
+      listaSugestoes.innerHTML = data.sugestoes.map((s) => '<div class="card" style="margin-bottom:10px"><strong>' + UI.escapar(s.produto) + '</strong><div>Desconto: ' + s.desconto + '%</div><div>' + UI.escapar(s.justificativa) + '</div></div>').join('');
       await carregarHistorico();
     }
     async function carregarHistorico() {
       const data = await API.get('/api/ia/sugestoes/historico');
-      document.getElementById('historicoIa').innerHTML = data.map((d) => '<div class="card" style="margin-bottom:10px"><div>' + UI.data(d.criadoEm) + '</div><div>' + UI.escapar(d.resultadoMargem || '') + '</div></div>').join('');
+      historicoIa.innerHTML = data.map((d) => '<div class="card" style="margin-bottom:10px"><div>' + UI.data(d.criadoEm) + '</div><div>' + UI.escapar(d.resultadoMargem || '') + '</div></div>').join('');
     }
-    document.getElementById('btnGerar').addEventListener('click', gerar);
+    $('btnGerar').addEventListener('click', gerar);
     (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('ia.html'); await carregarHistorico(); })();
   })();
   </script>

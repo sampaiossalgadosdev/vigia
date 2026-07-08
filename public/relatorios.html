@@ -35,21 +35,29 @@
   <script>
   (() => {
     initNavbar();
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const receitaDia = $('receitaDia'), qtdDia = $('qtdDia'), tabelaPeriodo = $('tabelaPeriodo'),
+          tabelaProdutos = $('tabelaProdutos'), tabelaMargem = $('tabelaMargem'),
+          tabelaDre = $('tabelaDre'), tabelaEstoque = $('tabelaEstoque');
+
     function trocarAba(aba) { document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba)); document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba)); }
     async function carregar() {
       const dia = await API.get('/api/relatorios/vendas-dia');
-      document.getElementById('receitaDia').textContent = UI.moeda(dia.receita || 0);
-      document.getElementById('qtdDia').textContent = UI.numero(dia.total || 0);
+      receitaDia.textContent = UI.moeda(dia.receita || 0);
+      qtdDia.textContent = UI.numero(dia.total || 0);
       const periodo = await API.get('/api/relatorios/vendas-periodo');
-      document.getElementById('tabelaPeriodo').innerHTML = periodo.vendas.map((v) => '<tr><td>' + UI.data(v.criadoEm) + '</td><td>' + UI.moeda(v.total) + '</td></tr>').join('');
+      tabelaPeriodo.innerHTML = periodo.vendas.map((v) => '<tr><td>' + UI.data(v.criadoEm) + '</td><td>' + UI.moeda(v.total) + '</td></tr>').join('');
       const produtos = await API.get('/api/relatorios/produtos-mais-vendidos');
-      document.getElementById('tabelaProdutos').innerHTML = produtos.map((p) => '<tr><td>' + p.produtoId + '</td><td>' + p.qtd + '</td><td>' + UI.moeda(p.receita) + '</td></tr>').join('');
+      tabelaProdutos.innerHTML = produtos.map((p) => '<tr><td>' + p.produtoId + '</td><td>' + p.qtd + '</td><td>' + UI.moeda(p.receita) + '</td></tr>').join('');
       const margem = await API.get('/api/relatorios/margem');
-      document.getElementById('tabelaMargem').innerHTML = margem.map((m) => '<tr><td>' + m.produtoId + '</td><td>' + UI.moeda(m.receita) + '</td><td>' + UI.moeda(m.custo) + '</td><td>' + UI.moeda(m.margem) + '</td></tr>').join('');
+      tabelaMargem.innerHTML = margem.map((m) => '<tr><td>' + m.produtoId + '</td><td>' + UI.moeda(m.receita) + '</td><td>' + UI.moeda(m.custo) + '</td><td>' + UI.moeda(m.margem) + '</td></tr>').join('');
       const dre = await API.get('/api/relatorios/dre-simplificado');
-      document.getElementById('tabelaDre').innerHTML = '<tr><td>' + dre.mes + '</td><td>' + UI.moeda(dre.receita) + '</td><td>' + UI.moeda(dre.custo) + '</td><td>' + UI.moeda(dre.lucroBruto) + '</td></tr>';
+      tabelaDre.innerHTML = '<tr><td>' + dre.mes + '</td><td>' + UI.moeda(dre.receita) + '</td><td>' + UI.moeda(dre.custo) + '</td><td>' + UI.moeda(dre.lucroBruto) + '</td></tr>';
       const estoque = await API.get('/api/relatorios/estoque-critico');
-      document.getElementById('tabelaEstoque').innerHTML = estoque.map((p) => '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + p.estoqueQtd + '</td><td>' + p.estoqueMin + '</td></tr>').join('');
+      tabelaEstoque.innerHTML = estoque.map((p) => '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + p.estoqueQtd + '</td><td>' + p.estoqueMin + '</td></tr>').join('');
     }
     document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
       btn.addEventListener('click', () => trocarAba(btn.dataset.aba));

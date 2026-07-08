@@ -103,14 +103,27 @@
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null, tokenImportacao = null;
 
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const busca = $('busca'), tabela = $('tabela'), infoPagina = $('infoPagina');
+    const tituloModal = $('tituloModal'), erroModal = $('erroModal'), campoPlu = $('campoPlu');
+    const fEan = $('f_ean'), fNome = $('f_nome'), fMarca = $('f_marca'), fNcm = $('f_ncm'),
+          fUnidade = $('f_unidade'), fPreco = $('f_preco'), fCusto = $('f_custo'),
+          fEstoque = $('f_estoque'), fMinimo = $('f_minimo'), fCategoria = $('f_categoria'),
+          fPeso = $('f_peso'), fPlu = $('f_plu');
+    const erroImportar = $('erroImportar'), arquivoImportar = $('arquivoImportar'),
+          areaPreview = $('areaPreview'), resumoPreview = $('resumoPreview'),
+          tabelaPreview = $('tabelaPreview'), btnConfirmarImportacao = $('btnConfirmarImportacao');
+
     async function carregar() {
-      const busca = encodeURIComponent(document.getElementById('busca').value.trim());
-      const data = await API.get('/api/produtos?page=' + pagina + '&limit=20&search=' + busca);
+      const termo = encodeURIComponent(busca.value.trim());
+      const data = await API.get('/api/produtos?page=' + pagina + '&limit=20&search=' + termo);
       totalPaginas = data.totalPages || 1;
-      document.getElementById('infoPagina').textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
-      const corpo = document.getElementById('tabela');
-      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="8" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((p) =>
+      infoPagina.textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
+      if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="8" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
+      tabela.innerHTML = data.items.map((p) =>
         '<tr><td>' + p.ean + (p.vendidoPorPeso ? ' <span class="tag neutro">PLU ' + p.plu + '</span>' : '') + '</td>' +
         '<td>' + UI.escapar(p.nome) + '</td><td>' + p.unidade + '</td>' +
         '<td>' + UI.moeda(p.preco) + '</td><td>' + UI.moeda(p.custoMedio) + '</td>' +
@@ -128,25 +141,25 @@
     }
 
     function preencher(p) {
-      document.getElementById('f_ean').value = p.ean || '';
-      document.getElementById('f_nome').value = p.nome || '';
-      document.getElementById('f_marca').value = p.marca || '';
-      document.getElementById('f_ncm').value = p.ncm || '';
-      document.getElementById('f_unidade').value = p.unidade || 'UN';
-      document.getElementById('f_preco').value = p.preco || '';
-      document.getElementById('f_custo').value = p.custoMedio || '';
-      document.getElementById('f_estoque').value = p.estoqueQtd || '';
-      document.getElementById('f_minimo').value = p.estoqueMin || '';
-      document.getElementById('f_categoria').value = p.categoriaId || '';
-      document.getElementById('f_peso').checked = !!p.vendidoPorPeso;
-      document.getElementById('f_plu').value = p.plu || '';
-      document.getElementById('campoPlu').style.display = p.vendidoPorPeso ? 'block' : 'none';
+      fEan.value = p.ean || '';
+      fNome.value = p.nome || '';
+      fMarca.value = p.marca || '';
+      fNcm.value = p.ncm || '';
+      fUnidade.value = p.unidade || 'UN';
+      fPreco.value = p.preco || '';
+      fCusto.value = p.custoMedio || '';
+      fEstoque.value = p.estoqueQtd || '';
+      fMinimo.value = p.estoqueMin || '';
+      fCategoria.value = p.categoriaId || '';
+      fPeso.checked = !!p.vendidoPorPeso;
+      fPlu.value = p.plu || '';
+      campoPlu.style.display = p.vendidoPorPeso ? 'block' : 'none';
     }
 
     function abrirNovo() {
       editandoId = null;
-      document.getElementById('tituloModal').textContent = 'Novo produto';
-      document.getElementById('erroModal').classList.remove('visivel');
+      tituloModal.textContent = 'Novo produto';
+      erroModal.classList.remove('visivel');
       preencher({});
       UI.abrirModal('modalProduto');
     }
@@ -154,37 +167,36 @@
     async function editar(id) {
       const p = await API.get('/api/produtos/' + id);
       editandoId = id;
-      document.getElementById('tituloModal').textContent = 'Editar produto';
-      document.getElementById('erroModal').classList.remove('visivel');
+      tituloModal.textContent = 'Editar produto';
+      erroModal.classList.remove('visivel');
       preencher(p);
       UI.abrirModal('modalProduto');
     }
 
     async function salvar() {
       const body = {
-        ean: document.getElementById('f_ean').value.trim(),
-        nome: document.getElementById('f_nome').value.trim(),
-        marca: document.getElementById('f_marca').value.trim(),
-        ncm: document.getElementById('f_ncm').value.trim(),
-        unidade: document.getElementById('f_unidade').value,
-        preco: document.getElementById('f_preco').value,
-        custoMedio: document.getElementById('f_custo').value || 0,
-        estoqueQtd: document.getElementById('f_estoque').value || 0,
-        estoqueMin: document.getElementById('f_minimo').value || 0,
-        categoriaId: document.getElementById('f_categoria').value.trim(),
-        vendidoPorPeso: document.getElementById('f_peso').checked,
-        plu: document.getElementById('f_plu').value.trim(),
+        ean: fEan.value.trim(),
+        nome: fNome.value.trim(),
+        marca: fMarca.value.trim(),
+        ncm: fNcm.value.trim(),
+        unidade: fUnidade.value,
+        preco: fPreco.value,
+        custoMedio: fCusto.value || 0,
+        estoqueQtd: fEstoque.value || 0,
+        estoqueMin: fMinimo.value || 0,
+        categoriaId: fCategoria.value.trim(),
+        vendidoPorPeso: fPeso.checked,
+        plu: fPlu.value.trim(),
       };
-      const erroEl = document.getElementById('erroModal');
-      erroEl.classList.remove('visivel');
+      erroModal.classList.remove('visivel');
       try {
         if (editandoId) await API.put('/api/produtos/' + editandoId, body);
         else await API.post('/api/produtos', body);
         UI.fecharModal('modalProduto');
         carregar();
       } catch (e) {
-        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroEl.classList.add('visivel');
+        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroModal.classList.add('visivel');
       }
     }
 
@@ -203,60 +215,57 @@
     }
 
     async function enviarPreview() {
-      const erroEl = document.getElementById('erroImportar');
-      erroEl.classList.remove('visivel');
-      const input = document.getElementById('arquivoImportar');
-      if (!input.files.length) { erroEl.textContent = 'Selecione um arquivo CSV ou XLSX.'; erroEl.classList.add('visivel'); return; }
+      erroImportar.classList.remove('visivel');
+      if (!arquivoImportar.files.length) { erroImportar.textContent = 'Selecione um arquivo CSV ou XLSX.'; erroImportar.classList.add('visivel'); return; }
       const form = new FormData();
-      form.append('arquivo', input.files[0]);
+      form.append('arquivo', arquivoImportar.files[0]);
       try {
         const data = await API.post('/api/produtos/importar/preview', form);
         tokenImportacao = data.tokenImportacao;
-        document.getElementById('resumoPreview').textContent =
+        resumoPreview.textContent =
           data.total + ' linhas · ' + data.validos + ' válidas · ' + data.invalidos + ' inválidas';
-        document.getElementById('tabelaPreview').innerHTML = data.itens.map((i) =>
+        tabelaPreview.innerHTML = data.itens.map((i) =>
           '<tr><td>' + i.linha + '</td><td>' + UI.escapar(i.nome || '-') + '</td><td>' + (i.ean || '-') + '</td>' +
           '<td>' + (i.status === 'valido'
             ? '<span class="tag ok">válido</span>'
             : '<span class="tag erro">inválido</span> <small>' + UI.escapar((i.erros || []).join('; ')) + '</small>') + '</td></tr>'
         ).join('');
-        document.getElementById('areaPreview').style.display = 'block';
-        document.getElementById('btnConfirmarImportacao').disabled = data.validos === 0;
+        areaPreview.style.display = 'block';
+        btnConfirmarImportacao.disabled = data.validos === 0;
       } catch (e) {
-        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+        erroImportar.textContent = e.message; erroImportar.classList.add('visivel');
       }
     }
 
     async function confirmarImportacao() {
-      const erroEl = document.getElementById('erroImportar');
-      erroEl.classList.remove('visivel');
+      erroImportar.classList.remove('visivel');
       try {
         const resultado = await API.post('/api/produtos/importar/confirmar', { tokenImportacao });
         alert('Importação concluída: ' + resultado.inseridos + ' inseridos, ' + resultado.ignorados + ' ignorados.');
         UI.fecharModal('modalImportar');
-        document.getElementById('areaPreview').style.display = 'none';
+        areaPreview.style.display = 'none';
         carregar();
       } catch (e) {
-        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+        erroImportar.textContent = e.message; erroImportar.classList.add('visivel');
       }
     }
 
     // ─── Eventos ───
-    document.getElementById('btnNovoProduto').addEventListener('click', abrirNovo);
-    document.getElementById('btnAbrirImportar').addEventListener('click', () => UI.abrirModal('modalImportar'));
-    document.getElementById('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
-    document.getElementById('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
-    document.getElementById('btnCancelarProduto').addEventListener('click', () => UI.fecharModal('modalProduto'));
-    document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('btnBaixarModelo').addEventListener('click', baixarModelo);
-    document.getElementById('btnGerarPreview').addEventListener('click', enviarPreview);
-    document.getElementById('btnConfirmarImportacao').addEventListener('click', confirmarImportacao);
-    document.getElementById('btnFecharImportar').addEventListener('click', () => UI.fecharModal('modalImportar'));
-    document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
-    document.getElementById('f_peso').addEventListener('change', (ev) => {
-      document.getElementById('campoPlu').style.display = ev.target.checked ? 'block' : 'none';
+    $('btnNovoProduto').addEventListener('click', abrirNovo);
+    $('btnAbrirImportar').addEventListener('click', () => UI.abrirModal('modalImportar'));
+    $('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
+    $('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+    $('btnCancelarProduto').addEventListener('click', () => UI.fecharModal('modalProduto'));
+    $('btnSalvar').addEventListener('click', salvar);
+    $('btnBaixarModelo').addEventListener('click', baixarModelo);
+    $('btnGerarPreview').addEventListener('click', enviarPreview);
+    btnConfirmarImportacao.addEventListener('click', confirmarImportacao);
+    $('btnFecharImportar').addEventListener('click', () => UI.fecharModal('modalImportar'));
+    busca.addEventListener('input', () => { pagina = 1; carregar(); });
+    fPeso.addEventListener('change', (ev) => {
+      campoPlu.style.display = ev.target.checked ? 'block' : 'none';
     });
-    document.getElementById('tabela').addEventListener('click', (ev) => {
+    tabela.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao]');
       if (!btn) return;
       if (btn.dataset.acao === 'editar') editar(btn.dataset.id);

@@ -67,6 +67,13 @@
     initNavbar();
     let editandoId = null;
 
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const tabela = $('tabela'), tituloModal = $('tituloModal'), erroModal = $('erroModal'),
+          matrizPermissoes = $('matrizPermissoes'), fNome = $('f_nome'), fDescricao = $('f_descricao');
+
     const MODULOS = [
       ['dashboard', 'Dashboard'],
       ['produtos', 'Produtos'],
@@ -85,8 +92,7 @@
     function montarMatriz(permissoesAtuais) {
       const mapa = {};
       (permissoesAtuais || []).forEach((p) => { mapa[p.modulo] = p.nivel; });
-      const corpo = document.getElementById('matrizPermissoes');
-      corpo.innerHTML = MODULOS.map(([modulo, rotulo]) => {
+      matrizPermissoes.innerHTML = MODULOS.map(([modulo, rotulo]) => {
         const nivelAtual = mapa[modulo] || 'bloqueado';
         const celulas = NIVEIS.map((nivel) =>
           '<td style="text-align:center"><input type="radio" name="mod_' + modulo + '" value="' + nivel + '"' +
@@ -105,12 +111,11 @@
 
     async function carregar() {
       const data = await API.get('/api/perfis?limit=100');
-      const corpo = document.getElementById('tabela');
       if (!data.items.length) {
-        corpo.innerHTML = '<tr><td colspan="4" class="vazio">Nenhum perfil cadastrado.</td></tr>';
+        tabela.innerHTML = '<tr><td colspan="4" class="vazio">Nenhum perfil cadastrado.</td></tr>';
         return;
       }
-      corpo.innerHTML = data.items.map((p) =>
+      tabela.innerHTML = data.items.map((p) =>
         '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + UI.escapar(p.descricao || '-') + '</td>' +
         '<td>' + p.totalUsuarios + '</td>' +
         '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + p.id + '">Editar</button> ' +
@@ -120,10 +125,10 @@
 
     function abrirNovo() {
       editandoId = null;
-      document.getElementById('tituloModal').textContent = 'Novo perfil';
-      document.getElementById('erroModal').classList.remove('visivel');
-      document.getElementById('f_nome').value = '';
-      document.getElementById('f_descricao').value = '';
+      tituloModal.textContent = 'Novo perfil';
+      erroModal.classList.remove('visivel');
+      fNome.value = '';
+      fDescricao.value = '';
       montarMatriz([]);
       UI.abrirModal('modalPerfil');
     }
@@ -131,20 +136,19 @@
     async function editar(id) {
       const perfil = await API.get('/api/perfis/' + id);
       editandoId = perfil.id;
-      document.getElementById('tituloModal').textContent = 'Editar perfil';
-      document.getElementById('erroModal').classList.remove('visivel');
-      document.getElementById('f_nome').value = perfil.nome;
-      document.getElementById('f_descricao').value = perfil.descricao || '';
+      tituloModal.textContent = 'Editar perfil';
+      erroModal.classList.remove('visivel');
+      fNome.value = perfil.nome;
+      fDescricao.value = perfil.descricao || '';
       montarMatriz(perfil.permissoes);
       UI.abrirModal('modalPerfil');
     }
 
     async function salvar() {
-      const erroEl = document.getElementById('erroModal');
-      erroEl.classList.remove('visivel');
+      erroModal.classList.remove('visivel');
       const body = {
-        nome: document.getElementById('f_nome').value.trim(),
-        descricao: document.getElementById('f_descricao').value.trim(),
+        nome: fNome.value.trim(),
+        descricao: fDescricao.value.trim(),
         permissoes: lerMatriz(),
       };
       try {
@@ -153,8 +157,8 @@
         UI.fecharModal('modalPerfil');
         carregar();
       } catch (e) {
-        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroEl.classList.add('visivel');
+        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroModal.classList.add('visivel');
       }
     }
 
@@ -164,10 +168,10 @@
     }
 
     // ─── Eventos ───
-    document.getElementById('btnNovoPerfil').addEventListener('click', abrirNovo);
-    document.getElementById('btnCancelarPerfil').addEventListener('click', () => UI.fecharModal('modalPerfil'));
-    document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('tabela').addEventListener('click', (ev) => {
+    $('btnNovoPerfil').addEventListener('click', abrirNovo);
+    $('btnCancelarPerfil').addEventListener('click', () => UI.fecharModal('modalPerfil'));
+    $('btnSalvar').addEventListener('click', salvar);
+    tabela.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao]');
       if (!btn) return;
       if (btn.dataset.acao === 'editar') editar(btn.dataset.id);

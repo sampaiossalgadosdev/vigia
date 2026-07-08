@@ -31,21 +31,26 @@
   <script>
   (() => {
     initNavbar();
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const statusCaixa = $('statusCaixa'), vendasDia = $('vendasDia'), historicoCaixa = $('historicoCaixa');
+
     async function carregar() {
       const atual = await API.get('/api/caixa/atual');
-      document.getElementById('statusCaixa').textContent = atual.status === 'fechado' ? 'Fechado' : 'Aberto';
-      document.getElementById('vendasDia').textContent = UI.moeda(atual.totalVendas || 0);
+      statusCaixa.textContent = atual.status === 'fechado' ? 'Fechado' : 'Aberto';
+      vendasDia.textContent = UI.moeda(atual.totalVendas || 0);
       const hist = await API.get('/api/caixa/historico?limit=10');
-      const corpo = document.getElementById('historicoCaixa');
-      if (!hist.items.length) { corpo.innerHTML = '<tr><td colspan="3" class="vazio">Nenhum caixa fechado.</td></tr>'; return; }
-      corpo.innerHTML = hist.items.map((c) => '<tr><td>' + UI.data(c.fechadoEm) + '</td><td>' + c.status + '</td><td>' + UI.moeda(c.valorFechamento) + '</td></tr>').join('');
+      if (!hist.items.length) { historicoCaixa.innerHTML = '<tr><td colspan="3" class="vazio">Nenhum caixa fechado.</td></tr>'; return; }
+      historicoCaixa.innerHTML = hist.items.map((c) => '<tr><td>' + UI.data(c.fechadoEm) + '</td><td>' + c.status + '</td><td>' + UI.moeda(c.valorFechamento) + '</td></tr>').join('');
     }
     async function abrirCaixa() { const valor = prompt('Valor de abertura'); if (valor === null) return; await API.post('/api/caixa/abrir', { valorAbertura: valor }); await carregar(); }
     async function sangria() { const tipo = prompt('Tipo (sangria/suprimento)'); const valor = prompt('Valor'); const motivo = prompt('Motivo'); if (valor === null) return; await API.post('/api/caixa/sangria', { tipo, valor, motivo }); await carregar(); }
     async function fecharCaixa() { const valor = prompt('Valor de fechamento'); if (valor === null) return; await API.post('/api/caixa/fechar', { valorFechamento: valor }); await carregar(); }
-    document.getElementById('btnAbrirCaixa').addEventListener('click', abrirCaixa);
-    document.getElementById('btnSangria').addEventListener('click', sangria);
-    document.getElementById('btnFecharCaixa').addEventListener('click', fecharCaixa);
+    $('btnAbrirCaixa').addEventListener('click', abrirCaixa);
+    $('btnSangria').addEventListener('click', sangria);
+    $('btnFecharCaixa').addEventListener('click', fecharCaixa);
     (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('caixa.html'); await carregar(); })();
   })();
   </script>

@@ -104,6 +104,17 @@
     // Itens pendentes carregados, indexados por id (evita serializar objetos no HTML).
     const itensPendentes = new Map();
 
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const erroUpload = $('erroUpload'), painelNfe = $('painelNfe'), tituloNfe = $('tituloNfe'),
+          resumoNfe = $('resumoNfe'), itensNfe = $('itensNfe'), btnConfirmarNfe = $('btnConfirmarNfe');
+    const tabelaPendentes = $('tabelaPendentes'), badgePendentes = $('badgePendentes');
+    const infoItem = $('infoItem'), erroVincular = $('erroVincular'),
+          buscaVincular = $('buscaVincular'), resultadosVincular = $('resultadosVincular');
+    const filtroStatus = $('filtroStatus'), tabelaHistorico = $('tabelaHistorico');
+
     function trocarAba(aba) {
       document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
       document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
@@ -112,8 +123,8 @@
     }
 
     // ─── Upload de XML ───
-    const dropArea = document.getElementById('dropArea');
-    const inputXml = document.getElementById('arquivoXml');
+    const dropArea = $('dropArea');
+    const inputXml = $('arquivoXml');
     dropArea.addEventListener('click', () => inputXml.click());
     dropArea.addEventListener('dragover', (ev) => { ev.preventDefault(); dropArea.classList.add('arrastando'); });
     dropArea.addEventListener('dragleave', () => dropArea.classList.remove('arrastando'));
@@ -124,35 +135,34 @@
     inputXml.addEventListener('change', () => { if (inputXml.files.length) enviarXml(inputXml.files[0]); });
 
     async function enviarXml(arquivo) {
-      const erroEl = document.getElementById('erroUpload');
-      erroEl.classList.remove('visivel');
+      erroUpload.classList.remove('visivel');
       const form = new FormData();
       form.append('arquivo', arquivo);
       try {
         const nfe = await API.post('/api/estoque/nfe/upload', form);
         mostrarNfe(nfe);
       } catch (e) {
-        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+        erroUpload.textContent = e.message; erroUpload.classList.add('visivel');
       }
     }
 
     function mostrarNfe(nfe) {
       nfeAtual = nfe;
-      document.getElementById('painelNfe').style.display = 'block';
-      document.getElementById('tituloNfe').textContent = 'NF-e ' + nfe.numeroNfe + ' · ' + (nfe.fornecedor ? nfe.fornecedor.nome : 'sem fornecedor');
+      painelNfe.style.display = 'block';
+      tituloNfe.textContent = 'NF-e ' + nfe.numeroNfe + ' · ' + (nfe.fornecedor ? nfe.fornecedor.nome : 'sem fornecedor');
       const r = nfe.resumo || {
         totalItens: nfe.itens.length,
         itensOk: nfe.itens.filter((i) => i.status === 'ok').length,
         itensPendentes: nfe.itens.filter((i) => i.status === 'pendente').length,
       };
-      document.getElementById('resumoNfe').textContent =
+      resumoNfe.textContent =
         'Valor total ' + UI.moeda(nfe.valorTotal) + ' · ' + r.totalItens + ' itens (' + r.itensOk + ' ok, ' + r.itensPendentes + ' pendentes). Itens pendentes serão ignorados na confirmação.';
-      document.getElementById('itensNfe').innerHTML = nfe.itens.map((i) =>
+      itensNfe.innerHTML = nfe.itens.map((i) =>
         '<tr><td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td><td>' + UI.moeda(i.valorTotal) + '</td>' +
         '<td><span class="tag ' + (i.status === 'ok' ? 'ok' : 'pendente') + '">' + i.status + '</span></td></tr>'
       ).join('');
-      document.getElementById('btnConfirmarNfe').style.display = nfe.status === 'confirmada' ? 'none' : 'inline-block';
+      btnConfirmarNfe.style.display = nfe.status === 'confirmada' ? 'none' : 'inline-block';
     }
 
     async function confirmarNfe() {
@@ -160,7 +170,7 @@
       try {
         await API.post('/api/estoque/nfe/confirmar/' + nfeAtual.id, {});
         alert('Entrada confirmada. Estoque e custo médio atualizados.');
-        document.getElementById('painelNfe').style.display = 'none';
+        painelNfe.style.display = 'none';
         nfeAtual = null;
         atualizarBadgePendentes();
       } catch (e) { alert(e.message); }
@@ -169,11 +179,10 @@
     // ─── Itens pendentes ───
     async function carregarPendentes() {
       const data = await API.get('/api/estoque/pendentes');
-      const corpo = document.getElementById('tabelaPendentes');
       itensPendentes.clear();
       data.itens.forEach((i) => itensPendentes.set(i.id, i));
-      if (data.itens.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhum item pendente.</td></tr>'; return; }
-      corpo.innerHTML = data.itens.map((i) =>
+      if (data.itens.length === 0) { tabelaPendentes.innerHTML = '<tr><td colspan="6" class="vazio">Nenhum item pendente.</td></tr>'; return; }
+      tabelaPendentes.innerHTML = data.itens.map((i) =>
         '<tr><td>' + i.nfe.numeroNfe + ' <span class="tag ' + (i.nfe.status === 'confirmada' ? 'ok' : 'neutro') + '">' + i.nfe.status + '</span></td>' +
         '<td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td>' +
@@ -184,54 +193,51 @@
     async function atualizarBadgePendentes() {
       try {
         const data = await API.get('/api/estoque/pendentes');
-        const badge = document.getElementById('badgePendentes');
-        if (data.total > 0) { badge.textContent = data.total; badge.classList.remove('oculto'); }
-        else badge.classList.add('oculto');
+        if (data.total > 0) { badgePendentes.textContent = data.total; badgePendentes.classList.remove('oculto'); }
+        else badgePendentes.classList.add('oculto');
       } catch (e) { /* opcional */ }
     }
 
     function abrirVincular(item) {
       itemVinculando = item;
-      document.getElementById('infoItem').textContent =
+      infoItem.textContent =
         'Item: ' + item.descricao + ' · EAN do XML: ' + item.ean + ' · ' + item.quantidade + ' ' + item.unidade;
-      document.getElementById('erroVincular').classList.remove('visivel');
-      document.getElementById('buscaVincular').value = '';
-      document.getElementById('resultadosVincular').innerHTML = '';
+      erroVincular.classList.remove('visivel');
+      buscaVincular.value = '';
+      resultadosVincular.innerHTML = '';
       UI.abrirModal('modalVincular');
     }
 
-    document.getElementById('buscaVincular').addEventListener('input', async (ev) => {
+    buscaVincular.addEventListener('input', async (ev) => {
       const termo = ev.target.value.trim();
       if (termo.length < 2) return;
       const data = await API.get('/api/produtos?limit=8&search=' + encodeURIComponent(termo));
-      document.getElementById('resultadosVincular').innerHTML = data.items.map((p) =>
+      resultadosVincular.innerHTML = data.items.map((p) =>
         '<tr><td>' + UI.escapar(p.nome) + '<br><small>' + p.ean + '</small></td>' +
         '<td style="text-align:right"><button class="btn pequeno" data-acao="vincular-produto" data-id="' + p.id + '">Vincular</button></td></tr>'
       ).join('');
     });
 
     async function vincular(produtoId) {
-      const erroEl = document.getElementById('erroVincular');
-      erroEl.classList.remove('visivel');
+      erroVincular.classList.remove('visivel');
       try {
         await API.post('/api/estoque/nfe/' + itemVinculando.nfe.id + '/itens/' + itemVinculando.id + '/vincular', { produtoId });
         UI.fecharModal('modalVincular');
         carregarPendentes();
         atualizarBadgePendentes();
       } catch (e) {
-        erroEl.textContent = e.message; erroEl.classList.add('visivel');
+        erroVincular.textContent = e.message; erroVincular.classList.add('visivel');
       }
     }
 
     /** Cria um produto novo com os dados do item do XML e vincula em seguida. */
     async function cadastrarDoItem() {
-      const erroEl = document.getElementById('erroVincular');
-      erroEl.classList.remove('visivel');
+      erroVincular.classList.remove('visivel');
       const i = itemVinculando;
       const eanNumerico = /^\d{8}$|^\d{12,14}$/.test(i.ean) ? i.ean : null;
       if (!eanNumerico) {
-        erroEl.textContent = 'O item do XML não possui EAN válido. Cadastre o produto manualmente em Produtos e depois vincule aqui.';
-        erroEl.classList.add('visivel');
+        erroVincular.textContent = 'O item do XML não possui EAN válido. Cadastre o produto manualmente em Produtos e depois vincule aqui.';
+        erroVincular.classList.add('visivel');
         return;
       }
       const preco = prompt('Preço de venda (R$) para "' + i.descricao + '":', (Number(i.valorUnitario) * 1.3).toFixed(2));
@@ -243,18 +249,17 @@
         });
         await vincular(produto.id);
       } catch (e) {
-        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroEl.classList.add('visivel');
+        erroVincular.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroVincular.classList.add('visivel');
       }
     }
 
     // ─── Histórico ───
     async function carregarHistorico() {
-      const status = document.getElementById('filtroStatus').value;
+      const status = filtroStatus.value;
       const data = await API.get('/api/estoque/nfe?limit=50' + (status ? '&status=' + status : ''));
-      const corpo = document.getElementById('tabelaHistorico');
-      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma NF-e encontrada.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((n) =>
+      if (data.items.length === 0) { tabelaHistorico.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma NF-e encontrada.</td></tr>'; return; }
+      tabelaHistorico.innerHTML = data.items.map((n) =>
         '<tr data-id="' + n.id + '" style="cursor:pointer">' +
         '<td>' + n.numeroNfe + '</td><td>' + UI.escapar(n.fornecedor ? n.fornecedor.nome : '-') + '</td>' +
         '<td>' + UI.data(n.dataEmissao) + '</td><td>' + UI.moeda(n.valorTotal) + '</td><td>' + n._count.itens + '</td>' +
@@ -266,28 +271,28 @@
       const nfe = await API.get('/api/estoque/nfe/' + id);
       trocarAba('upload');
       mostrarNfe(nfe);
-      document.getElementById('painelNfe').scrollIntoView({ behavior: 'smooth' });
+      painelNfe.scrollIntoView({ behavior: 'smooth' });
     }
 
     // ─── Eventos ───
     document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
       btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
     });
-    document.getElementById('btnConfirmarNfe').addEventListener('click', confirmarNfe);
-    document.getElementById('filtroStatus').addEventListener('change', carregarHistorico);
-    document.getElementById('btnCadastrarDoItem').addEventListener('click', cadastrarDoItem);
-    document.getElementById('btnFecharVincular').addEventListener('click', () => UI.fecharModal('modalVincular'));
-    document.getElementById('tabelaPendentes').addEventListener('click', (ev) => {
+    btnConfirmarNfe.addEventListener('click', confirmarNfe);
+    filtroStatus.addEventListener('change', carregarHistorico);
+    $('btnCadastrarDoItem').addEventListener('click', cadastrarDoItem);
+    $('btnFecharVincular').addEventListener('click', () => UI.fecharModal('modalVincular'));
+    tabelaPendentes.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao="vincular"]');
       if (!btn) return;
       const item = itensPendentes.get(btn.dataset.id);
       if (item) abrirVincular(item);
     });
-    document.getElementById('resultadosVincular').addEventListener('click', (ev) => {
+    resultadosVincular.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao="vincular-produto"]');
       if (btn) vincular(btn.dataset.id);
     });
-    document.getElementById('tabelaHistorico').addEventListener('click', (ev) => {
+    tabelaHistorico.addEventListener('click', (ev) => {
       const linha = ev.target.closest('tr[data-id]');
       if (linha) verNfe(linha.dataset.id);
     });

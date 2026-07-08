@@ -58,6 +58,14 @@
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null;
 
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const busca = $('busca'), tabela = $('tabela'), infoPagina = $('infoPagina');
+    const tituloModal = $('tituloModal'), erroModal = $('erroModal');
+    const fNome = $('f_nome'), fCnpj = $('f_cnpj'), fTelefone = $('f_telefone'), fEmail = $('f_email');
+
     /** Validação de CNPJ no frontend (formato + dígitos verificadores). */
     function cnpjValido(valor) {
       const cnpj = String(valor || '').replace(/\D/g, '');
@@ -73,13 +81,12 @@
     }
 
     async function carregar() {
-      const busca = encodeURIComponent(document.getElementById('busca').value.trim());
-      const data = await API.get('/api/fornecedores?page=' + pagina + '&limit=20&search=' + busca);
+      const termo = encodeURIComponent(busca.value.trim());
+      const data = await API.get('/api/fornecedores?page=' + pagina + '&limit=20&search=' + termo);
       totalPaginas = data.totalPages || 1;
-      document.getElementById('infoPagina').textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' fornecedores';
-      const corpo = document.getElementById('tabela');
-      if (data.items.length === 0) { corpo.innerHTML = '<tr><td colspan="5" class="vazio">Nenhum fornecedor encontrado.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((f) =>
+      infoPagina.textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' fornecedores';
+      if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="5" class="vazio">Nenhum fornecedor encontrado.</td></tr>'; return; }
+      tabela.innerHTML = data.items.map((f) =>
         '<tr><td>' + UI.escapar(f.nome) + '</td><td>' + f.cnpj + '</td>' +
         '<td>' + UI.escapar(f.email || '-') + '</td><td>' + UI.escapar(f.telefone || '-') + '</td>' +
         '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + f.id + '">Editar</button> ' +
@@ -95,38 +102,37 @@
 
     function abrirNovo() {
       editandoId = null;
-      document.getElementById('tituloModal').textContent = 'Novo fornecedor';
-      document.getElementById('erroModal').classList.remove('visivel');
-      ['f_nome', 'f_cnpj', 'f_telefone', 'f_email'].forEach((id) => document.getElementById(id).value = '');
+      tituloModal.textContent = 'Novo fornecedor';
+      erroModal.classList.remove('visivel');
+      [fNome, fCnpj, fTelefone, fEmail].forEach((campo) => campo.value = '');
       UI.abrirModal('modalFornecedor');
     }
 
     async function editar(id) {
       const f = await API.get('/api/fornecedores/' + id);
       editandoId = id;
-      document.getElementById('tituloModal').textContent = 'Editar fornecedor';
-      document.getElementById('erroModal').classList.remove('visivel');
-      document.getElementById('f_nome').value = f.nome;
-      document.getElementById('f_cnpj').value = f.cnpj;
-      document.getElementById('f_telefone').value = f.telefone || '';
-      document.getElementById('f_email').value = f.email || '';
+      tituloModal.textContent = 'Editar fornecedor';
+      erroModal.classList.remove('visivel');
+      fNome.value = f.nome;
+      fCnpj.value = f.cnpj;
+      fTelefone.value = f.telefone || '';
+      fEmail.value = f.email || '';
       UI.abrirModal('modalFornecedor');
     }
 
     async function salvar() {
-      const erroEl = document.getElementById('erroModal');
-      erroEl.classList.remove('visivel');
-      const cnpj = document.getElementById('f_cnpj').value;
+      erroModal.classList.remove('visivel');
+      const cnpj = fCnpj.value;
       if (!cnpjValido(cnpj)) {
-        erroEl.textContent = 'CNPJ inválido: verifique os 14 dígitos.';
-        erroEl.classList.add('visivel');
+        erroModal.textContent = 'CNPJ inválido: verifique os 14 dígitos.';
+        erroModal.classList.add('visivel');
         return;
       }
       const body = {
-        nome: document.getElementById('f_nome').value.trim(),
+        nome: fNome.value.trim(),
         cnpj: cnpj.replace(/\D/g, ''),
-        telefone: document.getElementById('f_telefone').value.trim(),
-        email: document.getElementById('f_email').value.trim(),
+        telefone: fTelefone.value.trim(),
+        email: fEmail.value.trim(),
       };
       try {
         if (editandoId) await API.put('/api/fornecedores/' + editandoId, body);
@@ -134,8 +140,8 @@
         UI.fecharModal('modalFornecedor');
         carregar();
       } catch (e) {
-        erroEl.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
-        erroEl.classList.add('visivel');
+        erroModal.textContent = e.message + (e.errors && e.errors.length ? ': ' + e.errors.join('; ') : '');
+        erroModal.classList.add('visivel');
       }
     }
 
@@ -145,13 +151,13 @@
     }
 
     // ─── Eventos ───
-    document.getElementById('btnNovoFornecedor').addEventListener('click', abrirNovo);
-    document.getElementById('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
-    document.getElementById('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
-    document.getElementById('btnCancelarFornecedor').addEventListener('click', () => UI.fecharModal('modalFornecedor'));
-    document.getElementById('btnSalvar').addEventListener('click', salvar);
-    document.getElementById('busca').addEventListener('input', () => { pagina = 1; carregar(); });
-    document.getElementById('tabela').addEventListener('click', (ev) => {
+    $('btnNovoFornecedor').addEventListener('click', abrirNovo);
+    $('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
+    $('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+    $('btnCancelarFornecedor').addEventListener('click', () => UI.fecharModal('modalFornecedor'));
+    $('btnSalvar').addEventListener('click', salvar);
+    busca.addEventListener('input', () => { pagina = 1; carregar(); });
+    tabela.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao]');
       if (!btn) return;
       if (btn.dataset.acao === 'editar') editar(btn.dataset.id);

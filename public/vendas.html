@@ -37,22 +37,27 @@
   <script>
   (() => {
     initNavbar();
+    // Referências capturadas na injeção do script: se o usuário navegar para
+    // outra página antes de um fetch terminar, buscar por id retornaria null;
+    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
+    const $ = (id) => document.getElementById(id);
+    const inicio = $('inicio'), fim = $('fim'), statusFiltro = $('statusFiltro'), tabelaVendas = $('tabelaVendas');
+
     async function carregar() {
       const params = new URLSearchParams({ page: 1, limit: 20 });
-      if (document.getElementById('inicio').value) params.set('inicio', document.getElementById('inicio').value);
-      if (document.getElementById('fim').value) params.set('fim', document.getElementById('fim').value);
-      if (document.getElementById('statusFiltro').value) params.set('status', document.getElementById('statusFiltro').value);
+      if (inicio.value) params.set('inicio', inicio.value);
+      if (fim.value) params.set('fim', fim.value);
+      if (statusFiltro.value) params.set('status', statusFiltro.value);
       const data = await API.get('/api/vendas?' + params.toString());
-      const corpo = document.getElementById('tabelaVendas');
-      if (!data.items.length) { corpo.innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
-      corpo.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button></td></tr>').join('');
+      if (!data.items.length) { tabelaVendas.innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
+      tabelaVendas.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button></td></tr>').join('');
     }
     async function detalhar(id) {
       const venda = await API.get('/api/vendas/' + id);
       alert('Venda ' + venda.id + '\nTotal: ' + UI.moeda(venda.total) + '\nItens: ' + venda.itens.length);
     }
-    document.getElementById('btnFiltrar').addEventListener('click', carregar);
-    document.getElementById('tabelaVendas').addEventListener('click', (ev) => {
+    $('btnFiltrar').addEventListener('click', carregar);
+    tabelaVendas.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao="detalhar"]');
       if (btn) detalhar(btn.dataset.id);
     });
