@@ -16,7 +16,9 @@ const { AppError, paginado } = require('../utils/response');
  */
 function normalizar(body) {
   const dados = {};
-  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'codigoInterno', 'imagemUrl', 'categoriaId'];
+  // codigoReferencia fica fora daqui de propósito: é gerado sozinho na criação
+  // (ver criar()) e só pode ser alterado manualmente na edição (ver atualizar()).
+  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'imagemUrl', 'categoriaId'];
   for (const campo of campos) if (body[campo] !== undefined) dados[campo] = body[campo] || null;
   if (dados.nome === null) delete dados.nome;
   if (dados.ean === null) delete dados.ean;
@@ -56,7 +58,7 @@ async function criar(tenantId, body, usuario, ip) {
     if (!categoria) throw new AppError('Categoria não encontrada neste supermercado', 422);
   }
 
-  const produto = await produtoRepo.criar({ ...dados, tenantId });
+  const produto = await produtoRepo.criarComCodigoSequencial(tenantId, dados);
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'criar', entidade: 'Produto',
     entidadeId: produto.id, depois: { nome: produto.nome, ean: produto.ean, preco: String(produto.preco) }, ip,
@@ -68,10 +70,18 @@ async function atualizar(tenantId, id, body, usuario, ip) {
   const atual = await detalhar(tenantId, id);
   const dados = normalizar(body);
 
+  // codigoReferencia só é editável manualmente aqui (não passa por normalizar/criar).
+  if (body.codigoReferencia !== undefined) dados.codigoReferencia = body.codigoReferencia || null;
+
   if (dados.ean && dados.ean !== atual.ean) {
     const existente = await produtoRepo.buscarPorEan(tenantId, dados.ean);
     if (existente && existente.id !== id)
       throw new AppError('Já existe um produto com este EAN neste supermercado', 409);
+  }
+  if (dados.codigoReferencia && dados.codigoReferencia !== atual.codigoReferencia) {
+    const existente = await produtoRepo.buscarPorCodigoReferencia(tenantId, dados.codigoReferencia);
+    if (existente && existente.id !== id)
+      throw new AppError('Já existe um produto com este Cód. Ref. neste supermercado', 409);
   }
   if (dados.categoriaId) {
     const categoria = await produtoRepo.buscarCategoria(tenantId, dados.categoriaId);

@@ -36,6 +36,11 @@ const regrasBase = (opcional = false) => {
 };
 
 const criar = [...regrasBase(false), validar];
-const atualizar = [...regrasBase(true), validar];
+const atualizar = [
+  ...regrasBase(true),
+  // Só editável na tela de edição — na criação o Cód. Ref. é gerado sozinho (ver produto.service.js).
+  body('codigoReferencia').optional({ values: 'falsy' }).isString().trim().isLength({ max: 20 }).withMessage('Cód. Ref. deve ter até 20 caracteres'),
+  validar,
+];
 
 module.exports = { criar, atualizar, UNIDADES };

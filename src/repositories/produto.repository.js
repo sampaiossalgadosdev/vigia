@@ -6,11 +6,28 @@
  */
 const prisma = require('../config/database');
 
-function filtroListagem(tenantId, { search, categoriaId, ativo }) {
+/**
+ * Filtros por coluna da listagem de produtos (padrão ERP): todos opcionais
+ * e combinados com AND. Texto usa contains/insensitive; número usa igualdade
+ * exata (filtro por faixa fica para uma próxima etapa).
+ */
+function filtroListagem(tenantId, { search, categoriaId, ativo, situacao, nome, grupo, valor, custoMedio, estoqueTotal, unidade, codigoReferencia }) {
   const where = { tenantId };
-  where.ativo = ativo === 'false' ? false : ativo === 'todos' ? undefined : true;
+
+  const situacaoEfetiva = situacao !== undefined ? situacao : ativo === 'false' ? 'inativo' : ativo === 'todos' ? 'todos' : undefined;
+  where.ativo = situacaoEfetiva === 'inativo' ? false : situacaoEfetiva === 'todos' ? undefined : true;
   if (where.ativo === undefined) delete where.ativo;
+
   if (categoriaId) where.categoriaId = categoriaId;
+  if (nome) where.nome = { contains: nome, mode: 'insensitive' };
+  if (grupo) where.categoria = { nome: { contains: grupo, mode: 'insensitive' } };
+  if (unidade) where.unidade = { contains: unidade, mode: 'insensitive' };
+  if (codigoReferencia) where.codigoReferencia = { contains: codigoReferencia, mode: 'insensitive' };
+
+  if (valor !== undefined && valor !== '' && !Number.isNaN(Number(valor))) where.preco = Number(valor);
+  if (custoMedio !== undefined && custoMedio !== '' && !Number.isNaN(Number(custoMedio))) where.custoMedio = Number(custoMedio);
+  if (estoqueTotal !== undefined && estoqueTotal !== '' && !Number.isNaN(Number(estoqueTotal))) where.estoqueQtd = Number(estoqueTotal);
+
   if (search)
     where.OR = [
       { nome: { contains: search, mode: 'insensitive' } },
@@ -21,10 +38,29 @@ function filtroListagem(tenantId, { search, categoriaId, ativo }) {
   return where;
 }
 
+/**
+ * Traduz a coluna pedida em ?orderBy= para a cláusula orderBy do Prisma.
+ * Colunas desconhecidas caem no padrão (nome).
+ */
+function montarOrderBy(orderBy, order) {
+  const mapa = {
+    nome: { nome: order },
+    grupo: { categoria: { nome: order } },
+    valor: { preco: order },
+    custoMedio: { custoMedio: order },
+    estoqueTotal: { estoqueQtd: order },
+    unidade: { unidade: order },
+    codigoReferencia: { codigoReferencia: order },
+    situacao: { ativo: order },
+  };
+  return mapa[orderBy] || { nome: order };
+}
+
 async function listar(tenantId, filtros, { skip, take, order }) {
   const where = filtroListagem(tenantId, filtros);
+  const orderByClause = montarOrderBy(filtros.orderBy, order);
   const [items, total] = await Promise.all([
-    prisma.produto.findMany({ where, skip, take, orderBy: { nome: order }, include: { categoria: { select: { id: true, nome: true } } } }),
+    prisma.produto.findMany({ where, skip, take, orderBy: orderByClause, include: { categoria: { select: { id: true, nome: true } } } }),
     prisma.produto.count({ where }),
   ]);
   return { items, total };
@@ -42,8 +78,29 @@ async function buscarPorEans(tenantId, eans) {
   return prisma.produto.findMany({ where: { tenantId, ean: { in: eans } } });
 }
 
+async function buscarPorCodigoReferencia(tenantId, codigoReferencia) {
+  return prisma.produto.findFirst({ where: { tenantId, codigoReferencia } });
+}
+
 async function criar(dados) {
   return prisma.produto.create({ data: dados });
+}
+
+/**
+ * Cria o produto com Cód. Ref. sequencial por tenant: incrementa
+ * Tenant.ultimoCodigoReferencia atomicamente e usa o novo valor na mesma
+ * transação, evitando colisão entre criações concorrentes.
+ */
+async function criarComCodigoSequencial(tenantId, dados) {
+  return prisma.$transaction(async (tx) => {
+    const tenant = await tx.tenant.update({
+      where: { id: tenantId },
+      data: { ultimoCodigoReferencia: { increment: 1 } },
+    });
+    return tx.produto.create({
+      data: { ...dados, tenantId, codigoReferencia: String(tenant.ultimoCodigoReferencia) },
+    });
+  });
 }
 
 async function atualizar(id, dados) {
@@ -91,6 +148,7 @@ async function buscarOuCriarCategoria(tx, tenantId, nome) {
 }
 
 module.exports = {
-  listar, buscarPorId, buscarPorEan, buscarPorEans, criar, atualizar,
-  criarVarios, sync, alertasEstoque, contar, buscarCategoria, buscarOuCriarCategoria,
+  listar, buscarPorId, buscarPorEan, buscarPorEans, buscarPorCodigoReferencia, criar,
+  criarComCodigoSequencial, atualizar, criarVarios, sync, alertasEstoque, contar,
+  buscarCategoria, buscarOuCriarCategoria,
 };

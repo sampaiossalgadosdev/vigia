@@ -109,6 +109,19 @@ tr:hover td { background: var(--verde-claro); }
 .tag.erro { background: #fdecea; color: var(--alerta); }
 .tag.neutro { background: #eef1ef; color: var(--cinza); }
 
+/* ─── Tabela com filtro por coluna, ordenação e linha clicável ─── */
+th.ordenavel { cursor: pointer; user-select: none; white-space: nowrap; }
+th.ordenavel i { margin-left: 4px; color: var(--cinza); font-size: 11px; }
+th.ordenavel.ativa i { color: var(--verde); }
+.linha-filtros th { padding: 6px 8px 10px; }
+.linha-filtros input, .linha-filtros select { padding: 6px 8px; font-size: 13px; }
+.tabela-clicavel tbody tr { cursor: pointer; }
+.col-check, .col-acoes { cursor: default; }
+.acoes-linha { display: flex; gap: 12px; }
+.acoes-linha button { background: none; border: none; padding: 4px; color: var(--cinza); font-size: 15px; }
+.acoes-linha button:hover { color: var(--verde); }
+.acoes-linha button.perigo:hover { color: var(--alerta); }
+
 /* ─── Botões e formulários ─── */
 .btn {
   border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px;

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>VIGIA · Produtos</title>
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
   <script src="/js/navbar.js"></script>
 </head>
 <body>
@@ -16,15 +17,45 @@
       </div>
 
       <div class="barra-acoes">
-        <input type="search" id="busca" placeholder="Buscar por nome, EAN, marca ou PLU">
         <button class="btn" id="btnNovoProduto">Novo produto</button>
         <button class="btn secundario" id="btnAbrirImportar">Importar em lote</button>
       </div>
 
       <div class="painel">
-        <table>
-          <thead><tr><th>EAN</th><th>Nome</th><th>Unid.</th><th>Preço</th><th>Custo</th><th>Estoque</th><th>Categoria</th><th></th></tr></thead>
-          <tbody id="tabela"><tr><td colspan="8" class="vazio">Carregando...</td></tr></tbody>
+        <table class="tabela-clicavel">
+          <thead>
+            <tr>
+              <th class="col-check"><input type="checkbox" id="checkTodos"></th>
+              <th class="ordenavel" data-coluna="nome">Nome <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="grupo">Grupo <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="valor">Valor <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="custoMedio">Custo médio <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="estoqueTotal">Estoque total <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="unidade">Unidade <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="codigoReferencia">Cód. Ref. <i class="fa-solid fa-sort"></i></th>
+              <th class="ordenavel" data-coluna="situacao">Situação <i class="fa-solid fa-sort"></i></th>
+              <th class="col-acoes"></th>
+            </tr>
+            <tr class="linha-filtros">
+              <th></th>
+              <th><input type="text" id="filtro_nome" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_grupo" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_valor" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_custoMedio" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_estoqueTotal" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_unidade" placeholder="Filtrar..."></th>
+              <th><input type="text" id="filtro_codigoReferencia" placeholder="Filtrar..."></th>
+              <th>
+                <select id="filtro_situacao">
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                  <option value="todos">Todos</option>
+                </select>
+              </th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tabela"><tr><td colspan="10" class="vazio">Carregando...</td></tr></tbody>
         </table>
         <div class="paginacao">
           <button class="btn secundario pequeno" id="btnPaginaAnterior">Anterior</button>
@@ -53,6 +84,7 @@
         <div class="campo"><label>Estoque atual</label><input id="f_estoque" type="number" step="0.001" min="0"></div>
         <div class="campo"><label>Estoque mínimo</label><input id="f_minimo" type="number" step="0.001" min="0"></div>
         <div class="campo"><label>Categoria (id opcional)</label><input id="f_categoria" placeholder="uuid da categoria"></div>
+        <div class="campo" id="campoCodigoRef" style="display:none"><label>Cód. Ref.</label><input id="f_codigoRef" maxlength="20"></div>
         <div class="campo">
           <label><input type="checkbox" id="f_peso" style="width:auto"> Vendido por peso (balança)</label>
         </div>
@@ -102,35 +134,63 @@
   (() => {
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null, tokenImportacao = null;
+    let orderBy = 'nome', order = 'asc';
+    // Filtros por coluna, combinados com AND na query string (ver produto.repository.js).
+    const filtros = { nome: '', grupo: '', valor: '', custoMedio: '', estoqueTotal: '', unidade: '', codigoReferencia: '', situacao: 'ativo' };
 
     // Referências capturadas na injeção do script: se o usuário navegar para
     // outra página antes de um fetch terminar, buscar por id retornaria null;
     // nos elementos órfãos a escrita tardia é um no-op inofensivo.
     const $ = (id) => document.getElementById(id);
-    const busca = $('busca'), tabela = $('tabela'), infoPagina = $('infoPagina');
-    const tituloModal = $('tituloModal'), erroModal = $('erroModal'), campoPlu = $('campoPlu');
+    const tabela = $('tabela'), infoPagina = $('infoPagina'), checkTodos = $('checkTodos');
+    const tituloModal = $('tituloModal'), erroModal = $('erroModal'), campoPlu = $('campoPlu'), campoCodigoRef = $('campoCodigoRef');
     const fEan = $('f_ean'), fNome = $('f_nome'), fMarca = $('f_marca'), fNcm = $('f_ncm'),
           fUnidade = $('f_unidade'), fPreco = $('f_preco'), fCusto = $('f_custo'),
           fEstoque = $('f_estoque'), fMinimo = $('f_minimo'), fCategoria = $('f_categoria'),
-          fPeso = $('f_peso'), fPlu = $('f_plu');
+          fCodigoRef = $('f_codigoRef'), fPeso = $('f_peso'), fPlu = $('f_plu');
     const erroImportar = $('erroImportar'), arquivoImportar = $('arquivoImportar'),
           areaPreview = $('areaPreview'), resumoPreview = $('resumoPreview'),
           tabelaPreview = $('tabelaPreview'), btnConfirmarImportacao = $('btnConfirmarImportacao');
 
+    function debounce(fn, ms) {
+      let temporizador;
+      return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
+    }
+
+    function construirQuery() {
+      const params = new URLSearchParams({ page: pagina, limit: 20, orderBy, order });
+      Object.entries(filtros).forEach(([chave, valor]) => { if (valor) params.set(chave, valor); });
+      return params.toString();
+    }
+
+    function atualizarIconesOrdenacao() {
+      document.querySelectorAll('th.ordenavel').forEach((th) => {
+        const ativa = th.dataset.coluna === orderBy;
+        th.classList.toggle('ativa', ativa);
+        th.querySelector('i').className = ativa ? (order === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down') : 'fa-solid fa-sort';
+      });
+    }
+
     async function carregar() {
-      const termo = encodeURIComponent(busca.value.trim());
-      const data = await API.get('/api/produtos?page=' + pagina + '&limit=20&search=' + termo);
+      const data = await API.get('/api/produtos?' + construirQuery());
       totalPaginas = data.totalPages || 1;
       infoPagina.textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
-      if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="8" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
+      if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="10" class="vazio">Nenhum produto encontrado.</td></tr>'; return; }
       tabela.innerHTML = data.items.map((p) =>
-        '<tr><td>' + p.ean + (p.vendidoPorPeso ? ' <span class="tag neutro">PLU ' + p.plu + '</span>' : '') + '</td>' +
-        '<td>' + UI.escapar(p.nome) + '</td><td>' + p.unidade + '</td>' +
-        '<td>' + UI.moeda(p.preco) + '</td><td>' + UI.moeda(p.custoMedio) + '</td>' +
-        '<td>' + (Number(p.estoqueQtd) <= Number(p.estoqueMin) ? '<span class="tag erro">' + p.estoqueQtd + '</span>' : p.estoqueQtd) + '</td>' +
+        '<tr data-id="' + p.id + '">' +
+        '<td class="col-check"><input type="checkbox" class="check-produto" data-id="' + p.id + '"></td>' +
+        '<td>' + UI.escapar(p.nome) + '</td>' +
         '<td>' + (p.categoria ? UI.escapar(p.categoria.nome) : '-') + '</td>' +
-        '<td><button class="btn secundario pequeno" data-acao="editar" data-id="' + p.id + '">Editar</button> ' +
-        '<button class="btn perigo pequeno" data-acao="remover" data-id="' + p.id + '">Excluir</button></td></tr>'
+        '<td>' + UI.moeda(p.preco) + '</td>' +
+        '<td>' + UI.moeda(p.custoMedio) + '</td>' +
+        '<td>' + (Number(p.estoqueQtd) <= Number(p.estoqueMin) ? '<span class="tag erro">' + p.estoqueQtd + '</span>' : p.estoqueQtd) + '</td>' +
+        '<td>' + p.unidade + '</td>' +
+        '<td>' + (p.codigoReferencia || '-') + '</td>' +
+        '<td><span class="tag ' + (p.ativo ? 'ok' : 'neutro') + '">' + (p.ativo ? 'Ativo' : 'Inativo') + '</span></td>' +
+        '<td class="col-acoes"><div class="acoes-linha">' +
+        '<button data-acao="copiar" data-id="' + p.id + '" title="Copiar"><i class="fa-regular fa-copy"></i></button>' +
+        '<button class="perigo" data-acao="excluir" data-id="' + p.id + '" title="Excluir"><i class="fa-regular fa-trash-can"></i></button>' +
+        '</div></td></tr>'
       ).join('');
     }
 
@@ -161,6 +221,7 @@
       tituloModal.textContent = 'Novo produto';
       UI.limparErro(erroModal);
       preencher({});
+      campoCodigoRef.style.display = 'none';
       UI.abrirModal('modalProduto');
     }
 
@@ -170,7 +231,26 @@
       tituloModal.textContent = 'Editar produto';
       UI.limparErro(erroModal);
       preencher(p);
+      fCodigoRef.value = p.codigoReferencia || '';
+      campoCodigoRef.style.display = 'block';
       UI.abrirModal('modalProduto');
+    }
+
+    /**
+     * Pré-preenche o formulário de "Novo produto" com os dados do produto
+     * original (nome, grupo, valor, custo médio, unidade). EAN fica vazio
+     * (é único, não pode ser duplicado) e Cód. Ref. nem aparece na criação —
+     * o próprio POST /api/produtos gera um novo sozinho. Não é um clone
+     * vinculado: salva como produto novo e independente.
+     */
+    async function duplicar(id) {
+      const p = await API.get('/api/produtos/' + id);
+      abrirNovo();
+      fNome.value = p.nome + ' - Cópia';
+      fCategoria.value = p.categoriaId || '';
+      fPreco.value = p.preco || '';
+      fCusto.value = p.custoMedio || '';
+      fUnidade.value = p.unidade || 'UN';
     }
 
     async function salvar() {
@@ -188,6 +268,7 @@
         vendidoPorPeso: fPeso.checked,
         plu: fPlu.value.trim(),
       };
+      if (editandoId) body.codigoReferencia = fCodigoRef.value.trim();
       UI.limparErro(erroModal);
       try {
         if (editandoId) await API.put('/api/produtos/' + editandoId, body);
@@ -262,15 +343,55 @@
     $('btnGerarPreview').addEventListener('click', enviarPreview);
     btnConfirmarImportacao.addEventListener('click', confirmarImportacao);
     $('btnFecharImportar').addEventListener('click', () => UI.fecharModal('modalImportar'));
-    busca.addEventListener('input', () => { pagina = 1; carregar(); });
     fPeso.addEventListener('change', (ev) => {
       campoPlu.style.display = ev.target.checked ? 'block' : 'none';
     });
+
+    // Filtros por coluna: texto/número com debounce, Situação dispara na hora.
+    ['nome', 'grupo', 'valor', 'custoMedio', 'estoqueTotal', 'unidade', 'codigoReferencia'].forEach((chave) => {
+      $('filtro_' + chave).addEventListener('input', debounce((ev) => {
+        filtros[chave] = ev.target.value.trim();
+        pagina = 1;
+        carregar();
+      }, 400));
+    });
+    $('filtro_situacao').addEventListener('change', (ev) => {
+      filtros.situacao = ev.target.value;
+      pagina = 1;
+      carregar();
+    });
+
+    // Ordenação por coluna.
+    document.querySelectorAll('th.ordenavel').forEach((th) => {
+      th.addEventListener('click', () => {
+        const coluna = th.dataset.coluna;
+        if (orderBy === coluna) order = order === 'asc' ? 'desc' : 'asc';
+        else { orderBy = coluna; order = 'asc'; }
+        pagina = 1;
+        atualizarIconesOrdenacao();
+        carregar();
+      });
+    });
+    atualizarIconesOrdenacao();
+
+    // "Selecionar todos" só marca/desmarca as linhas visíveis — sem ação em
+    // lote amarrada ainda (nenhuma foi especificada), fica pronto pra futuro.
+    checkTodos.addEventListener('change', () => {
+      tabela.querySelectorAll('.check-produto').forEach((cb) => { cb.checked = checkTodos.checked; });
+    });
+
+    // Clique na linha abre a edição, exceto no checkbox e nas ações (que já
+    // tratam o próprio clique e retornam antes de chegar aqui).
     tabela.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('button[data-acao]');
-      if (!btn) return;
-      if (btn.dataset.acao === 'editar') editar(btn.dataset.id);
-      if (btn.dataset.acao === 'remover') remover(btn.dataset.id);
+      const btnAcao = ev.target.closest('button[data-acao]');
+      if (btnAcao) {
+        if (btnAcao.dataset.acao === 'copiar') duplicar(btnAcao.dataset.id);
+        if (btnAcao.dataset.acao === 'excluir') remover(btnAcao.dataset.id);
+        return;
+      }
+      if (ev.target.closest('.col-check')) return;
+      const linha = ev.target.closest('tr[data-id]');
+      if (linha) editar(linha.dataset.id);
     });
 
     (async () => {

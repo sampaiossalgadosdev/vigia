@@ -54,16 +54,17 @@ enum PlanoTenant {
 
 // ─── TENANT ───────────────────────────────────────────────
 model Tenant {
-  id               String      @id @default(uuid())
-  nome             String
-  cnpj             String      @unique
-  email            String
-  telefone         String?
-  plano            PlanoTenant @default(standard)
-  regimeTributario String      @default("simples")
-  ativo            Boolean     @default(true)
-  criadoEm         DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  id                     String      @id @default(uuid())
+  nome                   String
+  cnpj                   String      @unique
+  email                  String
+  telefone               String?
+  plano                  PlanoTenant @default(standard)
+  regimeTributario       String      @default("simples")
+  ativo                  Boolean     @default(true)
+  ultimoCodigoReferencia Int         @default(0)
+  criadoEm               DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
   usuarios      Usuario[]
   perfis        Perfil[]
@@ -190,28 +191,28 @@ model Categoria {
 
 // ─── PRODUTO ──────────────────────────────────────────────
 model Produto {
-  id             String   @id @default(uuid())
-  tenantId       String
-  ean            String
-  codigoInterno  String?
-  plu            String? // código PLU para produtos por peso (balança)
-  nome           String
-  marca          String?
-  ncm            String?
-  unidade        String   @default("UN") // UN | KG | CX | L | PC | FD
-  vendidoPorPeso Boolean  @default(false)
-  preco          Decimal  @db.Decimal(10, 2)
-  custoMedio     Decimal  @default(0) @db.Decimal(10, 2)
-  estoqueQtd     Decimal  @default(0) @db.Decimal(10, 3)
-  estoqueMin     Decimal  @default(0) @db.Decimal(10, 3)
-  imagemUrl      String?
-  categoriaId    String?
-  ativo          Boolean  @default(true)
-  criadoEm       DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(uuid())
+  tenantId         String
+  ean              String
+  codigoReferencia String? // código sequencial por tenant, gerado automaticamente na criação
+  plu              String? // código PLU para produtos por peso (balança)
+  nome             String
+  marca            String?
+  ncm              String?
+  unidade          String   @default("UN") // UN | KG | CX | L | PC | FD
+  vendidoPorPeso   Boolean  @default(false)
+  preco            Decimal  @db.Decimal(10, 2)
+  custoMedio       Decimal  @default(0) @db.Decimal(10, 2)
+  estoqueQtd       Decimal  @default(0) @db.Decimal(10, 3)
+  estoqueMin       Decimal  @default(0) @db.Decimal(10, 3)
+  imagemUrl        String?
+  categoriaId      String?
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  tenant        Tenant     @relation(fields: [tenantId], references: [id])
-  categoria     Categoria? @relation(fields: [categoriaId], references: [id])
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  categoria     Categoria?            @relation(fields: [categoriaId], references: [id])
   itensNfe      NfeItem[]
   movimentacoes MovimentacaoEstoque[]
   decisoesIA    DecisaoIA[]
@@ -219,6 +220,7 @@ model Produto {
   promocoes     Promocao[]
 
   @@unique([tenantId, ean])
+  @@unique([tenantId, codigoReferencia])
   @@index([tenantId])
   @@index([tenantId, ean])
   @@index([tenantId, categoriaId])
@@ -373,25 +375,25 @@ model DecisaoIA {
 
 // ─── VENDA ────────────────────────────────────────────────
 model Venda {
-  id                  String            @id @default(uuid())
-  tenantId            String
-  operadorId          String?
-  total               Decimal           @db.Decimal(10, 2)
-  subtotal            Decimal           @db.Decimal(10, 2)
-  desconto            Decimal           @default(0) @db.Decimal(10, 2)
-  troco               Decimal           @default(0) @db.Decimal(10, 2)
-  cpfConsumidor       String?
-  chaveNfce           String?
-  status              String            @default("concluida") // concluida | cancelada | pendente_sync
-  canceladoEm         DateTime?
-  canceladoPor        String?
-  motivoCancelamento  String?
-  criadoEm            DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                 String    @id @default(uuid())
+  tenantId           String
+  operadorId         String?
+  total              Decimal   @db.Decimal(10, 2)
+  subtotal           Decimal   @db.Decimal(10, 2)
+  desconto           Decimal   @default(0) @db.Decimal(10, 2)
+  troco              Decimal   @default(0) @db.Decimal(10, 2)
+  cpfConsumidor      String?
+  chaveNfce          String?
+  status             String    @default("concluida") // concluida | cancelada | pendente_sync
+  canceladoEm        DateTime?
+  canceladoPor       String?
+  motivoCancelamento String?
+  criadoEm           DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  tenant         Tenant            @relation(fields: [tenantId], references: [id])
-  itens          VendaItem[]
-  pagamentos     VendaPagamento[]
+  tenant     Tenant           @relation(fields: [tenantId], references: [id])
+  itens      VendaItem[]
+  pagamentos VendaPagamento[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -400,20 +402,20 @@ model Venda {
 }
 
 model VendaItem {
-  id            String   @id @default(uuid())
+  id            String  @id @default(uuid())
   vendaId       String
   produtoId     String
-  quantidade    Decimal  @db.Decimal(10, 3)
-  precoUnitario Decimal  @db.Decimal(10, 2)
-  custoUnitario Decimal  @db.Decimal(10, 2)
-  desconto      Decimal  @default(0) @db.Decimal(10, 2)
-  subtotal      Decimal  @db.Decimal(10, 2)
-  total         Decimal  @db.Decimal(10, 2)
+  quantidade    Decimal @db.Decimal(10, 3)
+  precoUnitario Decimal @db.Decimal(10, 2)
+  custoUnitario Decimal @db.Decimal(10, 2)
+  desconto      Decimal @default(0) @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+  total         Decimal @db.Decimal(10, 2)
   promocaoId    String?
 
-  venda     Venda    @relation(fields: [vendaId], references: [id])
-  produto   Produto  @relation(fields: [produtoId], references: [id])
-  promocao  Promocao? @relation(fields: [promocaoId], references: [id])
+  venda    Venda     @relation(fields: [vendaId], references: [id])
+  produto  Produto   @relation(fields: [produtoId], references: [id])
+  promocao Promocao? @relation(fields: [promocaoId], references: [id])
 
   @@index([vendaId])
   @@index([produtoId])
@@ -422,7 +424,7 @@ model VendaItem {
 model VendaPagamento {
   id      String  @id @default(uuid())
   vendaId String
-  forma   String  // dinheiro | credito | debito | pix | voucher | outros
+  forma   String // dinheiro | credito | debito | pix | voucher | outros
   valor   Decimal @db.Decimal(10, 2)
 
   venda Venda @relation(fields: [vendaId], references: [id])
@@ -432,23 +434,23 @@ model VendaPagamento {
 
 // ─── PROMOÇÃO ─────────────────────────────────────────────
 model Promocao {
-  id          String      @id @default(uuid())
-  tenantId    String
-  produtoId   String
-  nome        String
-  tipo        String      // percentual | valor_fixo | leve_pague
-  desconto    Decimal     @db.Decimal(10, 2)
-  leveQtd     Int?
-  pagueQtd    Int?
-  dataInicio  DateTime
-  dataFim     DateTime
-  ativa       Boolean     @default(true)
-  criadoEm    DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  produtoId  String
+  nome       String
+  tipo       String // percentual | valor_fixo | leve_pague
+  desconto   Decimal  @db.Decimal(10, 2)
+  leveQtd    Int?
+  pagueQtd   Int?
+  dataInicio DateTime
+  dataFim    DateTime
+  ativa      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  produto     Produto     @relation(fields: [produtoId], references: [id])
-  itensVenda  VendaItem[]
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  produto    Produto     @relation(fields: [produtoId], references: [id])
+  itensVenda VendaItem[]
 
   @@index([tenantId])
   @@index([tenantId, produtoId, ativa])
@@ -457,24 +459,24 @@ model Promocao {
 
 // ─── CAIXA (fechamento diário) ────────────────────────────
 model Caixa {
-  id               String    @id @default(uuid())
-  tenantId         String
-  operadorId       String?
-  abertoEm         DateTime  @default(now())
-  fechadoEm        DateTime?
-  valorAbertura    Decimal   @db.Decimal(10, 2)
-  valorFechamento  Decimal?  @db.Decimal(10, 2)
-  totalVendas      Decimal   @default(0) @db.Decimal(10, 2)
-  totalDinheiro    Decimal   @default(0) @db.Decimal(10, 2)
-  totalCartao      Decimal   @default(0) @db.Decimal(10, 2)
-  totalPix         Decimal   @default(0) @db.Decimal(10, 2)
-  diferenca        Decimal?  @db.Decimal(10, 2)
-  status           String    @default("aberto") // aberto | fechado
-  observacao       String?
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  tenantId        String
+  operadorId      String?
+  abertoEm        DateTime  @default(now())
+  fechadoEm       DateTime?
+  valorAbertura   Decimal   @db.Decimal(10, 2)
+  valorFechamento Decimal?  @db.Decimal(10, 2)
+  totalVendas     Decimal   @default(0) @db.Decimal(10, 2)
+  totalDinheiro   Decimal   @default(0) @db.Decimal(10, 2)
+  totalCartao     Decimal   @default(0) @db.Decimal(10, 2)
+  totalPix        Decimal   @default(0) @db.Decimal(10, 2)
+  diferenca       Decimal?  @db.Decimal(10, 2)
+  status          String    @default("aberto") // aberto | fechado
+  observacao      String?
+  updatedAt       DateTime  @updatedAt
 
-  tenant           Tenant     @relation(fields: [tenantId], references: [id])
-  sangrias         Sangria[]
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  sangrias Sangria[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -484,13 +486,13 @@ model Sangria {
   id         String   @id @default(uuid())
   caixaId    String
   tenantId   String
-  tipo       String   // sangria | suprimento
+  tipo       String // sangria | suprimento
   valor      Decimal  @db.Decimal(10, 2)
   motivo     String?
   operadorId String?
   criadoEm   DateTime @default(now())
 
-  caixa      Caixa    @relation(fields: [caixaId], references: [id])
+  caixa Caixa @relation(fields: [caixaId], references: [id])
 
   @@index([caixaId])
   @@index([tenantId])
