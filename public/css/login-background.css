@@ -9,7 +9,7 @@
  * o card de login ocupa a coluna dos 25% direitos, a partir de ~36% da altura.
  */
 :root {
-  --login-navy: #0b1220;
+  --login-navy: #021226;
   --login-ciano: #38bdf8;
   --login-texto: #e8f1f8;
   --login-suave: #9fb6c9;
@@ -70,7 +70,7 @@ body .login-pagina.login-fundo {
    centralizado na tela inteira. */
 @media (max-width: 900px) {
   body .login-pagina.login-fundo {
-    background: linear-gradient(160deg, #0b1220, #14304d);
+    background: linear-gradient(160deg, #021226, #0b2745);
     justify-content: center;
     align-items: center;
   }

@@ -4,13 +4,20 @@
  * superadmin (layout com sidebar fixa, cards, tabelas, modais, formulários).
  */
 :root {
-  --verde-escuro: #0d3b2e;
-  --verde: #14805e;
+  /* Identidade: navy da marca rgb(2,18,38), com um degrau tonal entre
+     sidebar e navbar para as superfícies não se fundirem numa massa só. */
+  --marinho: #021226;        /* base da marca: sidebar e login */
+  --marinho-claro: #0b2745;  /* navbar: um tom acima do marinho */
+  --azul: #2e7cf6;           /* ação primária (azul dos olhos da coruja) */
+  --azul-escuro: #1f63d2;    /* hover da ação primária */
+  --azul-claro: #e9f2fe;     /* fundos suaves: hover de linha, seleções */
+  --ciano: #38bdf8;          /* filetes de acento */
+  --verde: #14805e;          /* semântico: status positivo (tags) */
   --verde-claro: #e5f4ee;
-  --grafite: #1d2521;
-  --cinza: #5d6a63;
-  --linha: #dde5e0;
-  --fundo: #f4f7f5;
+  --grafite: #17222e;
+  --cinza: #5a6b7e;
+  --linha: #dce4ee;
+  --fundo: #f4f7fb;
   --branco: #ffffff;
   --alerta: #c0392b;
   --amarelo: #b7791f;
@@ -40,7 +47,7 @@ body.sidebar-collapsed .conteudo {
   margin-left: 0;
 }
 
-a { color: var(--verde); text-decoration: none; }
+a { color: var(--azul); text-decoration: none; }
 button { font-family: inherit; cursor: pointer; }
 
 /* ─── Layout com sidebar ─── */
@@ -52,7 +59,7 @@ button { font-family: inherit; cursor: pointer; }
 
 .sidebar {
   width: 230px; flex-shrink: 0;
-  background: var(--verde-escuro); color: #d8e8e0;
+  background: var(--marinho); color: #c5d4e6;
   display: flex; flex-direction: column;
   position: fixed; top: 0; left: 0; height: 100vh;
   transition: width 220ms ease, opacity 220ms ease;
@@ -64,14 +71,17 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 3px; color: #fff;
   border-bottom: 1px solid rgba(255,255,255,.12);
 }
-.sidebar .logo small { display: block; font-size: 10px; letter-spacing: 1px; font-weight: 400; color: #9fc4b4; margin-top: 4px; }
+.sidebar .logo small { display: block; font-size: 10px; letter-spacing: 1px; font-weight: 400; color: #8aa4c2; margin-top: 4px; }
 .sidebar nav { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 0; }
 .sidebar nav a {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 11px 20px; color: #cfe3d9; font-size: 14px;
+  padding: 11px 20px; color: #c2d2e4; font-size: 14px;
 }
 .sidebar nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
-.sidebar nav a.ativo { background: var(--verde); color: #fff; font-weight: 600; }
+.sidebar nav a.ativo {
+  background: var(--azul); color: #fff; font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--ciano);
+}
 .badge {
   background: var(--alerta); color: #fff; border-radius: 999px;
   font-size: 11px; padding: 2px 8px; font-weight: 700;
@@ -104,25 +114,25 @@ button { font-family: inherit; cursor: pointer; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--linha); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--cinza); }
 td { padding: 10px 8px; border-bottom: 1px solid var(--linha); vertical-align: middle; }
-tr:hover td { background: var(--verde-claro); }
+tr:hover td { background: var(--azul-claro); }
 
 .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .tag.ok { background: var(--verde-claro); color: var(--verde); }
 .tag.pendente { background: #fdf3e3; color: var(--amarelo); }
 .tag.erro { background: #fdecea; color: var(--alerta); }
-.tag.neutro { background: #eef1ef; color: var(--cinza); }
+.tag.neutro { background: #eaeef4; color: var(--cinza); }
 
 /* ─── Tabela com filtro por coluna, ordenação e linha clicável ─── */
 th.ordenavel { cursor: pointer; user-select: none; white-space: nowrap; }
 th.ordenavel i { margin-left: 4px; color: var(--cinza); font-size: 11px; }
-th.ordenavel.ativa i { color: var(--verde); }
+th.ordenavel.ativa i { color: var(--azul); }
 .linha-filtros th { padding: 6px 8px 10px; }
 .linha-filtros input, .linha-filtros select { padding: 6px 8px; font-size: 13px; }
 .tabela-clicavel tbody tr { cursor: pointer; }
 .col-check, .col-acoes { cursor: default; }
 .acoes-linha { display: flex; gap: 12px; }
 .acoes-linha button, .btn-icone { background: none; border: none; padding: 4px; color: var(--cinza); font-size: 15px; }
-.acoes-linha button:hover, .btn-icone:hover { color: var(--verde); }
+.acoes-linha button:hover, .btn-icone:hover { color: var(--azul); }
 .acoes-linha button.perigo:hover, .btn-icone.perigo:hover { color: var(--alerta); }
 /* Célula precisa continuar table-cell (flex aqui quebra o alinhamento das
    bordas da linha); o alinhamento interno é feito por vertical-align. */
@@ -141,10 +151,10 @@ th.ordenavel.ativa i { color: var(--verde); }
 /* ─── Botões e formulários ─── */
 .btn {
   border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px;
-  font-weight: 600; background: var(--verde); color: #fff;
+  font-weight: 600; background: var(--azul); color: #fff;
 }
-.btn:hover { background: #0f6b4e; }
-.btn.secundario { background: #eef1ef; color: var(--grafite); }
+.btn:hover { background: var(--azul-escuro); }
+.btn.secundario { background: #eaeff6; color: var(--grafite); }
 .btn.secundario:hover { background: var(--linha); }
 .btn.perigo { background: var(--alerta); }
 .btn.pequeno { padding: 5px 10px; font-size: 12px; }
@@ -156,7 +166,7 @@ input, select, textarea {
   width: 100%; padding: 9px 10px; border: 1px solid var(--linha);
   border-radius: 8px; font-size: 14px; font-family: inherit; background: #fff;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); border-color: var(--verde); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); border-color: var(--azul); }
 .campo { margin-bottom: 10px; }
 
 .barra-acoes { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
@@ -166,7 +176,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
 
 /* ─── Modal ─── */
 .modal-fundo {
-  position: fixed; inset: 0; background: rgba(13,59,46,.45);
+  position: fixed; inset: 0; background: rgba(2,18,38,.5);
   display: none; align-items: flex-start; justify-content: center;
   padding: 40px 16px; overflow-y: auto; z-index: 50;
 }
@@ -184,14 +194,14 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   background: none; border: none; padding: 10px 16px; font-size: 14px;
   color: var(--cinza); border-bottom: 3px solid transparent; margin-bottom: -2px;
 }
-.abas button.ativa { color: var(--verde); border-bottom-color: var(--verde); font-weight: 700; }
+.abas button.ativa { color: var(--azul); border-bottom-color: var(--azul); font-weight: 700; }
 .aba-conteudo { display: none; }
 .aba-conteudo.ativa { display: block; }
 
 /* ─── Login ─── */
 .login-pagina {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(160deg, var(--verde-escuro), var(--verde));
+  background: linear-gradient(160deg, var(--marinho), var(--marinho-claro));
   padding: 16px;
 }
 .login-caixa {
@@ -199,7 +209,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   width: 100%; max-width: 380px;
 }
 .login-caixa .marca { text-align: center; margin-bottom: 22px; }
-.login-caixa .marca strong { font-size: 30px; letter-spacing: 5px; color: var(--verde-escuro); }
+.login-caixa .marca strong { font-size: 30px; letter-spacing: 5px; color: var(--marinho); }
 .login-caixa .marca span { display: block; font-size: 11px; color: var(--cinza); margin-top: 4px; }
 .msg-erro { background: #fdecea; color: var(--alerta); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; display: none; }
 .msg-erro.visivel { display: block; }
@@ -207,9 +217,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
 /* ─── Área de drop ─── */
 .drop-area {
   border: 2px dashed var(--linha); border-radius: var(--raio);
-  padding: 34px; text-align: center; color: var(--cinza); background: #fbfdfc;
+  padding: 34px; text-align: center; color: var(--cinza); background: #fbfcfe;
 }
-.drop-area.arrastando { border-color: var(--verde); background: var(--verde-claro); }
+.drop-area.arrastando { border-color: var(--azul); background: var(--azul-claro); }
 
 .vazio { padding: 26px; text-align: center; color: var(--cinza); font-size: 14px; }
 
@@ -219,7 +229,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--verde); bor
   left: 230px;
   right: 0;
   height: 56px;
-  background: #1e3a5f;
+  background: var(--marinho-claro);
+  border-bottom: 1px solid rgba(56,189,248,.16);
   color: #fff;
   display: flex;
   align-items: center;

@@ -15,7 +15,7 @@
 
 body.rede { background: var(--rede-fundo); color: var(--rede-texto); }
 
-body.rede .sidebar { background: #0b1220; }
+body.rede .sidebar { background: #021226; }
 body.rede .sidebar .logo { color: var(--rede-acento); }
 body.rede .sidebar nav a.ativo { background: var(--rede-acento); }
 
@@ -55,7 +55,7 @@ body.rede .modal { background: var(--rede-painel); color: var(--rede-texto); }
 .loja-card .metricas strong { display: block; font-size: 17px; }
 .grade-lojas { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
 
-body.rede .login-pagina { background: linear-gradient(160deg, #0b1220, #1c3a6e); }
+body.rede .login-pagina { background: linear-gradient(160deg, #021226, #1c3a6e); }
 body.rede .login-caixa { background: var(--rede-painel); }
 body.rede .login-caixa .marca strong { color: var(--rede-acento); }
 body.rede .login-caixa .marca span, body.rede .login-caixa label { color: var(--rede-suave); }
