@@ -121,7 +121,11 @@ th.ordenavel.ativa i { color: var(--verde); }
 .acoes-linha button, .btn-icone { background: none; border: none; padding: 4px; color: var(--cinza); font-size: 15px; }
 .acoes-linha button:hover, .btn-icone:hover { color: var(--verde); }
 .acoes-linha button.perigo:hover, .btn-icone.perigo:hover { color: var(--alerta); }
-.col-check { display: flex; align-items: center; gap: 8px; }
+/* Célula precisa continuar table-cell (flex aqui quebra o alinhamento das
+   bordas da linha); o alinhamento interno é feito por vertical-align. */
+.col-check { width: 1%; white-space: nowrap; }
+.col-check input[type="checkbox"] { width: auto; vertical-align: middle; }
+.col-check .btn-icone { vertical-align: middle; margin-right: 6px; }
 
 /* ─── Botões e formulários ─── */
 .btn {

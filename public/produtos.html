@@ -137,7 +137,8 @@
   (() => {
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null, tokenImportacao = null;
-    let orderBy = 'nome', order = 'asc';
+    // Ordenação em três estados: null (padrão do servidor) → asc → desc → null.
+    let orderBy = null, order = 'asc';
     // Filtros por coluna, combinados com AND na query string (ver produto.repository.js).
     const filtros = { nome: '', grupo: '', valor: '', custoMedio: '', estoqueTotal: '', unidade: '', codigoReferencia: '', situacao: 'ativo' };
     // Ids marcados via checkbox na página atual, pra exclusão em lote.
@@ -163,7 +164,8 @@
     }
 
     function construirQuery() {
-      const params = new URLSearchParams({ page: pagina, limit: 20, orderBy, order });
+      const params = new URLSearchParams({ page: pagina, limit: 20 });
+      if (orderBy) { params.set('orderBy', orderBy); params.set('order', order); }
       Object.entries(filtros).forEach(([chave, valor]) => { if (valor) params.set(chave, valor); });
       return params.toString();
     }
@@ -379,7 +381,8 @@
     document.querySelectorAll('th.ordenavel').forEach((th) => {
       th.addEventListener('click', () => {
         const coluna = th.dataset.coluna;
-        if (orderBy === coluna) order = order === 'asc' ? 'desc' : 'asc';
+        if (orderBy === coluna && order === 'asc') order = 'desc';
+        else if (orderBy === coluna) { orderBy = null; order = 'asc'; } // 3º clique desseleciona
         else { orderBy = coluna; order = 'asc'; }
         pagina = 1;
         atualizarIconesOrdenacao();
