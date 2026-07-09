@@ -6,6 +6,7 @@
   <title>VIGIA · Dashboard</title>
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
   <script src="/js/navbar.js"></script>
 </head>
 <body>
@@ -14,23 +15,84 @@
     <main class="conteudo">
       <div class="topo">
         <h1>Dashboard</h1>
+        <div class="campo" style="margin:0">
+          <input type="date" id="dataRef" title="Data de referência — controla todos os widgets">
+        </div>
       </div>
 
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <!-- ─── Cards: resumo do mês de referência ─── -->
       <div class="cards">
-        <div class="card"><div class="rotulo">Saídas hoje (estimado)</div><div class="valor" id="cardHoje">—</div></div>
-        <div class="card"><div class="rotulo">Produtos cadastrados</div><div class="valor" id="cardProdutos">—</div></div>
-        <div class="card alerta"><div class="rotulo">Alertas de estoque</div><div class="valor" id="cardAlertas">—</div></div>
-        <div class="card"><div class="rotulo">Sugestões pendentes</div><div class="valor" id="cardSugestoes">—</div></div>
+        <div class="card">
+          <div class="rotulo">Total de vendas</div>
+          <div class="card-linha">
+            <div>
+              <div class="valor" id="cardTotal">—</div>
+              <div class="sub-media" id="cardTotalMedia"></div>
+            </div>
+            <canvas id="sparkVendas" width="90" height="40"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="rotulo">Clientes atendidos</div>
+          <div class="card-linha">
+            <div>
+              <div class="valor" id="cardClientes">—</div>
+              <div class="sub-media" id="cardClientesMedia"></div>
+            </div>
+            <canvas id="sparkClientes" width="90" height="40"></canvas>
+          </div>
+        </div>
+        <div class="card">
+          <div class="rotulo">Ticket médio</div>
+          <div class="card-linha">
+            <div class="valor" id="cardTicket">—</div>
+            <i class="fa-solid fa-receipt" style="font-size:26px;color:var(--cinza);opacity:.5"></i>
+          </div>
+        </div>
       </div>
 
-      <div class="painel">
-        <h2>Últimas movimentações</h2>
-        <table>
-          <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Origem</th></tr></thead>
-          <tbody id="tabelaMovs"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
-        </table>
+      <!-- ─── Pizzas: grupos de produtos + formas de pagamento (mês) ─── -->
+      <div class="grid-2">
+        <div class="painel">
+          <h2>Grupos de produtos</h2>
+          <div style="max-width:340px;margin:0 auto"><canvas id="graficoGrupos"></canvas></div>
+          <div class="legenda-pizza" id="legendaGrupos"></div>
+        </div>
+        <div class="painel">
+          <h2>Formas de pagamentos</h2>
+          <div style="max-width:340px;margin:0 auto"><canvas id="graficoFormas"></canvas></div>
+          <div class="legenda-pizza" id="legendaFormas"></div>
+        </div>
       </div>
 
+      <!-- ─── TOP 10 (mês) ─── -->
+      <div class="grid-2">
+        <div class="painel">
+          <h2>TOP 10 produtos mais vendidos</h2>
+          <table>
+            <thead><tr><th>Produto</th><th style="width:130px">Qtde. vendida</th></tr></thead>
+            <tbody id="tabelaTopProdutos"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="painel">
+          <h2>TOP 10 Atendente/vendedor</h2>
+          <table>
+            <thead><tr><th>Atendente/vendedor</th><th style="width:150px">Vlr. vendido (R$)</th></tr></thead>
+            <tbody id="tabelaTopVendedores"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ─── Combos ─── -->
+      <div class="painel"><h2>Vendas diárias</h2><canvas id="graficoDiarias" height="90"></canvas></div>
+      <div class="painel"><h2>Vendas mensais</h2><canvas id="graficoMensais" height="90"></canvas></div>
+      <div class="painel"><h2>Venda média semanal</h2><canvas id="graficoSemanal" height="90"></canvas></div>
+      <div class="painel"><h2>Vendas por hora</h2><canvas id="graficoHoras" height="90"></canvas></div>
+
+      <!-- Sugestões da rede (mantido do dashboard anterior — único lugar
+           onde o tenant lê/marca as sugestões do superusuário) -->
       <div class="painel">
         <h2>Sugestões recebidas</h2>
         <div id="listaSugestoes" class="vazio">Carregando...</div>
@@ -44,69 +106,239 @@
   <script>
   (() => {
     initNavbar();
-    // Referências capturadas na injeção do script: se o usuário navegar para
-    // outra página antes de um fetch terminar, buscar por id retornaria null;
-    // nos elementos órfãos a escrita tardia é um no-op inofensivo.
     const $ = (id) => document.getElementById(id);
-    const cardHoje = $('cardHoje'), cardProdutos = $('cardProdutos'),
-          cardAlertas = $('cardAlertas'), cardSugestoes = $('cardSugestoes'),
-          listaSugestoes = $('listaSugestoes'), tabelaMovs = $('tabelaMovs');
+    const erroGeral = $('erroGeral');
+    // Instâncias Chart.js vivas, destruídas a cada atualização.
+    const graficos = {};
 
-    async function carregarDashboard() {
+    const CORES = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#475569', '#14b8a6', '#a855f7'];
+    const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const DIAS_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    const ROTULO_FORMA = { dinheiro: 'Dinheiro', credito: 'Crédito', debito: 'Débito', pix: 'PIX', voucher: 'Voucher', outros: 'Outros' };
+
+    /**
+     * Chart.js via CDN carregado sob demanda: a navegação da sidebar troca só
+     * o <main> e não executa <script src> da página destino, então o load
+     * precisa acontecer dentro do script inline (que sempre roda).
+     */
+    function garantirChartJs() {
+      if (window.Chart) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Não foi possível carregar o Chart.js (verifique a conexão)'));
+        document.head.appendChild(s);
+      });
+    }
+
+    function renderChart(canvasId, config) {
+      if (graficos[canvasId]) graficos[canvasId].destroy();
+      graficos[canvasId] = new Chart($(canvasId), config);
+    }
+
+    const eixoMoeda = { ticks: { callback: (v) => 'R$ ' + Number(v).toLocaleString('pt-BR') } };
+    const tooltipMoeda = (item) => item.dataset.label + ': ' +
+      (item.dataset.yAxisID === 'y1' ? Number(item.raw).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : UI.moeda(item.raw));
+
+    function comboConfig(labels, datasets) {
+      return {
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { callbacks: { label: tooltipMoeda } } },
+          scales: {
+            y: { position: 'left', ...eixoMoeda },
+            y1: { position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true },
+          },
+        },
+      };
+    }
+
+    // ─── Cards + sparklines ───
+    function desenharSparkline(canvasId, valores, tipo) {
+      const canvas = $(canvasId);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!valores.length) return;
+      const max = Math.max(...valores, 1);
+      const passo = canvas.width / Math.max(valores.length, 1);
+      ctx.strokeStyle = '#2563eb'; ctx.fillStyle = 'rgba(37,99,235,.55)'; ctx.lineWidth = 1.5;
+      if (tipo === 'barras') {
+        valores.forEach((v, i) => {
+          const h = (v / max) * (canvas.height - 4);
+          ctx.fillRect(i * passo + 1, canvas.height - h, Math.max(passo - 2, 1), h);
+        });
+      } else {
+        ctx.beginPath();
+        valores.forEach((v, i) => {
+          const x = i * passo + passo / 2;
+          const y = canvas.height - 3 - (v / max) * (canvas.height - 6);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+    }
+
+    function renderCards(resumo, diarias) {
+      $('cardTotal').textContent = UI.moeda(resumo.totalVendas);
+      $('cardTotalMedia').textContent = 'Média diária: ' + UI.moeda(resumo.mediaDiariaVendas);
+      $('cardClientes').textContent = UI.numero(resumo.clientesAtendidos);
+      $('cardClientesMedia').textContent = 'Média diária: ' + resumo.mediaDiariaClientes.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+      $('cardTicket').textContent = UI.moeda(resumo.ticketMedio);
+      // Sparklines decorativos: tendência dos últimos 14 dias da série diária.
+      const cauda = diarias.slice(-14);
+      desenharSparkline('sparkVendas', cauda.map((d) => d.valor), 'linha');
+      desenharSparkline('sparkClientes', cauda.map((d) => d.clientes), 'barras');
+    }
+
+    // ─── Pizzas ───
+    function renderPizza(canvasId, legendaId, itens, rotuloDe) {
+      const labels = itens.map(rotuloDe);
+      renderChart(canvasId, {
+        type: 'pie',
+        data: { labels, datasets: [{ data: itens.map((i) => i.valor), backgroundColor: itens.map((_, i) => CORES[i % CORES.length]) }] },
+        options: {
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (item) => labels[item.dataIndex] + ': ' + UI.moeda(item.raw) + ' (' + itens[item.dataIndex].percentual.toFixed(1) + '%)' } },
+          },
+        },
+      });
+      $(legendaId).innerHTML = itens.map((item, i) =>
+        '<span><span class="legenda-cor" style="background:' + CORES[i % CORES.length] + '"></span>' +
+        UI.escapar(labels[i]) + ' · ' + item.percentual.toFixed(1) + '%</span>'
+      ).join('') || '<span style="color:var(--cinza)">Sem vendas no período.</span>';
+    }
+
+    // ─── TOP 10 ───
+    function renderTops(produtos, vendedores) {
+      $('tabelaTopProdutos').innerHTML = produtos.length ? produtos.map((p) =>
+        '<tr><td>' + UI.escapar(p.nome) + ' - ' + p.unidade + '</td>' +
+        '<td><span class="tag ok">' + Number(p.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + '</span></td></tr>'
+      ).join('') : '<tr><td colspan="2" class="vazio">Sem vendas no período.</td></tr>';
+
+      $('tabelaTopVendedores').innerHTML = vendedores.length ? vendedores.map((v) =>
+        '<tr><td>' + UI.escapar(v.nome) + '</td><td>' + UI.moeda(v.valor) + '</td></tr>'
+      ).join('') : '<tr><td colspan="2" class="vazio">Sem vendas no período.</td></tr>';
+    }
+
+    // ─── Combos ───
+    function renderDiarias(diarias) {
+      renderChart('graficoDiarias', comboConfig(
+        diarias.map((d) => String(d.dia).padStart(2, '0')),
+        [
+          { type: 'bar', label: 'Vlr. vendido (R$)', data: diarias.map((d) => d.valor), backgroundColor: 'rgba(37,99,235,.7)', yAxisID: 'y' },
+          { type: 'line', label: 'Clientes atendidos', data: diarias.map((d) => d.clientes), borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1', tension: .3 },
+        ]
+      ));
+    }
+
+    function renderMensais(mensais) {
+      renderChart('graficoMensais', comboConfig(
+        mensais.map((m) => MESES[m.mes - 1]),
+        [
+          { type: 'bar', label: 'Valor vendido (R$)', data: mensais.map((m) => m.valor), backgroundColor: 'rgba(37,99,235,.7)', yAxisID: 'y' },
+          { type: 'line', label: 'Qtde. de vendas', data: mensais.map((m) => m.vendas), borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1', tension: .3 },
+        ]
+      ));
+    }
+
+    function renderSemanal(semanal) {
+      renderChart('graficoSemanal', comboConfig(
+        semanal.map((s) => DIAS_SEMANA[s.dow]),
+        [
+          { type: 'bar', label: 'Vlr. médio do dia (R$)', data: semanal.map((s) => s.valorMedio), backgroundColor: 'rgba(37,99,235,.7)', yAxisID: 'y' },
+          { type: 'line', label: 'Qtde. média de clientes', data: semanal.map((s) => s.clientesMedio), borderColor: '#f59e0b', backgroundColor: '#f59e0b', yAxisID: 'y1', tension: .3 },
+        ]
+      ));
+    }
+
+    function renderHoras(horas) {
+      renderChart('graficoHoras', comboConfig(
+        horas.map((h) => h.hora + ':00'),
+        [
+          { type: 'bar', label: 'Média de vendas no ano (R$)', data: horas.map((h) => h.valorMediaAno), backgroundColor: 'rgba(22,163,74,.75)', yAxisID: 'y' },
+          { type: 'bar', label: 'Vendas no dia (R$)', data: horas.map((h) => h.valorDia), backgroundColor: 'rgba(234,88,12,.75)', yAxisID: 'y' },
+          { type: 'line', label: 'Média de clientes atendidos no ano', data: horas.map((h) => h.clientesMediaAno), borderColor: '#2563eb', backgroundColor: '#2563eb', yAxisID: 'y1', tension: .3 },
+        ]
+      ));
+    }
+
+    // ─── Atualização central: uma mudança de data recarrega tudo ───
+    async function atualizarDashboard(data) {
+      UI.limparErro(erroGeral);
       try {
-        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-        const [produtos, alertas, sugestoes, movsHoje] = await Promise.all([
-          API.get('/api/produtos?limit=1'),
-          API.get('/api/produtos/estoque/alertas'),
-          API.get('/api/sugestoes?limit=5'),
-          API.get('/api/estoque/movimentacoes?tipo=saida&inicio=' + hoje.toISOString() + '&limit=100'),
+        await garantirChartJs();
+        const q = '?data=' + data;
+        const [resumo, grupos, formas, topProd, topVend, diarias, mensais, semanal, horas] = await Promise.all([
+          API.get('/api/dashboard/resumo' + q),
+          API.get('/api/dashboard/grupos-produtos' + q),
+          API.get('/api/dashboard/formas-pagamento' + q),
+          API.get('/api/dashboard/top-produtos' + q),
+          API.get('/api/dashboard/top-vendedores' + q),
+          API.get('/api/dashboard/vendas-diarias' + q),
+          API.get('/api/dashboard/vendas-mensais' + q),
+          API.get('/api/dashboard/venda-media-semanal' + q),
+          API.get('/api/dashboard/vendas-por-hora' + q),
         ]);
-        cardProdutos.textContent = UI.numero(produtos.total);
-        cardAlertas.textContent = UI.numero(alertas.total);
-        cardSugestoes.textContent = UI.numero(sugestoes.pendentes);
-        cardHoje.textContent = UI.numero(movsHoje.total) + ' mov.';
+        renderCards(resumo, diarias);
+        renderPizza('graficoGrupos', 'legendaGrupos', grupos, (g) => g.grupo);
+        renderPizza('graficoFormas', 'legendaFormas', formas, (f) => ROTULO_FORMA[f.forma] || f.forma);
+        renderTops(topProd, topVend);
+        renderDiarias(diarias);
+        renderMensais(mensais);
+        renderSemanal(semanal);
+        renderHoras(horas);
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      }
+    }
 
-        if (sugestoes.items.length === 0) listaSugestoes.textContent = 'Nenhuma sugestão recebida.';
-        else
-          listaSugestoes.innerHTML = sugestoes.items.map((s) =>
-            '<div style="padding:10px 0;border-bottom:1px solid var(--linha)">' +
-            '<span class="tag ' + (s.status === 'pendente' ? 'pendente' : 'neutro') + '">' + s.tipo + '</span> ' +
-            '<strong>' + UI.escapar(s.titulo) + '</strong>' +
-            '<div style="font-size:13px;color:var(--cinza);margin-top:4px">' + UI.escapar(s.mensagem) + '</div>' +
-            (s.status === 'pendente'
-              ? '<button class="btn secundario pequeno" style="margin-top:6px" data-acao="marcar-lida" data-id="' + s.id + '">Marcar como lida</button>'
-              : '') +
-            '</div>'
-          ).join('');
-      } catch (e) { console.error(e); }
-
+    // ─── Sugestões da rede (mantido do dashboard anterior) ───
+    async function carregarSugestoes() {
+      const listaSugestoes = $('listaSugestoes');
       try {
-        const movs = await API.get('/api/estoque/movimentacoes?limit=5');
-        if (movs.items.length === 0) tabelaMovs.innerHTML = '<tr><td colspan="5" class="vazio">Sem movimentações ainda.</td></tr>';
-        else
-          tabelaMovs.innerHTML = movs.items.map((m) =>
-            '<tr><td>' + UI.data(m.criadoEm) + '</td><td>' + UI.escapar(m.produto.nome) + '</td>' +
-            '<td><span class="tag ' + (m.tipo === 'entrada' ? 'ok' : 'neutro') + '">' + m.tipo + '</span></td>' +
-            '<td>' + m.quantidade + ' ' + m.produto.unidade + '</td><td>' + m.origem + '</td></tr>'
-          ).join('');
-      } catch (e) { console.error(e); }
+        const sugestoes = await API.get('/api/sugestoes?limit=5');
+        if (sugestoes.items.length === 0) { listaSugestoes.textContent = 'Nenhuma sugestão recebida.'; return; }
+        listaSugestoes.innerHTML = sugestoes.items.map((s) =>
+          '<div style="padding:10px 0;border-bottom:1px solid var(--linha)">' +
+          '<span class="tag ' + (s.status === 'pendente' ? 'pendente' : 'neutro') + '">' + s.tipo + '</span> ' +
+          '<strong>' + UI.escapar(s.titulo) + '</strong>' +
+          '<div style="font-size:13px;color:var(--cinza);margin-top:4px">' + UI.escapar(s.mensagem) + '</div>' +
+          (s.status === 'pendente'
+            ? '<button class="btn secundario pequeno" style="margin-top:6px" data-acao="marcar-lida" data-id="' + s.id + '">Marcar como lida</button>'
+            : '') +
+          '</div>'
+        ).join('');
+      } catch (e) { listaSugestoes.textContent = 'Não foi possível carregar as sugestões.'; }
     }
 
-    async function marcarLida(id) {
-      try { await API.put('/api/sugestoes/' + id + '/lida'); await carregarDashboard(); }
-      catch (e) { alert(e.message); }
-    }
-
-    listaSugestoes.addEventListener('click', (ev) => {
+    $('listaSugestoes').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-acao="marcar-lida"]');
-      if (btn) marcarLida(btn.dataset.id);
+      if (!btn) return;
+      try { await API.put('/api/sugestoes/' + btn.dataset.id + '/lida'); await carregarSugestoes(); }
+      catch (e) { alert(e.message); }
+    });
+
+    // ─── Init ───
+    function hojeISO() {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    $('dataRef').addEventListener('change', () => {
+      if ($('dataRef').value) atualizarDashboard($('dataRef').value);
     });
 
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('index.html');
-      await carregarDashboard();
+      $('dataRef').value = hojeISO();
+      atualizarDashboard($('dataRef').value);
+      carregarSugestoes();
     })();
   })();
   </script>

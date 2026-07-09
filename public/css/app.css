@@ -126,6 +126,15 @@ button { font-family: inherit; cursor: pointer; }
 .toast-sucesso { background-color: #16a34a; }
 .toast-erro    { background-color: #dc2626; } /* pra uso futuro */
 
+/* ─── Dashboard (index.html) ─── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+.card .sub-media { font-size: 13px; color: var(--cinza); margin-top: 4px; }
+.card .card-linha { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.legenda-pizza { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; font-size: 13px; }
+.legenda-pizza span { display: inline-flex; align-items: center; gap: 6px; }
+.legenda-cor { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
 /* ─── Árvore de categorias (categorias-produtos.html) ─── */
 .arvore { max-height: 62vh; overflow-y: auto; margin-top: 10px; }
 .arvore-item {
