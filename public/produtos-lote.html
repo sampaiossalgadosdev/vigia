@@ -135,6 +135,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
   <script>
   (() => {
     initNavbar();
@@ -308,6 +309,24 @@
       ).join('');
     }
 
+    /**
+     * Volta pra Etapa 1 zerada após confirmar: seleção vazia, campos das
+     * Etapas 2/3 limpos e listagem recarregada (já mostrando os novos valores).
+     * Sem navegação — o toast fica visível durante o reset.
+     */
+    function reiniciarFluxo() {
+      selecionados.clear();
+      Object.keys(CAMPOS).forEach((campo) => { $('campo_' + campo).checked = false; });
+      atualizarAvancar2();
+      $('v_categoria').value = '';
+      $('v_unidade').value = 'UN';
+      $('v_marca').value = '';
+      pagina = 1;
+      atualizarContador();
+      irParaEtapa(1);
+      carregar();
+    }
+
     async function confirmar(alteracoes) {
       const btn = $('btnConfirmar');
       btn.disabled = true; btn.textContent = 'Salvando...';
@@ -316,8 +335,8 @@
           produtoIds: [...selecionados.keys()],
           alteracoes,
         });
-        alert(data.atualizados + ' produto(s) atualizado(s) com sucesso.');
-        window.location.href = 'produtos.html';
+        mostrarToast(data.atualizados + ' produto(s) atualizado(s) com sucesso');
+        reiniciarFluxo();
       } catch (e) {
         UI.erro(erroGeral, e);
         window.scrollTo({ top: 0, behavior: 'smooth' });

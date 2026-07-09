@@ -14,7 +14,10 @@
     <aside class="sidebar" id="sidebar"></aside>
     <main class="conteudo">
       <div class="topo">
-        <h1>Manutenção de Produtos</h1>
+        <div style="display:flex;align-items:center;gap:10px">
+          <a href="/produtos.html" class="btn-voltar" title="Voltar para Produtos" aria-label="Voltar para Produtos"><i class="fa-solid fa-arrow-left"></i></a>
+          <h1>Manutenção de Produtos</h1>
+        </div>
         <span id="subtituloProduto" style="color:var(--cinza);font-size:14px"></span>
       </div>
 
@@ -109,6 +112,7 @@
 
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
   <script>
   (() => {
     initNavbar();
@@ -242,7 +246,8 @@
       btn.disabled = true; btn.textContent = 'Salvando...';
       try {
         await API.put('/api/produtos/' + produtoId, body);
-        window.location.href = 'produtos.html';
+        // Permanece na página com os dados salvos visíveis — sem redirect.
+        mostrarToast('Salvo com sucesso');
       } catch (e) {
         UI.erro(erroGeral, e);
         window.scrollTo({ top: 0, behavior: 'smooth' });

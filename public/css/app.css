@@ -103,6 +103,37 @@ button { font-family: inherit; cursor: pointer; }
 }
 .badge.oculto { display: none; }
 
+/* ─── Toast (feedback temporário, ver js/toast.js) ─── */
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  opacity: 0;
+  z-index: 9999;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+.toast-visivel {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast-sucesso { background-color: #16a34a; }
+.toast-erro    { background-color: #dc2626; } /* pra uso futuro */
+
+/* Seta de voltar ao lado do título (ex.: Manutenção de Produtos) */
+.btn-voltar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 8px;
+  color: var(--cinza); font-size: 18px; flex-shrink: 0;
+}
+.btn-voltar:hover { background: rgba(0,0,0,.07); color: inherit; }
+
 .conteudo { flex: 1; min-width: 0; padding: 24px 28px; margin-left: 230px; transition: margin-left 220ms ease; }
 
 .topo {
