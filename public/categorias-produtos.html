@@ -17,11 +17,61 @@
         <h1>Categorias de Produtos</h1>
       </div>
 
-      <!-- Placeholder: a funcionalidade ainda será detalhada. Não implementar lógica aqui. -->
-      <div class="painel">
-        <div class="vazio" style="padding:60px 20px;text-align:center">
-          <p style="font-size:18px;font-weight:600;margin-bottom:8px">Em breve</p>
-          <p style="color:var(--cinza)">A gestão de categorias de produtos ainda está em construção.</p>
+      <div class="barra-acoes">
+        <button class="btn" id="btnNovoGrupo">Novo Grupo</button>
+        <button class="btn" id="btnNovoSubgrupo" disabled>Novo Subgrupo</button>
+        <button class="btn" id="btnSalvar" disabled>Salvar</button>
+        <button class="btn secundario" id="btnDeletar" disabled>Deletar</button>
+      </div>
+
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+        <!-- Painel esquerdo: árvore -->
+        <div class="painel" style="flex:0 0 320px;min-width:260px">
+          <div class="campo"><input type="text" id="busca" placeholder="Buscar grupo ou subgrupo..."></div>
+          <div class="arvore" id="arvore"><div class="vazio">Carregando...</div></div>
+        </div>
+
+        <!-- Painel direito: abas -->
+        <div class="painel" style="flex:1;min-width:340px">
+          <div class="abas">
+            <button class="ativa" data-aba="dados">Dados Cadastrais</button>
+            <button data-aba="produtos">Produtos</button>
+          </div>
+
+          <div class="aba-conteudo ativa" id="aba-dados">
+            <div id="semSelecao" class="vazio">Selecione um grupo na árvore ou clique em "Novo Grupo".</div>
+            <div id="formCategoria" style="display:none">
+              <div class="form-grid">
+                <div class="campo cheio"><label>Descrição *</label><input id="c_nome" maxlength="100"></div>
+                <div class="campo"><label>Mark-up default do grupo (%)</label><input id="c_markup" type="number" step="0.01" min="0" placeholder="Ex: 35,00"></div>
+                <div class="campo" id="campoPai" style="display:none">
+                  <label>Grupo superior *</label>
+                  <input id="c_pai" list="listaGrupos" placeholder="Digite pra buscar...">
+                  <datalist id="listaGrupos"></datalist>
+                </div>
+              </div>
+              <div style="margin-top:14px">
+                <button class="btn secundario" id="btnAplicarMarkup" disabled>Aplicar markup para todos os produtos deste grupo</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="aba-conteudo" id="aba-produtos">
+            <div id="produtosVazio" class="vazio">Selecione um subgrupo pra ver os produtos vinculados.</div>
+            <div id="produtosArea" style="display:none">
+              <table>
+                <thead><tr><th style="width:140px">Cód. Ref.</th><th>Nome</th></tr></thead>
+                <tbody id="tabelaProdutosCat"></tbody>
+              </table>
+              <div class="paginacao">
+                <button class="btn secundario pequeno" id="btnProdAnterior">Anterior</button>
+                <span id="infoPaginaProd"></span>
+                <button class="btn secundario pequeno" id="btnProdProxima">Próxima</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -33,10 +83,272 @@
   <script>
   (() => {
     initNavbar();
+    const $ = (id) => document.getElementById(id);
+    const erroGeral = $('erroGeral');
+
+    let arvore = [];               // grupos raiz com filhos aninhados (GET /api/categorias)
+    const expandidos = new Set();  // ids de grupos com o submenu aberto
+    let busca = '';
+    // Item em edição: { modo: 'novo'|'editar', id?, parentId, ... }.
+    let selecionado = null;
+    let prodPagina = 1, prodTotalPaginas = 1;
+
+    function debounce(fn, ms) {
+      let temporizador;
+      return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
+    }
+
+    // ─── Árvore ───
+    function encontrar(id) {
+      for (const grupo of arvore) {
+        if (grupo.id === id) return grupo;
+        const filho = (grupo.filhos || []).find((f) => f.id === id);
+        if (filho) return filho;
+      }
+      return null;
+    }
+
+    function combina(nome) {
+      return nome.toLowerCase().includes(busca.toLowerCase());
+    }
+
+    function renderArvore() {
+      const el = $('arvore');
+      const blocos = [];
+      for (const grupo of arvore) {
+        const filhos = grupo.filhos || [];
+        const filhosVisiveis = busca ? filhos.filter((f) => combina(f.nome)) : filhos;
+        const grupoVisivel = !busca || combina(grupo.nome) || filhosVisiveis.length > 0;
+        if (!grupoVisivel) continue;
+        // Busca ativa expande o grupo pra mostrar onde o resultado está.
+        const aberto = busca ? true : expandidos.has(grupo.id);
+        const listados = busca && !combina(grupo.nome) ? filhosVisiveis : (aberto ? filhos : []);
+
+        blocos.push(
+          '<div class="arvore-item' + (selecionado && selecionado.id === grupo.id ? ' ativo' : '') + '" data-id="' + grupo.id + '">' +
+          (filhos.length > 0
+            ? '<span class="arvore-seta' + (aberto ? ' aberta' : '') + '" data-toggle="' + grupo.id + '">▸</span>'
+            : '<span class="arvore-seta"></span>') +
+          '<span>' + UI.escapar(grupo.nome) + '</span></div>'
+        );
+        for (const filho of listados) {
+          blocos.push(
+            '<div class="arvore-item sub' + (selecionado && selecionado.id === filho.id ? ' ativo' : '') + '" data-id="' + filho.id + '">' +
+            '<span>' + UI.escapar(filho.nome) + '</span></div>'
+          );
+        }
+      }
+      el.innerHTML = blocos.length ? blocos.join('') : '<div class="vazio">Nenhuma categoria encontrada.</div>';
+    }
+
+    async function carregarArvore(selecionarId) {
+      arvore = await API.get('/api/categorias');
+      $('listaGrupos').innerHTML = arvore.map((g) => '<option value="' + UI.escapar(g.nome) + '">').join('');
+      if (selecionarId) {
+        const item = encontrar(selecionarId);
+        if (item) { selecionado = { modo: 'editar', ...item }; if (item.parentId) expandidos.add(item.parentId); }
+        else selecionado = null;
+      }
+      renderArvore();
+      atualizarPainel();
+    }
+
+    // ─── Painel direito ───
+    function ehGrupoPai(item) { return !item.parentId; }
+
+    function nomeDoPai(parentId) {
+      const pai = arvore.find((g) => g.id === parentId);
+      return pai ? pai.nome : '';
+    }
+
+    function atualizarPainel() {
+      const tem = !!selecionado;
+      $('semSelecao').style.display = tem ? 'none' : 'block';
+      $('formCategoria').style.display = tem ? 'block' : 'none';
+      $('btnSalvar').disabled = !tem;
+      $('btnDeletar').disabled = !(tem && selecionado.modo === 'editar');
+      $('btnAplicarMarkup').disabled = !(tem && selecionado.modo === 'editar');
+      $('btnNovoSubgrupo').disabled = !(tem && selecionado.modo === 'editar' && ehGrupoPai(selecionado));
+
+      if (tem) {
+        $('c_nome').value = selecionado.nome || '';
+        $('c_markup').value = selecionado.markupPercent != null ? selecionado.markupPercent : '';
+        const mostrarPai = !!selecionado.parentId;
+        $('campoPai').style.display = mostrarPai ? 'block' : 'none';
+        $('c_pai').value = mostrarPai ? nomeDoPai(selecionado.parentId) : '';
+      }
+      atualizarAbaProdutos();
+    }
+
+    function selecionar(id) {
+      const item = encontrar(id);
+      if (!item) return;
+      selecionado = { modo: 'editar', ...item };
+      prodPagina = 1;
+      UI.limparErro(erroGeral);
+      renderArvore();
+      atualizarPainel();
+    }
+
+    // ─── Aba Produtos ───
+    function trocarAba(nome) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === nome));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + nome));
+    }
+    document.querySelectorAll('.abas button').forEach((b) => b.addEventListener('click', () => trocarAba(b.dataset.aba)));
+
+    function atualizarAbaProdutos() {
+      const ehSubgrupoSalvo = selecionado && selecionado.modo === 'editar' && !ehGrupoPai(selecionado);
+      $('produtosArea').style.display = ehSubgrupoSalvo ? 'block' : 'none';
+      $('produtosVazio').style.display = ehSubgrupoSalvo ? 'none' : 'block';
+      $('produtosVazio').textContent = selecionado && selecionado.modo === 'editar' && ehGrupoPai(selecionado)
+        ? 'Grupos pais não têm produtos vinculados diretamente — selecione um subgrupo.'
+        : 'Selecione um subgrupo pra ver os produtos vinculados.';
+      if (ehSubgrupoSalvo) carregarProdutos();
+    }
+
+    async function carregarProdutos() {
+      const data = await API.get('/api/categorias/' + selecionado.id + '/produtos?page=' + prodPagina + '&limit=20');
+      prodTotalPaginas = data.totalPages || 1;
+      $('infoPaginaProd').textContent = 'Página ' + data.page + ' de ' + prodTotalPaginas + ' · ' + data.total + ' produtos';
+      $('tabelaProdutosCat').innerHTML = data.items.length
+        ? data.items.map((p) => '<tr><td>' + (p.codigoReferencia || '-') + '</td><td>' + UI.escapar(p.nome) + '</td></tr>').join('')
+        : '<tr><td colspan="2" class="vazio">Nenhum produto vinculado a este subgrupo.</td></tr>';
+    }
+
+    function mudarPaginaProd(delta) {
+      const nova = prodPagina + delta;
+      if (nova < 1 || nova > prodTotalPaginas) return;
+      prodPagina = nova; carregarProdutos();
+    }
+
+    // ─── Ações ───
+    function modoNovoGrupo() {
+      selecionado = { modo: 'novo', parentId: null, nome: '', markupPercent: null };
+      UI.limparErro(erroGeral);
+      renderArvore();
+      atualizarPainel();
+      trocarAba('dados');
+      $('c_nome').focus();
+    }
+
+    function modoNovoSubgrupo() {
+      const pai = selecionado; // botão só habilita com grupo pai selecionado
+      selecionado = { modo: 'novo', parentId: pai.id, nome: '', markupPercent: null };
+      expandidos.add(pai.id);
+      UI.limparErro(erroGeral);
+      renderArvore();
+      atualizarPainel();
+      trocarAba('dados');
+      $('c_nome').focus();
+    }
+
+    /** Monta o body de criação/edição a partir do formulário; null = inválido. */
+    function lerFormulario() {
+      const nome = $('c_nome').value.trim();
+      if (nome.length < 2) { UI.erro(erroGeral, 'Descrição é obrigatória (mínimo 2 caracteres).'); return null; }
+      const body = { nome, markupPercent: $('c_markup').value === '' ? null : Number($('c_markup').value) };
+      if (body.markupPercent !== null && !(body.markupPercent >= 0)) {
+        UI.erro(erroGeral, 'Markup deve ser um percentual maior ou igual a zero.'); return null;
+      }
+      // Grupo superior: só participa quando o campo está visível (subgrupos).
+      if ($('campoPai').style.display !== 'none') {
+        const nomePai = $('c_pai').value.trim();
+        const pai = arvore.find((g) => g.nome.toLowerCase() === nomePai.toLowerCase());
+        if (!pai) { UI.erro(erroGeral, 'Grupo superior não encontrado — escolha um grupo existente da lista.'); return null; }
+        if (selecionado.id && pai.id === selecionado.id) { UI.erro(erroGeral, 'Uma categoria não pode ser filha de si mesma.'); return null; }
+        body.parentId = pai.id;
+      } else if (selecionado.modo === 'novo') {
+        body.parentId = selecionado.parentId; // novo subgrupo criado a partir do grupo selecionado
+      }
+      return body;
+    }
+
+    async function salvar() {
+      UI.limparErro(erroGeral);
+      const body = lerFormulario();
+      if (!body) return;
+      const btn = $('btnSalvar');
+      btn.disabled = true;
+      try {
+        const salvo = selecionado.modo === 'novo'
+          ? await API.post('/api/categorias', body)
+          : await API.put('/api/categorias/' + selecionado.id, body);
+        mostrarToast('Salvo com sucesso');
+        await carregarArvore(salvo.id);
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      } finally {
+        btn.disabled = !selecionado;
+      }
+    }
+
+    function deletar() {
+      const item = selecionado;
+      UI.confirmarAcao('Desativar "' + item.nome + '"? A categoria sairá da árvore (soft delete).', async () => {
+        await API.del('/api/categorias/' + item.id);
+        mostrarToast('Categoria removida');
+        selecionado = null;
+        await carregarArvore();
+      });
+    }
+
+    /**
+     * Salva o formulário primeiro (o markup usado é o gravado na categoria)
+     * e então dispara a reprecificação do escopo no backend.
+     */
+    function aplicarMarkup() {
+      if ($('c_markup').value === '') { UI.erro(erroGeral, 'Informe o markup antes de aplicar.'); return; }
+      const escopo = ehGrupoPai(selecionado)
+        ? 'todos os produtos dos subgrupos deste grupo'
+        : 'os produtos deste subgrupo';
+      UI.confirmarAcao('Aplicar markup de ' + $('c_markup').value + '% e recalcular o preço de venda de ' + escopo + '?', async () => {
+        UI.limparErro(erroGeral);
+        const body = lerFormulario();
+        if (!body) return;
+        if (selecionado.modo === 'novo') { UI.erro(erroGeral, 'Salve a categoria antes de aplicar o markup.'); return; }
+        await API.put('/api/categorias/' + selecionado.id, body);
+        const data = await API.post('/api/categorias/' + selecionado.id + '/aplicar-markup', {});
+        mostrarToast(data.aplicados + ' produto(s) reprecificado(s)' + (data.pulados ? ' · ' + data.pulados + ' sem custo médio (pulados)' : ''), 'sucesso', 3500);
+        await carregarArvore(selecionado.id);
+      });
+    }
+
+    // ─── Eventos ───
+    $('arvore').addEventListener('click', (ev) => {
+      const seta = ev.target.closest('[data-toggle]');
+      if (seta) {
+        const id = seta.dataset.toggle;
+        if (expandidos.has(id)) expandidos.delete(id); else expandidos.add(id);
+        renderArvore();
+        return;
+      }
+      const item = ev.target.closest('.arvore-item[data-id]');
+      if (item) selecionar(item.dataset.id);
+    });
+
+    $('busca').addEventListener('input', debounce((ev) => {
+      busca = ev.target.value.trim();
+      renderArvore();
+    }, 250));
+
+    $('btnNovoGrupo').addEventListener('click', modoNovoGrupo);
+    $('btnNovoSubgrupo').addEventListener('click', modoNovoSubgrupo);
+    $('btnSalvar').addEventListener('click', salvar);
+    $('btnDeletar').addEventListener('click', deletar);
+    $('btnAplicarMarkup').addEventListener('click', aplicarMarkup);
+    $('btnProdAnterior').addEventListener('click', () => mudarPaginaProd(-1));
+    $('btnProdProxima').addEventListener('click', () => mudarPaginaProd(1));
+
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('categorias-produtos.html');
+      try {
+        await carregarArvore();
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      }
     })();
   })();
   </script>

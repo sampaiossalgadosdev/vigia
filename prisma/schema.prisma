@@ -174,19 +174,28 @@ model Usuario {
 }
 
 // ─── CATEGORIA ────────────────────────────────────────────
+// Hierarquia de 2 níveis: Grupo (parentId null) → Subgrupo (parentId
+// aponta pro grupo pai). Subgrupo de subgrupo não é permitido (regra
+// no CategoriaService). markupPercent é o markup default aplicável aos
+// produtos do escopo (ex: 35.00 = 35%).
 model Categoria {
-  id        String   @id @default(uuid())
-  tenantId  String
-  nome      String
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(uuid())
+  tenantId      String
+  nome          String
+  markupPercent Decimal? @db.Decimal(5, 2)
+  parentId      String?
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  tenant   Tenant      @relation(fields: [tenantId], references: [id])
+  parent   Categoria?  @relation("CategoriaHierarquia", fields: [parentId], references: [id])
+  filhos   Categoria[] @relation("CategoriaHierarquia")
   produtos Produto[]
 
   @@unique([tenantId, nome])
   @@index([tenantId])
+  @@index([parentId])
 }
 
 // ─── PRODUTO ──────────────────────────────────────────────

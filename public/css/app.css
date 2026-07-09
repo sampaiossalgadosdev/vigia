@@ -126,6 +126,23 @@ button { font-family: inherit; cursor: pointer; }
 .toast-sucesso { background-color: #16a34a; }
 .toast-erro    { background-color: #dc2626; } /* pra uso futuro */
 
+/* ─── Árvore de categorias (categorias-produtos.html) ─── */
+.arvore { max-height: 62vh; overflow-y: auto; margin-top: 10px; }
+.arvore-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  user-select: none;
+}
+.arvore-item:hover { background: rgba(0,0,0,.05); }
+.arvore-item.ativo { background: var(--azul); color: #fff; }
+.arvore-item .arvore-seta {
+  width: 18px; text-align: center; font-size: 11px; flex-shrink: 0;
+  color: var(--cinza); transition: transform 150ms ease;
+}
+.arvore-item.ativo .arvore-seta { color: #fff; }
+.arvore-item .arvore-seta.aberta { transform: rotate(90deg); }
+.arvore-item.sub { padding-left: 34px; }
+
 /* Seta de voltar ao lado do título (ex.: Manutenção de Produtos) */
 .btn-voltar {
   display: inline-flex; align-items: center; justify-content: center;
