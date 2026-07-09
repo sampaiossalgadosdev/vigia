@@ -71,7 +71,8 @@ const API = (() => {
   const get = (caminho) => request(caminho);
   const post = (caminho, body) => request(caminho, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) });
   const put = (caminho, body) => request(caminho, { method: 'PUT', body: JSON.stringify(body || {}) });
+  const patch = (caminho, body) => request(caminho, { method: 'PATCH', body: JSON.stringify(body || {}) });
   const del = (caminho) => request(caminho, { method: 'DELETE' });
 
-  return { request, get, post, put, del, renovar, setAccessToken, getAccessToken };
+  return { request, get, post, put, patch, del, renovar, setAccessToken, getAccessToken };
 })();

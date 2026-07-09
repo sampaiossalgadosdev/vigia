@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Alterar Produtos em Lote</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Alterar Produtos em Lote</h1>
+        <span id="indicadorEtapa" style="color:var(--cinza);font-size:14px"></span>
+      </div>
+
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <!-- ─── Etapa 1: seleção de produtos ─── -->
+      <div id="etapa1">
+        <div class="painel">
+          <table class="tabela-produtos">
+            <thead>
+              <tr>
+                <th class="col-check"><input type="checkbox" id="checkTodos"></th>
+                <th class="ordenavel" data-coluna="nome">Nome <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="grupo">Grupo <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="valor">Valor <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="custoMedio">Custo médio <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="estoqueTotal">Estoque total <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="unidade">Unidade <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="codigoReferencia">Cód. Ref. <i class="fa-solid fa-sort"></i></th>
+                <th class="ordenavel" data-coluna="situacao">Situação <i class="fa-solid fa-sort"></i></th>
+              </tr>
+              <tr class="linha-filtros">
+                <th></th>
+                <th><input type="text" id="filtro_nome" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_grupo" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_valor" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_custoMedio" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_estoqueTotal" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_unidade" placeholder="Filtrar..."></th>
+                <th><input type="text" id="filtro_codigoReferencia" placeholder="Filtrar..."></th>
+                <th>
+                  <select id="filtro_situacao">
+                    <option value="ativo">Ativo</option>
+                    <option value="inativo">Inativo</option>
+                    <option value="todos">Todos</option>
+                  </select>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="tabela"><tr><td colspan="9" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+          <div class="paginacao">
+            <button class="btn secundario pequeno" id="btnPaginaAnterior">Anterior</button>
+            <span id="infoPagina"></span>
+            <button class="btn secundario pequeno" id="btnPaginaProxima">Próxima</button>
+          </div>
+        </div>
+        <div class="rodape" style="display:flex;justify-content:flex-end;align-items:center;gap:14px;margin-bottom:24px">
+          <span id="contadorSelecionados" style="color:var(--cinza);font-size:14px">Nenhum produto selecionado</span>
+          <button class="btn" id="btnAvancar1" disabled>Avançar</button>
+        </div>
+      </div>
+
+      <!-- ─── Etapa 2: seleção de campos ─── -->
+      <div id="etapa2" style="display:none">
+        <div class="painel">
+          <h2>Quais campos você quer alterar?</h2>
+          <p style="color:var(--cinza);font-size:14px;margin:8px 0 16px">
+            O valor informado será aplicado a todos os produtos selecionados.
+          </p>
+          <div class="form-grid">
+            <div class="campo"><label><input type="checkbox" id="campo_categoriaId" style="width:auto"> Grupo (categoria)</label></div>
+            <div class="campo"><label><input type="checkbox" id="campo_unidade" style="width:auto"> Unidade de medida</label></div>
+            <div class="campo"><label><input type="checkbox" id="campo_marca" style="width:auto"> Marca</label></div>
+          </div>
+        </div>
+        <div class="rodape" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:24px">
+          <button class="btn secundario" id="btnVoltar2">Voltar</button>
+          <button class="btn" id="btnAvancar2" disabled>Avançar</button>
+        </div>
+      </div>
+
+      <!-- ─── Etapa 3: edição dos valores ─── -->
+      <div id="etapa3" style="display:none">
+        <div class="painel">
+          <h2>Novos valores</h2>
+          <div id="erroEtapa3" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo" id="valorGrupo" style="display:none">
+              <label>Grupo</label>
+              <select id="v_categoria"><option value="">Carregando...</option></select>
+            </div>
+            <div class="campo" id="valorUnidade" style="display:none">
+              <label>Unidade de medida</label>
+              <select id="v_unidade"><option>UN</option><option>KG</option><option>CX</option><option>L</option><option>PC</option><option>FD</option></select>
+            </div>
+            <div class="campo" id="valorMarca" style="display:none">
+              <label>Marca</label>
+              <input id="v_marca" maxlength="100">
+            </div>
+          </div>
+        </div>
+        <div class="rodape" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:24px">
+          <button class="btn secundario" id="btnVoltar3">Voltar</button>
+          <button class="btn" id="btnVisualizar">Visualizar Alterações</button>
+        </div>
+      </div>
+
+      <!-- ─── Etapa 4: confirmação (Antes → Depois) ─── -->
+      <div id="etapa4" style="display:none">
+        <div class="painel">
+          <h2>Confirme as alterações</h2>
+          <p id="resumoConfirmacao" style="color:var(--cinza);font-size:14px;margin:8px 0 16px"></p>
+          <div style="overflow-x:auto">
+            <table>
+              <thead id="cabecalhoPreview"></thead>
+              <tbody id="tabelaPreview"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="rodape" style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:24px">
+          <button class="btn secundario" id="btnCancelarTudo">Cancelar</button>
+          <button class="btn" id="btnConfirmar">Confirmar</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    let pagina = 1, totalPaginas = 1;
+    let orderBy = null, order = 'asc';
+    const filtros = { nome: '', grupo: '', valor: '', custoMedio: '', estoqueTotal: '', unidade: '', codigoReferencia: '', situacao: 'ativo' };
+
+    // Seleção sobrevive a paginação/filtros (diferente da listagem normal):
+    // guarda o produto inteiro pra montar o "Antes" da tela de confirmação
+    // sem uma nova rodada de requests.
+    const selecionados = new Map();
+    // Categorias carregadas na Etapa 3; usadas na Etapa 4 pra exibir o nome do grupo.
+    let categorias = [];
+    // Produtos da página visível, pra alimentar a seleção sem repetir o fetch.
+    let paginaAtual = [];
+
+    const CAMPOS = {
+      categoriaId: 'Grupo',
+      unidade: 'Unidade de medida',
+      marca: 'Marca',
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const tabela = $('tabela'), infoPagina = $('infoPagina'), checkTodos = $('checkTodos');
+    const erroGeral = $('erroGeral'), erroEtapa3 = $('erroEtapa3');
+
+    function debounce(fn, ms) {
+      let temporizador;
+      return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
+    }
+
+    // ─── Navegação entre etapas ───
+    const ROTULO_ETAPA = { 1: 'Etapa 1 de 4 · Selecione os produtos', 2: 'Etapa 2 de 4 · Selecione os campos', 3: 'Etapa 3 de 4 · Informe os novos valores', 4: 'Etapa 4 de 4 · Confirme as alterações' };
+    function irParaEtapa(n) {
+      [1, 2, 3, 4].forEach((i) => { $('etapa' + i).style.display = i === n ? 'block' : 'none'; });
+      $('indicadorEtapa').textContent = ROTULO_ETAPA[n];
+      UI.limparErro(erroGeral);
+      window.scrollTo({ top: 0 });
+    }
+
+    // ─── Etapa 1: listagem com seleção ───
+    function construirQuery() {
+      const params = new URLSearchParams({ page: pagina, limit: 20 });
+      if (orderBy) { params.set('orderBy', orderBy); params.set('order', order); }
+      Object.entries(filtros).forEach(([chave, valor]) => { if (valor) params.set(chave, valor); });
+      return params.toString();
+    }
+
+    function atualizarIconesOrdenacao() {
+      document.querySelectorAll('th.ordenavel').forEach((th) => {
+        const ativa = th.dataset.coluna === orderBy;
+        th.classList.toggle('ativa', ativa);
+        th.querySelector('i').className = ativa ? (order === 'asc' ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down') : 'fa-solid fa-sort';
+      });
+    }
+
+    function atualizarContador() {
+      const n = selecionados.size;
+      $('contadorSelecionados').textContent =
+        n === 0 ? 'Nenhum produto selecionado' : n + ' produto' + (n > 1 ? 's' : '') + ' selecionado' + (n > 1 ? 's' : '');
+      $('btnAvancar1').disabled = n === 0;
+    }
+
+    function atualizarCheckTodos() {
+      const checks = [...tabela.querySelectorAll('.check-produto')];
+      checkTodos.checked = checks.length > 0 && checks.every((cb) => cb.checked);
+    }
+
+    async function carregar() {
+      const data = await API.get('/api/produtos?' + construirQuery());
+      totalPaginas = data.totalPages || 1;
+      infoPagina.textContent = 'Página ' + data.page + ' de ' + totalPaginas + ' · ' + data.total + ' produtos';
+      if (data.items.length === 0) { tabela.innerHTML = '<tr><td colspan="9" class="vazio">Nenhum produto encontrado.</td></tr>'; atualizarCheckTodos(); return; }
+      tabela.innerHTML = data.items.map((p) =>
+        '<tr data-id="' + p.id + '">' +
+        '<td class="col-check"><input type="checkbox" class="check-produto" data-id="' + p.id + '"' + (selecionados.has(p.id) ? ' checked' : '') + '></td>' +
+        '<td>' + UI.escapar(p.nome) + '</td>' +
+        '<td>' + (p.categoria ? UI.escapar(p.categoria.nome) : '-') + '</td>' +
+        '<td>' + UI.moeda(p.preco) + '</td>' +
+        '<td>' + UI.moeda(p.custoMedio) + '</td>' +
+        '<td>' + (Number(p.estoqueQtd) <= Number(p.estoqueMin) ? '<span class="tag erro">' + p.estoqueQtd + '</span>' : p.estoqueQtd) + '</td>' +
+        '<td>' + p.unidade + '</td>' +
+        '<td>' + (p.codigoReferencia || '-') + '</td>' +
+        '<td><span class="tag ' + (p.ativo ? 'ok' : 'neutro') + '">' + (p.ativo ? 'Ativo' : 'Inativo') + '</span></td>' +
+        '</tr>'
+      ).join('');
+      paginaAtual = data.items;
+      atualizarCheckTodos();
+    }
+
+    function alternarSelecao(id, marcado) {
+      if (marcado) {
+        const produto = paginaAtual.find((p) => p.id === id);
+        if (produto) selecionados.set(id, produto);
+      } else {
+        selecionados.delete(id);
+      }
+      atualizarContador();
+      atualizarCheckTodos();
+    }
+
+    function mudarPagina(delta) {
+      const nova = pagina + delta;
+      if (nova < 1 || nova > totalPaginas) return;
+      pagina = nova; carregar();
+    }
+
+    // ─── Etapa 2: campos marcados ───
+    function camposMarcados() {
+      return Object.keys(CAMPOS).filter((campo) => $('campo_' + campo).checked);
+    }
+
+    function atualizarAvancar2() {
+      $('btnAvancar2').disabled = camposMarcados().length === 0;
+    }
+
+    // ─── Etapa 3: valores ───
+    async function prepararEtapa3() {
+      const marcados = camposMarcados();
+      $('valorGrupo').style.display = marcados.includes('categoriaId') ? 'block' : 'none';
+      $('valorUnidade').style.display = marcados.includes('unidade') ? 'block' : 'none';
+      $('valorMarca').style.display = marcados.includes('marca') ? 'block' : 'none';
+      if (marcados.includes('categoriaId') && categorias.length === 0) {
+        categorias = await API.get('/api/produtos/categorias');
+        $('v_categoria').innerHTML = '<option value="">Selecione...</option>' +
+          categorias.map((c) => '<option value="' + c.id + '">' + UI.escapar(c.nome) + '</option>').join('');
+      }
+    }
+
+    /** Lê os valores da Etapa 3; null indica campo marcado sem valor preenchido. */
+    function lerAlteracoes() {
+      const marcados = camposMarcados();
+      const alteracoes = {};
+      if (marcados.includes('categoriaId')) {
+        if (!$('v_categoria').value) return null;
+        alteracoes.categoriaId = $('v_categoria').value;
+      }
+      if (marcados.includes('unidade')) alteracoes.unidade = $('v_unidade').value;
+      if (marcados.includes('marca')) {
+        if (!$('v_marca').value.trim()) return null;
+        alteracoes.marca = $('v_marca').value.trim();
+      }
+      return alteracoes;
+    }
+
+    // ─── Etapa 4: preview Antes → Depois ───
+    function valorAntes(produto, campo) {
+      if (campo === 'categoriaId') return produto.categoria ? produto.categoria.nome : '-';
+      return produto[campo] || '-';
+    }
+
+    function valorDepois(alteracoes, campo) {
+      if (campo === 'categoriaId') {
+        const cat = categorias.find((c) => c.id === alteracoes.categoriaId);
+        return cat ? cat.nome : '-';
+      }
+      return alteracoes[campo];
+    }
+
+    function montarPreview(alteracoes) {
+      const campos = Object.keys(alteracoes);
+      $('resumoConfirmacao').textContent =
+        selecionados.size + ' produto(s) serão alterados. Confira antes de confirmar — a operação é aplicada de uma vez só.';
+      $('cabecalhoPreview').innerHTML =
+        '<tr><th>Produto</th>' + campos.map((c) => '<th>' + CAMPOS[c] + '</th>').join('') + '</tr>';
+      $('tabelaPreview').innerHTML = [...selecionados.values()].map((p) =>
+        '<tr><td>' + UI.escapar(p.nome) + '</td>' +
+        campos.map((c) =>
+          '<td>' + UI.escapar(String(valorAntes(p, c))) + ' → <strong>' + UI.escapar(String(valorDepois(alteracoes, c))) + '</strong></td>'
+        ).join('') + '</tr>'
+      ).join('');
+    }
+
+    async function confirmar(alteracoes) {
+      const btn = $('btnConfirmar');
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      try {
+        const data = await API.patch('/api/produtos/em-lote', {
+          produtoIds: [...selecionados.keys()],
+          alteracoes,
+        });
+        alert(data.atualizados + ' produto(s) atualizado(s) com sucesso.');
+        window.location.href = 'produtos.html';
+      } catch (e) {
+        UI.erro(erroGeral, e);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } finally {
+        btn.disabled = false; btn.textContent = 'Confirmar';
+      }
+    }
+
+    // ─── Eventos ───
+    $('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
+    $('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+
+    ['nome', 'grupo', 'valor', 'custoMedio', 'estoqueTotal', 'unidade', 'codigoReferencia'].forEach((chave) => {
+      $('filtro_' + chave).addEventListener('input', debounce((ev) => {
+        filtros[chave] = ev.target.value.trim();
+        pagina = 1;
+        carregar();
+      }, 400));
+    });
+    $('filtro_situacao').addEventListener('change', (ev) => {
+      filtros.situacao = ev.target.value;
+      pagina = 1;
+      carregar();
+    });
+
+    document.querySelectorAll('th.ordenavel').forEach((th) => {
+      th.addEventListener('click', () => {
+        const coluna = th.dataset.coluna;
+        if (orderBy === coluna && order === 'asc') order = 'desc';
+        else if (orderBy === coluna) { orderBy = null; order = 'asc'; }
+        else { orderBy = coluna; order = 'asc'; }
+        pagina = 1;
+        atualizarIconesOrdenacao();
+        carregar();
+      });
+    });
+    atualizarIconesOrdenacao();
+
+    checkTodos.addEventListener('change', () => {
+      tabela.querySelectorAll('.check-produto').forEach((cb) => {
+        cb.checked = checkTodos.checked;
+        alternarSelecao(cb.dataset.id, cb.checked);
+      });
+    });
+
+    tabela.addEventListener('change', (ev) => {
+      const cb = ev.target.closest('.check-produto');
+      if (cb) alternarSelecao(cb.dataset.id, cb.checked);
+    });
+
+    // Clique na linha não abre a edição (diferente da listagem normal):
+    // aqui ele só marca/desmarca o produto.
+    tabela.addEventListener('click', (ev) => {
+      if (ev.target.closest('.col-check')) return;
+      const linha = ev.target.closest('tr[data-id]');
+      if (!linha) return;
+      const cb = linha.querySelector('.check-produto');
+      cb.checked = !cb.checked;
+      alternarSelecao(cb.dataset.id, cb.checked);
+    });
+
+    $('btnAvancar1').addEventListener('click', () => irParaEtapa(2));
+    Object.keys(CAMPOS).forEach((campo) => $('campo_' + campo).addEventListener('change', atualizarAvancar2));
+    $('btnVoltar2').addEventListener('click', () => irParaEtapa(1));
+    $('btnAvancar2').addEventListener('click', async () => {
+      UI.limparErro(erroEtapa3);
+      irParaEtapa(3);
+      try {
+        await prepararEtapa3();
+      } catch (e) {
+        UI.erro(erroEtapa3, e);
+      }
+    });
+    $('btnVoltar3').addEventListener('click', () => irParaEtapa(2));
+    $('btnVisualizar').addEventListener('click', () => {
+      UI.limparErro(erroEtapa3);
+      const alteracoes = lerAlteracoes();
+      if (!alteracoes) { UI.erro(erroEtapa3, 'Preencha o valor de todos os campos selecionados.'); return; }
+      montarPreview(alteracoes);
+      irParaEtapa(4);
+    });
+    $('btnCancelarTudo').addEventListener('click', () => { window.location.href = 'produtos.html'; });
+    $('btnConfirmar').addEventListener('click', () => {
+      const alteracoes = lerAlteracoes();
+      if (alteracoes) confirmar(alteracoes);
+    });
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('produtos-lote.html');
+      irParaEtapa(1);
+      atualizarContador();
+      carregar();
+    })();
+  })();
+  </script>
+</body>
+</html>

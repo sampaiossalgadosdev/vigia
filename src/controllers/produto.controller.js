@@ -26,6 +26,10 @@ const atualizar = asyncHandler(async (req, res) => {
   success(res, await service.atualizar(req.tenantId, req.params.id, req.body, req.usuario, req.ip));
 });
 
+const atualizarEmLote = asyncHandler(async (req, res) => {
+  success(res, await service.atualizarEmLote(req.tenantId, req.body, req.usuario, req.ip));
+});
+
 const remover = asyncHandler(async (req, res) => {
   success(res, await service.remover(req.tenantId, req.params.id, req.usuario, req.ip));
 });
@@ -62,7 +66,7 @@ const listarCategorias = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  listar, detalhar, criar, atualizar, remover,
+  listar, detalhar, criar, atualizar, atualizarEmLote, remover,
   baixarModelo, importarPreview, importarConfirmar, sync, alertas,
   ultimaCompra, listarCategorias,
 };

@@ -49,4 +49,19 @@ const atualizar = [
   validar,
 ];
 
-module.exports = { criar, atualizar, UNIDADES };
+// Alteração em lote: só Grupo, Unidade e Marca são editáveis assim
+// (Nome, EAN e Cód. Ref. nunca — o service ignora qualquer outro campo).
+const CAMPOS_LOTE = ['categoriaId', 'unidade', 'marca'];
+const emLote = [
+  body('produtoIds').isArray({ min: 1 }).withMessage('Informe ao menos um produto'),
+  body('produtoIds.*').isUUID().withMessage('produtoIds contém um id inválido'),
+  body('alteracoes')
+    .custom((v) => v && typeof v === 'object' && !Array.isArray(v) && CAMPOS_LOTE.some((c) => v[c] !== undefined && v[c] !== '' && v[c] !== null))
+    .withMessage('Informe ao menos um campo em alteracoes (categoriaId, unidade ou marca)'),
+  body('alteracoes.categoriaId').optional({ values: 'falsy' }).isUUID().withMessage('categoriaId inválido'),
+  body('alteracoes.unidade').optional({ values: 'falsy' }).isIn(UNIDADES).withMessage('Unidade deve ser UN, KG, CX, L, PC ou FD'),
+  body('alteracoes.marca').optional({ values: 'falsy' }).isString().trim().isLength({ min: 1, max: 100 }).withMessage('Marca deve ter até 100 caracteres'),
+  validar,
+];
+
+module.exports = { criar, atualizar, emLote, CAMPOS_LOTE, UNIDADES };

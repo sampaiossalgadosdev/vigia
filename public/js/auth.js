@@ -111,6 +111,8 @@ const Auth = (() => {
   /**
    * Injeta a sidebar padrão, marca o link ativo, esconde módulos sem
    * permissão e busca o badge de sugestões pendentes.
+   * Itens com `filhos` viram um grupo expansível (dropdown): o rótulo só
+   * abre/fecha o submenu, não navega — quem navega são os filhos.
    */
   async function montarSidebar(paginaAtiva) {
     const usuario = usuarioAtual();
@@ -118,7 +120,15 @@ const Auth = (() => {
     if (!el) return;
     const links = [
       ['index.html', 'Dashboard', 'dashboard'],
-      ['produtos.html', 'Produtos', 'produtos'],
+      {
+        rotulo: 'Produtos',
+        modulo: 'produtos',
+        filhos: [
+          ['produtos.html', 'Listar Produtos'],
+          ['produtos-lote.html', 'Alterar Produtos em Lote'],
+          ['categorias-produtos.html', 'Categorias de Produtos'],
+        ],
+      },
       ['fornecedores.html', 'Fornecedores', 'fornecedores'],
       ['estoque.html', 'Estoque / NF-e', 'estoque'],
       ['vendas.html', 'Vendas', 'vendas'],
@@ -129,17 +139,35 @@ const Auth = (() => {
       ['usuarios.html', 'Usuários', 'usuarios'],
       ['perfis.html', 'Perfis', 'perfis'],
     ];
+
+    const renderLink = (href, rotulo, submenu) => {
+      const badge = href === 'index.html' ? ' <span id="badgeSugestoes" class="badge oculto"></span>' : '';
+      return '<a href="/' + href + '" class="' + (href === paginaAtiva ? 'ativo' : '') + (submenu ? ' sublink' : '') + '" data-page="' + href + '">' + rotulo + badge + '</a>';
+    };
+
     el.innerHTML =
       '<div class="logo">VIGIA<small>Varejo Inteligente</small></div>' +
       '<nav>' +
       links
-        .filter(([, , modulo]) => temAcessoAoModulo(usuario, modulo))
-        .map(([href, rotulo]) => {
-          const badge = href === 'index.html' ? ' <span id="badgeSugestoes" class="badge oculto"></span>' : '';
-          return '<a href="/' + href + '" class="' + (href === paginaAtiva ? 'ativo' : '') + '" data-page="' + href + '">' + rotulo + badge + '</a>';
+        .filter((item) => temAcessoAoModulo(usuario, Array.isArray(item) ? item[2] : item.modulo))
+        .map((item) => {
+          if (Array.isArray(item)) return renderLink(item[0], item[1], false);
+          const aberto = item.filhos.some(([href]) => href === paginaAtiva);
+          return (
+            '<div class="grupo-menu' + (aberto ? ' aberto' : '') + '">' +
+            '<button type="button" class="grupo-toggle' + (aberto ? ' ativo' : '') + '">' +
+            item.rotulo + ' <span class="grupo-seta">▸</span></button>' +
+            '<div class="submenu">' +
+            item.filhos.map(([href, rotulo]) => renderLink(href, rotulo, true)).join('') +
+            '</div></div>'
+          );
         })
         .join('') +
       '</nav>';
+
+    el.querySelectorAll('.grupo-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => btn.closest('.grupo-menu').classList.toggle('aberto'));
+    });
 
     el.querySelectorAll('a[data-page]').forEach((link) => {
       link.addEventListener('click', async (ev) => {

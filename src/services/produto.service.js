@@ -108,6 +108,48 @@ async function atualizar(tenantId, id, body, usuario, ip) {
 }
 
 /**
+ * Alteração em lote: aplica os mesmos valores (Grupo, Unidade e/ou Marca) a
+ * todos os produtos informados, numa única transação. Se qualquer id não
+ * pertencer ao tenant, a operação inteira é rejeitada — nada é aplicado
+ * parcialmente. Registra uma entrada de auditoria por produto alterado
+ * (mesmo padrão das demais ações sobre Produto).
+ */
+const CAMPOS_LOTE = ['categoriaId', 'unidade', 'marca'];
+
+async function atualizarEmLote(tenantId, body, usuario, ip) {
+  const ids = [...new Set(body.produtoIds)];
+  const alteracoes = body.alteracoes || {};
+
+  // Whitelist: só os campos editáveis em lote passam; o resto é ignorado.
+  const dados = {};
+  for (const campo of CAMPOS_LOTE)
+    if (alteracoes[campo] !== undefined && alteracoes[campo] !== null && alteracoes[campo] !== '')
+      dados[campo] = alteracoes[campo];
+  if (Object.keys(dados).length === 0)
+    throw new AppError('Informe ao menos um campo para alterar em lote', 422);
+
+  const produtos = await produtoRepo.listarPorIds(tenantId, ids);
+  if (produtos.length !== ids.length)
+    throw new AppError('Um ou mais produtos não pertencem a este supermercado', 422);
+
+  if (dados.categoriaId) {
+    const categoria = await produtoRepo.buscarCategoria(tenantId, dados.categoriaId);
+    if (!categoria) throw new AppError('Categoria não encontrada neste supermercado', 422);
+  }
+
+  const atualizados = await produtoRepo.atualizarEmLote(tenantId, ids, dados);
+
+  await Promise.all(produtos.map((p) => auditoriaRepo.registrar({
+    tenantId, usuarioId: usuario.id, acao: 'editar_em_lote', entidade: 'Produto',
+    entidadeId: p.id,
+    antes: Object.fromEntries(Object.keys(dados).map((campo) => [campo, p[campo]])),
+    depois: dados, ip,
+  })));
+
+  return { atualizados };
+}
+
+/**
  * Soft delete: marca ativo = false. Nunca remove fisicamente.
  */
 async function remover(tenantId, id, usuario, ip) {
@@ -162,4 +204,4 @@ async function alertas(tenantId) {
   };
 }
 
-module.exports = { listar, detalhar, criar, atualizar, remover, sync, alertas, ultimaCompra, listarCategorias };
+module.exports = { listar, detalhar, criar, atualizar, atualizarEmLote, remover, sync, alertas, ultimaCompra, listarCategorias };

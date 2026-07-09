@@ -82,10 +82,10 @@
         <h2>Preços</h2>
         <div class="form-grid">
           <div class="campo"><label>Preço médio</label><input id="m_precoMedio" readonly></div>
-          <div class="campo"><label>Preço atual da última compra</label><input id="m_precoAtual" readonly></div>
+          <div class="campo"><label>Preço da última compra</label><input id="m_precoAtual" readonly></div>
         </div>
         <div class="form-grid tres">
-          <div class="campo"><label>Markup desejado (%)</label><input id="m_markupDesejado" type="number" step="0.1" placeholder="Ex: 30"></div>
+          <div class="campo"><label>Markup desejado (%)</label><input id="m_markupDesejado" type="number" step="0.1" placeholder="35,0%"></div>
           <div class="campo"><label>Markup atual (%)</label><input id="m_markupAtual" readonly></div>
           <div class="campo"><label>Preço atual (venda) (R$) *</label><input id="m_precoVenda" type="number" step="0.01" min="0.01"></div>
         </div>
@@ -172,10 +172,8 @@
       $('m_markupAtual').value = precoMedioNum > 0 && produto.preco
         ? ((Number(produto.preco) / precoMedioNum - 1) * 100).toFixed(1).replace('.', ',') + '%'
         : '-';
-      if (!(precoMedioNum > 0)) {
-        $('m_markupDesejado').disabled = true;
-        $('m_markupDesejado').placeholder = 'Sem preço médio (nenhuma compra)';
-      }
+      // Sem preço médio (nenhuma compra) não há base para calcular o markup.
+      if (!(precoMedioNum > 0)) $('m_markupDesejado').disabled = true;
       // Códigos
       $('m_ean').value = produto.ean || '';
       $('m_codRef').value = produto.codigoReferencia || '';

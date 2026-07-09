@@ -82,6 +82,21 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--azul); color: #fff; font-weight: 600;
   box-shadow: inset 3px 0 0 var(--ciano);
 }
+
+/* ─── Grupo expansível da sidebar (ex.: Produtos) ─── */
+.sidebar nav .grupo-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 11px 20px; color: #c2d2e4; font-size: 14px;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.sidebar nav .grupo-toggle:hover { background: rgba(255,255,255,.08); color: #fff; }
+.sidebar nav .grupo-toggle.ativo { color: #fff; font-weight: 600; }
+.grupo-seta { font-size: 12px; transition: transform 180ms ease; }
+.grupo-menu.aberto .grupo-seta { transform: rotate(90deg); }
+.grupo-menu .submenu { display: none; background: rgba(0,0,0,.22); }
+.grupo-menu.aberto .submenu { display: block; }
+.sidebar nav a.sublink { padding: 10px 20px 10px 34px; font-size: 13px; }
 .badge {
   background: var(--alerta); color: #fff; border-radius: 999px;
   font-size: 11px; padding: 2px 8px; font-weight: 700;

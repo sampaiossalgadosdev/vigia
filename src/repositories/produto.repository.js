@@ -107,6 +107,27 @@ async function atualizar(id, dados) {
   return prisma.produto.update({ where: { id }, data: dados });
 }
 
+async function listarPorIds(tenantId, ids) {
+  return prisma.produto.findMany({
+    where: { tenantId, id: { in: ids } },
+    include: { categoria: { select: { id: true, nome: true } } },
+  });
+}
+
+/**
+ * Aplica o mesmo conjunto de campos a vários produtos numa única transação:
+ * ou todos são atualizados, ou nenhum.
+ */
+async function atualizarEmLote(tenantId, ids, dados) {
+  return prisma.$transaction(async (tx) => {
+    const resultado = await tx.produto.updateMany({
+      where: { tenantId, id: { in: ids } },
+      data: dados,
+    });
+    return resultado.count;
+  });
+}
+
 async function criarVarios(tx, dados) {
   return tx.produto.createMany({ data: dados, skipDuplicates: true });
 }
@@ -179,6 +200,7 @@ async function buscarOuCriarCategoria(tx, tenantId, nome) {
 
 module.exports = {
   listar, buscarPorId, buscarPorEan, buscarPorEans, buscarPorCodigoReferencia, criar,
-  criarComCodigoSequencial, atualizar, criarVarios, sync, alertasEstoque, contar,
+  criarComCodigoSequencial, atualizar, listarPorIds, atualizarEmLote, criarVarios,
+  sync, alertasEstoque, contar,
   buscarCategoria, buscarOuCriarCategoria, ultimaCompra, listarCategorias,
 };

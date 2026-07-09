@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Categorias de Produtos</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Categorias de Produtos</h1>
+      </div>
+
+      <!-- Placeholder: a funcionalidade ainda será detalhada. Não implementar lógica aqui. -->
+      <div class="painel">
+        <div class="vazio" style="padding:60px 20px;text-align:center">
+          <p style="font-size:18px;font-weight:600;margin-bottom:8px">Em breve</p>
+          <p style="color:var(--cinza)">A gestão de categorias de produtos ainda está em construção.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('categorias-produtos.html');
+    })();
+  })();
+  </script>
+</body>
+</html>
