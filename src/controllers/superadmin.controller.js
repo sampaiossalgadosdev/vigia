@@ -29,6 +29,10 @@ const statsTenant = asyncHandler(async (req, res) => {
   success(res, await service.statsTenant(req.params.id));
 });
 
+const salvarCertificado = asyncHandler(async (req, res) => {
+  success(res, await service.salvarCertificado(req.params.id, req.file, req.body.senha));
+});
+
 const modeloProdutos = asyncHandler(async (req, res) => {
   await service.validarTenantExiste(req.params.id);
   const buffer = importacao.modelo();
@@ -69,7 +73,7 @@ const desatrelarTenant = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  login, listarTenants, criarTenant, atualizarTenant, statsTenant,
+  login, listarTenants, criarTenant, atualizarTenant, salvarCertificado, statsTenant,
   modeloProdutos, importarPreview, importarConfirmar,
   listarSuperusuarios, criarSuperusuario, atualizarSuperusuario,
   atrelarTenants, desatrelarTenant,

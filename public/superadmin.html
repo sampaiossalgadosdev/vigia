@@ -87,6 +87,20 @@
         <div class="campo"><label>Regime tributário</label>
           <select id="t_regime"><option value="simples">Simples Nacional</option><option value="presumido">Lucro Presumido</option><option value="real">Lucro Real</option></select>
         </div>
+        <div class="campo"><label>UF (estado)</label>
+          <select id="t_uf">
+            <option value="">Selecione...</option>
+            <option>AC</option><option>AL</option><option>AP</option><option>AM</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MT</option><option>MS</option><option>MG</option><option>PA</option><option>PB</option><option>PR</option><option>PE</option><option>PI</option><option>RJ</option><option>RN</option><option>RS</option><option>RO</option><option>RR</option><option>SC</option><option>SP</option><option>SE</option><option>TO</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <h2 style="font-size:15px;margin:14px 0 8px">Certificado digital A1 (consulta SEFAZ)</h2>
+        <div class="form-grid">
+          <div class="campo"><label>Arquivo .pfx</label><input type="file" id="t_certArquivo" accept=".pfx,.p12"></div>
+          <div class="campo"><label>Senha do certificado</label><input id="t_certSenha" type="password" autocomplete="new-password" placeholder="Vazio se o certificado não tiver senha"></div>
+        </div>
+        <p id="infoCert" style="font-size:13px;color:#666;margin:4px 0 0"></p>
       </div>
       <div id="areaDono">
         <h2 style="font-size:15px;margin:14px 0 8px">Dono inicial (opcional)</h2>
@@ -246,7 +260,8 @@
       document.getElementById('tituloTenant').textContent = 'Novo tenant';
       document.getElementById('areaDono').style.display = 'block';
       document.getElementById('erroTenant').classList.remove('visivel');
-      ['t_nome','t_cnpj','t_email','d_nome','d_email','d_senha'].forEach((id) => document.getElementById(id).value = '');
+      ['t_nome','t_cnpj','t_email','t_uf','d_nome','d_email','d_senha','t_certArquivo','t_certSenha'].forEach((id) => document.getElementById(id).value = '');
+      document.getElementById('infoCert').textContent = '';
       UI.abrirModal('modalTenant');
     }
 
@@ -260,7 +275,23 @@
       document.getElementById('t_email').value = t.email;
       document.getElementById('t_plano').value = t.plano;
       document.getElementById('t_regime').value = t.regimeTributario;
+      document.getElementById('t_uf').value = t.uf || '';
+      document.getElementById('t_certArquivo').value = '';
+      document.getElementById('t_certSenha').value = '';
+      document.getElementById('infoCert').textContent = t.temCertificado
+        ? 'Certificado enviado em ' + new Date(t.certificadoUploadEm).toLocaleString('pt-BR') + '. Enviar um novo arquivo substitui o atual.'
+        : 'Nenhum certificado cadastrado.';
       UI.abrirModal('modalTenant');
+    }
+
+    /** Envia o .pfx pro backend, que valida a senha antes de salvar. */
+    async function enviarCertificado(tenantId) {
+      const input = document.getElementById('t_certArquivo');
+      if (!input.files.length) return;
+      const form = new FormData();
+      form.append('certificado', input.files[0]);
+      form.append('senha', document.getElementById('t_certSenha').value);
+      await AdminApi.post('/api/superadmin/tenants/' + tenantId + '/certificado', form);
     }
 
     async function salvarTenant() {
@@ -272,6 +303,7 @@
         email: document.getElementById('t_email').value.trim(),
         plano: document.getElementById('t_plano').value,
         regimeTributario: document.getElementById('t_regime').value,
+        uf: document.getElementById('t_uf').value,
       };
       if (!editandoTenantId) {
         const donoEmail = document.getElementById('d_email').value.trim();
@@ -279,8 +311,16 @@
           body.dono = { nome: document.getElementById('d_nome').value.trim(), email: donoEmail, senha: document.getElementById('d_senha').value };
       }
       try {
-        if (editandoTenantId) await AdminApi.put('/api/superadmin/tenants/' + editandoTenantId, body);
-        else await AdminApi.post('/api/superadmin/tenants', body);
+        let tenantId = editandoTenantId;
+        if (editandoTenantId) {
+          await AdminApi.put('/api/superadmin/tenants/' + editandoTenantId, body);
+        } else {
+          const data = await AdminApi.post('/api/superadmin/tenants', body);
+          tenantId = data.tenant.id;
+        }
+        // Certificado vai num request próprio; se a senha estiver errada o
+        // backend rejeita sem salvar e o modal permanece aberto com o erro.
+        await enviarCertificado(tenantId);
         UI.fecharModal('modalTenant');
         carregarTenants();
       } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }

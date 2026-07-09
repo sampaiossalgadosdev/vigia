@@ -7,7 +7,7 @@ const { Router } = require('express');
 const controller = require('../controllers/superadmin.controller');
 const validator = require('../validators/auth.validator');
 const { authAdmin } = require('../middlewares/authAdmin');
-const { uploadPlanilha } = require('../middlewares/upload');
+const { uploadPlanilha, uploadPfx } = require('../middlewares/upload');
 
 const router = Router();
 
@@ -19,6 +19,7 @@ router.get('/tenants', controller.listarTenants);
 router.post('/tenants', controller.criarTenant);
 router.put('/tenants/:id', controller.atualizarTenant);
 router.get('/tenants/:id/stats', controller.statsTenant);
+router.post('/tenants/:id/certificado', uploadPfx.single('certificado'), controller.salvarCertificado);
 router.get('/tenants/:id/produtos/modelo', controller.modeloProdutos);
 router.post('/tenants/:id/produtos/importar/preview', uploadPlanilha.single('arquivo'), controller.importarPreview);
 router.post('/tenants/:id/produtos/importar/confirmar', controller.importarConfirmar);

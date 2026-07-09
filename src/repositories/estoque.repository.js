@@ -18,18 +18,31 @@ async function criarNfe(dados, itens) {
   });
 }
 
-async function listarNfes(tenantId, { status }, { skip, take }) {
+async function listarNfes(tenantId, { status, dataInicio, dataFim }, { skip, take }) {
   const where = { tenantId };
   if (status) where.status = status;
+  if (dataInicio || dataFim) {
+    where.dataEmissao = {};
+    if (dataInicio) where.dataEmissao.gte = dataInicio;
+    if (dataFim) where.dataEmissao.lte = dataFim;
+  }
   const [items, total] = await Promise.all([
     prisma.nfe.findMany({
       where, skip, take,
       orderBy: { criadoEm: 'desc' },
-      include: { fornecedor: { select: { nome: true, cnpj: true } }, _count: { select: { itens: true } } },
+      include: {
+        fornecedor: { select: { nome: true, cnpj: true } },
+        // Total de itens e quantos ainda aguardam matching de produto.
+        _count: { select: { itens: true, } },
+        itens: { where: { status: 'pendente' }, select: { id: true } },
+      },
     }),
     prisma.nfe.count({ where }),
   ]);
-  return { items, total };
+  return {
+    items: items.map(({ itens, ...nfe }) => ({ ...nfe, itensPendentes: itens.length })),
+    total,
+  };
 }
 
 async function buscarNfePorId(tenantId, id) {
@@ -84,8 +97,11 @@ async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
       const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
       const estoqueAtual = Number(produto.estoqueQtd);
       const custoAtual = Number(produto.custoMedio);
-      const qtd = Number(item.quantidade);
-      const custoNovo = Number(item.valorUnitario);
+      // Fator de conversão unidade da nota → unidade do sistema (matching
+      // manual); a quantidade multiplica e o custo unitário divide.
+      const fator = Number(item.fatorConversao) > 0 ? Number(item.fatorConversao) : 1;
+      const qtd = Number(item.quantidade) * fator;
+      const custoNovo = Number(item.valorUnitario) / fator;
 
       const novoCusto =
         estoqueAtual <= 0
@@ -123,19 +139,22 @@ async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
 
 /**
  * Vincula um item pendente a um produto e, se a NF-e já estiver confirmada,
- * aplica a entrada de estoque do item na mesma transação.
+ * aplica a entrada de estoque do item na mesma transação. fatorConversao
+ * (unidade da nota → unidade do sistema) multiplica a quantidade e divide o
+ * custo unitário; quando não informado (fluxo antigo), assume 1.
  */
-async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEntrada) {
+async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEntrada, fatorConversao) {
+  const fator = Number(fatorConversao) > 0 ? Number(fatorConversao) : 1;
   return prisma.$transaction(async (tx) => {
     const atualizado = await tx.nfeItem.update({
       where: { id: item.id },
-      data: { produtoId, status: 'ok' },
+      data: { produtoId, status: 'ok', fatorConversao: fator },
     });
     if (aplicarEntrada) {
       const produto = await tx.produto.findUnique({ where: { id: produtoId } });
       const estoqueAtual = Number(produto.estoqueQtd);
-      const qtd = Number(item.quantidade);
-      const custoNovo = Number(item.valorUnitario);
+      const qtd = Number(item.quantidade) * fator;
+      const custoNovo = Number(item.valorUnitario) / fator;
       const novoCusto =
         estoqueAtual <= 0
           ? custoNovo

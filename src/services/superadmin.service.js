@@ -8,15 +8,25 @@
  * utils/jwt, utils/bcrypt, utils/cnpj.
  * Não realiza acesso HTTP nem acesso direto ao Prisma.
  */
+const forge = require('node-forge');
 const superadminRepo = require('../repositories/superadmin.repository');
 const usuarioRepo = require('../repositories/usuario.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
 const { gerarAccessToken } = require('../utils/jwt');
 const { comparar, gerarHash } = require('../utils/bcrypt');
 const { validarCnpj, limparCnpj } = require('../utils/cnpj');
+const { criptografar, criptografarTexto } = require('../utils/certcrypto');
 const { AppError, paginado } = require('../utils/response');
 
 const PLANOS = ['standard', 'pro'];
+const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+
+/** Remove os campos sensíveis do certificado das respostas da API. */
+function semCertificado(tenant) {
+  if (!tenant) return tenant;
+  const { certificadoPfx, certificadoSenha, ...resto } = tenant;
+  return { ...resto, temCertificado: !!certificadoPfx };
+}
 
 async function login(email, senha) {
   const admin = await superadminRepo.buscarAdminPorEmail(email);
@@ -33,7 +43,7 @@ async function listarTenants(query, pag) {
     { ativo: query.ativo, plano: query.plano, incluirInativos },
     { skip: pag.skip, take: pag.limit, search: pag.search }
   );
-  return paginado(items, total, pag.page, pag.limit);
+  return paginado(items.map(semCertificado), total, pag.page, pag.limit);
 }
 
 /**
@@ -48,9 +58,12 @@ async function criarTenant(body) {
   if (existente) throw new AppError('Já existe um tenant com este CNPJ', 409);
 
   if (body.plano && !PLANOS.includes(body.plano)) throw new AppError('Plano deve ser standard ou pro', 422);
+  if (body.uf && !UFS.includes(String(body.uf).toUpperCase()))
+    throw new AppError('UF inválida', 422);
 
   const tenant = await superadminRepo.criarTenant({
     nome: body.nome, cnpj, email: body.email, telefone: body.telefone || null,
+    uf: body.uf ? String(body.uf).toUpperCase() : null,
     plano: body.plano || 'standard', regimeTributario: body.regimeTributario || 'simples',
   });
 
@@ -68,7 +81,7 @@ async function criarTenant(body) {
     tenantId: tenant.id, acao: 'criar', entidade: 'Tenant', entidadeId: tenant.id,
     depois: { nome: tenant.nome, cnpj: tenant.cnpj, plano: tenant.plano },
   });
-  return { tenant, dono: dono ? { id: dono.id, email: dono.email } : null };
+  return { tenant: semCertificado(tenant), dono: dono ? { id: dono.id, email: dono.email } : null };
 }
 
 async function atualizarTenant(id, body) {
@@ -84,6 +97,10 @@ async function atualizarTenant(id, body) {
     dados.plano = body.plano;
   }
   if (body.regimeTributario) dados.regimeTributario = body.regimeTributario;
+  if (body.uf !== undefined) {
+    if (body.uf && !UFS.includes(String(body.uf).toUpperCase())) throw new AppError('UF inválida', 422);
+    dados.uf = body.uf ? String(body.uf).toUpperCase() : null;
+  }
   if (body.ativo !== undefined) dados.ativo = body.ativo === true || body.ativo === 'true';
   if (body.cnpj) {
     const cnpj = limparCnpj(body.cnpj);
@@ -98,7 +115,38 @@ async function atualizarTenant(id, body) {
     antes: { nome: atual.nome, plano: atual.plano, ativo: atual.ativo },
     depois: { nome: tenant.nome, plano: tenant.plano, ativo: tenant.ativo },
   });
-  return tenant;
+  return semCertificado(tenant);
+}
+
+/**
+ * Valida e grava o certificado digital A1 do tenant. O .pfx é aberto em
+ * memória com a senha informada (ou sem senha) — se o parse falhar, nada é
+ * salvo. Binário e senha são criptografados (AES-256-GCM) antes de persistir;
+ * nenhum dado sensível vai pra Auditoria nem pra logs.
+ */
+async function salvarCertificado(id, arquivo, senha) {
+  const tenant = await superadminRepo.buscarTenantPorId(id);
+  if (!tenant) throw new AppError('Tenant não encontrado', 404);
+  if (!arquivo || !arquivo.buffer) throw new AppError('Envie o arquivo .pfx do certificado', 422);
+
+  const senhaCert = senha || '';
+  try {
+    const asn1 = forge.asn1.fromDer(forge.util.createBuffer(arquivo.buffer.toString('binary')));
+    forge.pkcs12.pkcs12FromAsn1(asn1, senhaCert);
+  } catch (e) {
+    throw new AppError('Senha do certificado incorreta ou certificado inválido', 422);
+  }
+
+  const atualizado = await superadminRepo.atualizarTenant(id, {
+    certificadoPfx: criptografar(arquivo.buffer),
+    certificadoSenha: senhaCert ? criptografarTexto(senhaCert) : null,
+    certificadoUploadEm: new Date(),
+  });
+  await auditoriaRepo.registrar({
+    tenantId: id, acao: 'editar', entidade: 'Tenant', entidadeId: id,
+    depois: { certificadoAtualizado: true, arquivo: arquivo.originalname, tamanhoBytes: arquivo.size },
+  });
+  return { certificadoUploadEm: atualizado.certificadoUploadEm };
 }
 
 async function statsTenant(id) {
@@ -164,6 +212,6 @@ async function desatrelarTenant(superusuarioId, tenantId) {
 }
 
 module.exports = {
-  login, listarTenants, criarTenant, atualizarTenant, statsTenant, validarTenantExiste,
+  login, listarTenants, criarTenant, atualizarTenant, salvarCertificado, statsTenant, validarTenantExiste,
   listarSuperusuarios, criarSuperusuario, atualizarSuperusuario, atrelarTenants, desatrelarTenant,
 };

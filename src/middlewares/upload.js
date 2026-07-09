@@ -28,4 +28,13 @@ const uploadPlanilha = multer({
   },
 });
 
-module.exports = { uploadXml, uploadPlanilha };
+const uploadPfx = multer({
+  ...base,
+  fileFilter: (req, file, cb) => {
+    const nome = file.originalname.toLowerCase();
+    const ok = nome.endsWith('.pfx') || nome.endsWith('.p12');
+    cb(ok ? null : new Error('Envie o certificado digital em formato .pfx ou .p12'), ok);
+  },
+});
+
+module.exports = { uploadXml, uploadPlanilha, uploadPfx };

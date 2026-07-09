@@ -59,10 +59,18 @@ model Tenant {
   cnpj                   String      @unique
   email                  String
   telefone               String?
+  uf                     String? // sigla (ex: SP) — vira cUFAutor nas consultas SEFAZ
   plano                  PlanoTenant @default(standard)
   regimeTributario       String      @default("simples")
   ativo                  Boolean     @default(true)
   ultimoCodigoReferencia Int         @default(0)
+  // Certificado digital A1 do tenant, criptografado com AES-256-GCM
+  // (chave em CERT_ENCRYPTION_KEY). Gerido só pelo Super Admin.
+  certificadoPfx         Bytes?
+  certificadoSenha       String?
+  certificadoUploadEm    DateTime?
+  // Cursor da Distribuição DF-e: último NSU já recebido da SEFAZ.
+  ultimoNsu              String      @default("0")
   criadoEm               DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 
@@ -78,9 +86,10 @@ model Tenant {
   auditoria     Auditoria[]
   refreshTokens RefreshToken[]
   decisoesIA    DecisaoIA[]
-  vendas        Venda[]
-  promocoes     Promocao[]
-  caixas        Caixa[]
+  vendas          Venda[]
+  promocoes       Promocao[]
+  caixas          Caixa[]
+  nfeDistribuicao NfeDistribuicao[]
 }
 
 // ─── REFRESH TOKEN ────────────────────────────────────────
@@ -284,23 +293,58 @@ model Nfe {
 }
 
 model NfeItem {
-  id            String  @id @default(uuid())
-  nfeId         String
-  produtoId     String?
-  ean           String
-  descricao     String
-  ncm           String?
-  unidade       String
-  quantidade    Decimal @db.Decimal(10, 3)
-  valorUnitario Decimal @db.Decimal(10, 4)
-  valorTotal    Decimal @db.Decimal(10, 2)
-  status        String  @default("ok") // ok | pendente (produto não encontrado, aguarda confirmação)
+  id             String   @id @default(uuid())
+  nfeId          String
+  produtoId      String?
+  ean            String
+  descricao      String
+  ncm            String?
+  unidade        String
+  quantidade     Decimal  @db.Decimal(10, 3)
+  valorUnitario  Decimal  @db.Decimal(10, 4)
+  valorTotal     Decimal  @db.Decimal(10, 2)
+  // Fator de conversão unidade da nota → unidade do sistema, definido no
+  // matching manual. Quantidade que entra no estoque = quantidade × fator.
+  fatorConversao Decimal? @db.Decimal(10, 4)
+  status         String   @default("ok") // ok | pendente (produto não encontrado, aguarda confirmação)
 
   nfe     Nfe      @relation(fields: [nfeId], references: [id])
   produto Produto? @relation(fields: [produtoId], references: [id])
 
   @@index([nfeId])
   @@index([produtoId])
+}
+
+// ─── DISTRIBUIÇÃO DF-e (resumos recebidos da SEFAZ) ───────
+// A SEFAZ entrega cada documento uma única vez, por NSU sequencial.
+// Os resumos ficam persistidos aqui e a tela de consulta filtra
+// (período/manifestação) sobre esta base local; Tenant.ultimoNsu guarda
+// o cursor pra buscar só o que há de novo.
+model NfeDistribuicao {
+  id           String    @id @default(uuid())
+  tenantId     String
+  nsu          String
+  chaveAcesso  String
+  cnpjEmitente String?
+  nomeEmitente String?
+  dataEmissao  DateTime?
+  valorTotal   Decimal?  @db.Decimal(10, 2)
+  serie        String? // extraída da chave de acesso (posições 23-25)
+  numero       String? // extraído da chave de acesso (posições 26-34)
+  situacao     String? // cSitNFe: 1 autorizada | 2 cancelada | 3 denegada
+  manifestacao String    @default("nao_manifestada") // nao_manifestada | ciencia | confirmada | desconhecida | nao_realizada
+  natureza     String? // natOp — disponível só após baixar o XML completo
+  xmlCompleto  String?   @db.Text // procNFe, quando já entregue/baixado
+  importada    Boolean   @default(false) // já entrou no pipeline de Nfe/NfeItem?
+  criadoEm     DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, chaveAcesso])
+  @@index([tenantId])
+  @@index([tenantId, dataEmissao])
+  @@index([tenantId, importada])
 }
 
 // ─── MOVIMENTAÇÃO DE ESTOQUE ──────────────────────────────

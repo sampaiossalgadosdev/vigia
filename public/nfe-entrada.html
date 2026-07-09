@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · NF-e de Entrada</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>NF-e de Entrada</h1>
+      </div>
+
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <div class="abas">
+        <button class="ativa" data-aba="consulta">Consulta SEFAZ</button>
+        <button data-aba="historico">Histórico de importadas</button>
+      </div>
+
+      <!-- ─── Aba 1: Consulta SEFAZ + upload manual ─── -->
+      <div class="aba-conteudo ativa" id="aba-consulta">
+        <div class="painel">
+          <div class="form-grid tres">
+            <div class="campo"><label>Data início</label><input type="date" id="s_dataInicio"></div>
+            <div class="campo"><label>Data fim</label><input type="date" id="s_dataFim"></div>
+            <div class="campo"><label>Manifestação</label>
+              <div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:8px">
+                <label style="font-weight:400;display:flex;gap:5px;align-items:center"><input type="checkbox" id="m_nao_manifestada" checked style="width:auto"> Não manifestadas</label>
+                <label style="font-weight:400;display:flex;gap:5px;align-items:center"><input type="checkbox" id="m_confirmada" checked style="width:auto"> Confirmadas</label>
+                <label style="font-weight:400;display:flex;gap:5px;align-items:center"><input type="checkbox" id="m_ciencia" checked style="width:auto"> Ciência da Operação</label>
+              </div>
+            </div>
+          </div>
+          <div class="barra-acoes" style="margin-top:6px">
+            <button class="btn" id="btnPesquisar">Pesquisar</button>
+            <span id="infoSync" style="color:var(--cinza);font-size:13px"></span>
+          </div>
+        </div>
+
+        <div class="painel">
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th class="col-check"><input type="checkbox" id="checkTodosSefaz"></th>
+                  <th>Data de Emissão</th>
+                  <th>Fornecedor</th>
+                  <th>CNPJ do Fornecedor</th>
+                  <th>Valor Total</th>
+                  <th>Série</th>
+                  <th>Número</th>
+                  <th>Manifestação</th>
+                  <th>Situação</th>
+                  <th>Natureza da Operação</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaSefaz"><tr><td colspan="10" class="vazio">Use "Pesquisar" pra consultar as notas emitidas contra o CNPJ da loja.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end;align-items:center;gap:14px">
+            <span id="contadorSefaz" style="color:var(--cinza);font-size:14px"></span>
+            <button class="btn" id="btnTrazer" disabled>Trazer notas selecionadas</button>
+          </div>
+        </div>
+
+        <!-- Upload manual: mesmo endpoint do fluxo já existente (não alterado) -->
+        <div class="painel">
+          <h2>Upload manual de XML</h2>
+          <div id="areaSoltar" style="border:2px dashed var(--linha);border-radius:8px;padding:26px;text-align:center;color:var(--cinza);margin:12px 0;cursor:pointer">
+            Arraste o arquivo .xml da NF-e aqui, ou clique pra selecionar
+            <input type="file" id="arquivoXml" accept=".xml" style="display:none">
+          </div>
+          <p id="nomeArquivoXml" style="font-size:13px;color:var(--cinza)"></p>
+          <button class="btn secundario" id="btnEnviarXml" disabled>Importar XML</button>
+        </div>
+      </div>
+
+      <!-- ─── Aba 2: Histórico ─── -->
+      <div class="aba-conteudo" id="aba-historico">
+        <div class="painel">
+          <div class="form-grid tres">
+            <div class="campo"><label>De</label><input type="date" id="h_dataInicio"></div>
+            <div class="campo"><label>Até</label><input type="date" id="h_dataFim"></div>
+            <div class="campo" style="display:flex;align-items:flex-end"><button class="btn" id="btnFiltrarHist">Filtrar</button></div>
+          </div>
+          <table class="tabela-clicavel">
+            <thead>
+              <tr><th>Data</th><th>Fornecedor</th><th>Valor Total</th><th>Série/Número</th><th>Status de importação</th></tr>
+            </thead>
+            <tbody id="tabelaHist"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+          <div class="paginacao">
+            <button class="btn secundario pequeno" id="btnHistAnterior">Anterior</button>
+            <span id="infoPaginaHist"></span>
+            <button class="btn secundario pequeno" id="btnHistProxima">Próxima</button>
+          </div>
+          <p style="color:var(--cinza);font-size:13px;margin-top:8px">Clique numa nota pra vincular os itens pendentes a produtos do sistema.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal de matching de itens -->
+  <div class="modal-fundo" id="modalMatching">
+    <div class="modal" style="max-width:720px">
+      <h2>Matching de produtos</h2>
+      <p id="subtituloNota" style="color:var(--cinza);font-size:14px;margin-bottom:10px"></p>
+      <div id="erroMatching" class="msg-erro"></div>
+      <div id="listaItens" style="max-height:55vh;overflow-y:auto"></div>
+      <div class="rodape">
+        <button class="btn secundario" id="btnFecharMatching">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+    const erroGeral = $('erroGeral');
+    // Chaves marcadas na tabela SEFAZ e paginação do histórico.
+    const selecionadas = new Set();
+    let histPagina = 1, histTotalPaginas = 1;
+    // Estado do matching: nota aberta e produto escolhido por item.
+    let notaAberta = null;
+    const escolhaPorItem = new Map(); // itemId → { produtoId, nome, unidade }
+
+    function debounce(fn, ms) {
+      let temporizador;
+      return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
+    }
+
+    function dataBr(iso) { return iso ? new Date(iso).toLocaleDateString('pt-BR') : '-'; }
+    function dataISO(d) { return d.toISOString().slice(0, 10); }
+
+    function trocarAba(nome) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === nome));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + nome));
+    }
+    document.querySelectorAll('.abas button').forEach((b) => b.addEventListener('click', () => trocarAba(b.dataset.aba)));
+
+    // ─── Consulta SEFAZ ───
+    const ROTULO_MANIFESTACAO = {
+      nao_manifestada: 'Não manifestada', ciencia: 'Ciência da Operação',
+      confirmada: 'Confirmada', desconhecida: 'Desconhecimento', nao_realizada: 'Não realizada',
+    };
+
+    function filtrosManifestacao() {
+      const marcados = [];
+      if ($('m_nao_manifestada').checked) marcados.push('nao_manifestada');
+      if ($('m_confirmada').checked) marcados.push('confirmada');
+      if ($('m_ciencia').checked) marcados.push('ciencia');
+      return marcados;
+    }
+
+    function atualizarBotaoTrazer() {
+      const n = selecionadas.size;
+      $('contadorSefaz').textContent = n ? n + ' nota(s) selecionada(s)' : '';
+      $('btnTrazer').disabled = n === 0;
+    }
+
+    async function pesquisar() {
+      UI.limparErro(erroGeral);
+      const btn = $('btnPesquisar');
+      btn.disabled = true; btn.textContent = 'Consultando SEFAZ...';
+      selecionadas.clear();
+      atualizarBotaoTrazer();
+      try {
+        const data = await API.post('/api/nfe-entrada/consultar-sefaz', {
+          dataInicio: $('s_dataInicio').value,
+          dataFim: $('s_dataFim').value,
+          filtroManifestacao: filtrosManifestacao(),
+        });
+        $('infoSync').textContent = data.sincronizacao.documentosRecebidos + ' documento(s) novo(s) recebido(s) da SEFAZ';
+        const notas = data.notas;
+        if (!notas.length) { $('tabelaSefaz').innerHTML = '<tr><td colspan="10" class="vazio">Nenhuma nota encontrada no período/filtros.</td></tr>'; return; }
+        $('tabelaSefaz').innerHTML = notas.map((n) =>
+          '<tr>' +
+          '<td class="col-check">' + (n.importada
+            ? '<span class="tag ok" title="Já importada">✓</span>'
+            : '<input type="checkbox" class="check-nota" data-chave="' + n.chaveAcesso + '">') + '</td>' +
+          '<td>' + dataBr(n.dataEmissao) + '</td>' +
+          '<td>' + UI.escapar(n.fornecedor || '-') + '</td>' +
+          '<td>' + (n.cnpjFornecedor || '-') + '</td>' +
+          '<td>' + (n.valorTotal != null ? UI.moeda(n.valorTotal) : '-') + '</td>' +
+          '<td>' + (n.serie || '-') + '</td>' +
+          '<td>' + (n.numero || '-') + '</td>' +
+          '<td>' + (ROTULO_MANIFESTACAO[n.manifestacao] || n.manifestacao) + '</td>' +
+          '<td>' + UI.escapar(n.situacao) + '</td>' +
+          '<td>' + UI.escapar(n.natureza || '-') + '</td>' +
+          '</tr>'
+        ).join('');
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Pesquisar';
+      }
+    }
+
+    async function trazerSelecionadas() {
+      UI.limparErro(erroGeral);
+      const btn = $('btnTrazer');
+      btn.disabled = true; btn.textContent = 'Importando...';
+      try {
+        const r = await API.post('/api/nfe-entrada/importar', { chavesNfe: [...selecionadas] });
+        let msg = r.importadas + ' nota(s) importada(s)';
+        if (r.jaImportadas) msg += ' · ' + r.jaImportadas + ' já estava(m) no sistema';
+        if (r.falhas.length) msg += ' · ' + r.falhas.length + ' falha(s)';
+        mostrarToast(msg, r.falhas.length ? 'erro' : 'sucesso', 4000);
+        if (r.falhas.length) UI.erro(erroGeral, 'Falhas: ' + r.falhas.map((f) => f.chave.slice(-9) + ' (' + f.motivo + ')').join('; '));
+        await pesquisar();
+        carregarHistorico();
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      } finally {
+        btn.textContent = 'Trazer notas selecionadas';
+        atualizarBotaoTrazer();
+      }
+    }
+
+    // ─── Upload manual (mesmo endpoint do fluxo existente) ───
+    async function enviarXml() {
+      UI.limparErro(erroGeral);
+      const input = $('arquivoXml');
+      if (!input.files.length) return;
+      const form = new FormData();
+      form.append('arquivo', input.files[0]);
+      const btn = $('btnEnviarXml');
+      btn.disabled = true; btn.textContent = 'Importando...';
+      try {
+        const nfe = await API.post('/api/estoque/nfe/upload', form);
+        mostrarToast('NF-e importada: ' + nfe.resumo.itensOk + ' item(ns) ok, ' + nfe.resumo.itensPendentes + ' pendente(s) de matching', 'sucesso', 4000);
+        input.value = '';
+        $('nomeArquivoXml').textContent = '';
+        carregarHistorico();
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      } finally {
+        btn.disabled = !input.files.length; btn.textContent = 'Importar XML';
+      }
+    }
+
+    // ─── Histórico ───
+    async function carregarHistorico() {
+      const params = new URLSearchParams({ page: histPagina, limit: 20 });
+      if ($('h_dataInicio').value) params.set('dataInicio', $('h_dataInicio').value);
+      if ($('h_dataFim').value) params.set('dataFim', $('h_dataFim').value);
+      const data = await API.get('/api/nfe-entrada/historico?' + params.toString());
+      histTotalPaginas = data.totalPages || 1;
+      $('infoPaginaHist').textContent = 'Página ' + data.page + ' de ' + histTotalPaginas + ' · ' + data.total + ' notas';
+      if (!data.items.length) { $('tabelaHist').innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma NF-e importada no período.</td></tr>'; return; }
+      $('tabelaHist').innerHTML = data.items.map((n) => {
+        const serie = /^\d{44}$/.test(n.chaveAcesso) ? String(Number(n.chaveAcesso.slice(22, 25))) : '-';
+        return '<tr data-id="' + n.id + '">' +
+          '<td>' + dataBr(n.dataEmissao) + '</td>' +
+          '<td>' + UI.escapar(n.fornecedor ? n.fornecedor.nome : '-') + '</td>' +
+          '<td>' + UI.moeda(n.valorTotal) + '</td>' +
+          '<td>' + serie + '/' + UI.escapar(n.numeroNfe) + '</td>' +
+          '<td>' + (n.itensPendentes > 0
+            ? '<span class="tag erro">pendente de matching (' + n.itensPendentes + ' item(ns))</span>'
+            : '<span class="tag ok">totalmente vinculada</span>') + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function mudarPaginaHist(delta) {
+      const nova = histPagina + delta;
+      if (nova < 1 || nova > histTotalPaginas) return;
+      histPagina = nova; carregarHistorico();
+    }
+
+    // ─── Matching ───
+    async function abrirMatching(nfeId) {
+      UI.limparErro($('erroMatching'));
+      escolhaPorItem.clear();
+      notaAberta = await API.get('/api/nfe-entrada/' + nfeId + '/itens');
+      $('subtituloNota').textContent = 'NF-e ' + notaAberta.numeroNfe + ' · ' +
+        (notaAberta.fornecedor ? notaAberta.fornecedor.nome : 'fornecedor não identificado') + ' · ' + dataBr(notaAberta.dataEmissao);
+      renderItens();
+      UI.abrirModal('modalMatching');
+    }
+
+    function renderItens() {
+      const pendentes = notaAberta.itens.filter((i) => i.status === 'pendente');
+      if (!pendentes.length) {
+        $('listaItens').innerHTML = '<div class="vazio">Todos os itens desta nota já estão vinculados.</div>';
+        return;
+      }
+      $('listaItens').innerHTML = pendentes.map((item) => {
+        const escolha = escolhaPorItem.get(item.id);
+        return '<div class="painel" style="margin-bottom:10px" data-item="' + item.id + '">' +
+          '<strong>' + UI.escapar(item.descricao) + '</strong>' +
+          '<p style="font-size:13px;color:var(--cinza);margin:4px 0 10px">Qtd: ' + item.quantidade +
+          ' · Unidade da nota: ' + UI.escapar(item.unidade) + ' · Valor unit: ' + UI.moeda(item.valorUnitario) + '</p>' +
+          '<div class="campo" style="position:relative">' +
+          '<label>Buscar produto</label>' +
+          '<input class="busca-produto" data-item="' + item.id + '" placeholder="Digite o nome do produto..." value="' + (escolha ? UI.escapar(escolha.nome) : '') + '" autocomplete="off">' +
+          '<div class="sugestoes" data-item="' + item.id + '" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:180px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>' +
+          '</div>' +
+          '<div class="form-grid tres" style="margin-top:8px">' +
+          '<div class="campo"><label>Unidade da nota</label><input value="' + UI.escapar(item.unidade) + '" readonly></div>' +
+          '<div class="campo"><label>Unidade do sistema</label><input class="unidade-sistema" data-item="' + item.id + '" value="' + (escolha ? escolha.unidade : '-') + '" readonly></div>' +
+          '<div class="campo"><label>Fator de conversão *</label><input class="fator" data-item="' + item.id + '" type="number" step="0.0001" min="0.0001" placeholder="Ex: 1"></div>' +
+          '</div>' +
+          '<p class="qtd-final" data-item="' + item.id + '" style="font-size:13px;color:var(--cinza);margin:6px 0 10px">Quantidade final calculada: informe o fator</p>' +
+          '<button class="btn pequeno vincular" data-item="' + item.id + '">Confirmar vínculo</button>' +
+          '</div>';
+      }).join('');
+    }
+
+    const buscarProdutos = debounce(async (input) => {
+      const itemId = input.dataset.item;
+      const caixa = document.querySelector('.sugestoes[data-item="' + itemId + '"]');
+      const termo = input.value.trim();
+      if (termo.length < 2) { caixa.style.display = 'none'; return; }
+      try {
+        const produtos = await API.get('/api/nfe-entrada/produtos/busca?nome=' + encodeURIComponent(termo));
+        caixa.innerHTML = produtos.length
+          ? produtos.map((p) => '<div class="sugestao" data-id="' + p.id + '" data-nome="' + UI.escapar(p.nome) + '" data-unidade="' + p.unidade + '" style="padding:8px 12px;cursor:pointer">' + UI.escapar(p.nome) + ' <small style="color:var(--cinza)">(' + p.unidade + (p.codigoReferencia ? ' · Ref ' + p.codigoReferencia : '') + ')</small></div>').join('')
+          : '<div style="padding:8px 12px;color:var(--cinza)">Nenhum produto encontrado</div>';
+        caixa.style.display = 'block';
+      } catch (e) { caixa.style.display = 'none'; }
+    }, 300);
+
+    function atualizarQtdFinal(itemId) {
+      const item = notaAberta.itens.find((i) => i.id === itemId);
+      const fator = Number(document.querySelector('.fator[data-item="' + itemId + '"]').value);
+      const alvo = document.querySelector('.qtd-final[data-item="' + itemId + '"]');
+      alvo.textContent = fator > 0
+        ? 'Quantidade final calculada: ' + item.quantidade + ' (nota) × ' + fator + ' (fator) = ' + (Number(item.quantidade) * fator) + ' no sistema'
+        : 'Quantidade final calculada: informe o fator';
+    }
+
+    async function vincularItem(itemId) {
+      const erroEl = $('erroMatching');
+      UI.limparErro(erroEl);
+      const escolha = escolhaPorItem.get(itemId);
+      const fator = Number(document.querySelector('.fator[data-item="' + itemId + '"]').value);
+      if (!escolha) { UI.erro(erroEl, 'Selecione um produto pra este item.'); return; }
+      if (!(fator > 0)) { UI.erro(erroEl, 'Fator de conversão é obrigatório (use 1 quando as unidades forem iguais).'); return; }
+      const item = notaAberta.itens.find((i) => i.id === itemId);
+      try {
+        await API.put('/api/nfe-entrada/' + notaAberta.id + '/itens/' + itemId + '/vincular', {
+          produtoId: escolha.produtoId,
+          unidadeNota: item.unidade,
+          unidadeSistema: escolha.unidade,
+          fatorConversao: fator,
+        });
+        mostrarToast('Item vinculado');
+        item.status = 'ok';
+        renderItens();
+        carregarHistorico();
+      } catch (e) {
+        UI.erro(erroEl, e);
+      }
+    }
+
+    // Delegação de eventos do modal de matching (conteúdo é re-renderizado).
+    $('listaItens').addEventListener('input', (ev) => {
+      const busca = ev.target.closest('.busca-produto');
+      if (busca) { buscarProdutos(busca); return; }
+      const fator = ev.target.closest('.fator');
+      if (fator) atualizarQtdFinal(fator.dataset.item);
+    });
+    $('listaItens').addEventListener('click', (ev) => {
+      const sugestao = ev.target.closest('.sugestao');
+      if (sugestao) {
+        const caixa = sugestao.closest('.sugestoes');
+        const itemId = caixa.dataset.item;
+        escolhaPorItem.set(itemId, { produtoId: sugestao.dataset.id, nome: sugestao.dataset.nome, unidade: sugestao.dataset.unidade });
+        document.querySelector('.busca-produto[data-item="' + itemId + '"]').value = sugestao.dataset.nome;
+        document.querySelector('.unidade-sistema[data-item="' + itemId + '"]').value = sugestao.dataset.unidade;
+        caixa.style.display = 'none';
+        return;
+      }
+      const btn = ev.target.closest('.vincular');
+      if (btn) vincularItem(btn.dataset.item);
+    });
+
+    // ─── Eventos gerais ───
+    $('btnPesquisar').addEventListener('click', pesquisar);
+    $('btnTrazer').addEventListener('click', trazerSelecionadas);
+    $('checkTodosSefaz').addEventListener('change', () => {
+      document.querySelectorAll('.check-nota').forEach((cb) => {
+        cb.checked = $('checkTodosSefaz').checked;
+        if (cb.checked) selecionadas.add(cb.dataset.chave); else selecionadas.delete(cb.dataset.chave);
+      });
+      atualizarBotaoTrazer();
+    });
+    $('tabelaSefaz').addEventListener('change', (ev) => {
+      const cb = ev.target.closest('.check-nota');
+      if (!cb) return;
+      if (cb.checked) selecionadas.add(cb.dataset.chave); else selecionadas.delete(cb.dataset.chave);
+      atualizarBotaoTrazer();
+    });
+
+    const areaSoltar = $('areaSoltar');
+    areaSoltar.addEventListener('click', () => $('arquivoXml').click());
+    areaSoltar.addEventListener('dragover', (ev) => { ev.preventDefault(); areaSoltar.style.borderColor = 'var(--azul)'; });
+    areaSoltar.addEventListener('dragleave', () => { areaSoltar.style.borderColor = 'var(--linha)'; });
+    areaSoltar.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      areaSoltar.style.borderColor = 'var(--linha)';
+      if (ev.dataTransfer.files.length) {
+        $('arquivoXml').files = ev.dataTransfer.files;
+        $('nomeArquivoXml').textContent = ev.dataTransfer.files[0].name;
+        $('btnEnviarXml').disabled = false;
+      }
+    });
+    $('arquivoXml').addEventListener('change', () => {
+      const tem = $('arquivoXml').files.length > 0;
+      $('nomeArquivoXml').textContent = tem ? $('arquivoXml').files[0].name : '';
+      $('btnEnviarXml').disabled = !tem;
+    });
+    $('btnEnviarXml').addEventListener('click', enviarXml);
+
+    $('btnFiltrarHist').addEventListener('click', () => { histPagina = 1; carregarHistorico(); });
+    $('btnHistAnterior').addEventListener('click', () => mudarPaginaHist(-1));
+    $('btnHistProxima').addEventListener('click', () => mudarPaginaHist(1));
+    $('tabelaHist').addEventListener('click', (ev) => {
+      const linha = ev.target.closest('tr[data-id]');
+      if (linha) abrirMatching(linha.dataset.id).catch((e) => UI.erro(erroGeral, e));
+    });
+    $('btnFecharMatching').addEventListener('click', () => UI.fecharModal('modalMatching'));
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('nfe-entrada.html');
+      // Período padrão: últimos 30 dias.
+      const hoje = new Date();
+      $('s_dataFim').value = dataISO(hoje);
+      $('s_dataInicio').value = dataISO(new Date(hoje.getTime() - 30 * 24 * 3600 * 1000));
+      carregarHistorico().catch((e) => UI.erro(erroGeral, e));
+    })();
+  })();
+  </script>
+</body>
+</html>
