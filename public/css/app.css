@@ -141,7 +141,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 .arvore-item.ativo .arvore-seta { color: #fff; }
 .arvore-item .arvore-seta.aberta { transform: rotate(90deg); }
-.arvore-item.sub { padding-left: 34px; }
+/* Subgrupos recuam além do texto do pai (que começa após a seta de 18px),
+   deixando claro que estão "dentro" do grupo, como numa árvore de arquivos. */
+.arvore-item.sub { padding-left: 58px; }
 
 /* Seta de voltar ao lado do título (ex.: Manutenção de Produtos) */
 .btn-voltar {

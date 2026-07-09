@@ -127,7 +127,7 @@
         blocos.push(
           '<div class="arvore-item' + (selecionado && selecionado.id === grupo.id ? ' ativo' : '') + '" data-id="' + grupo.id + '">' +
           (filhos.length > 0
-            ? '<span class="arvore-seta' + (aberto ? ' aberta' : '') + '" data-toggle="' + grupo.id + '">▸</span>'
+            ? '<span class="arvore-seta' + (aberto ? ' aberta' : '') + '">▸</span>'
             : '<span class="arvore-seta"></span>') +
           '<span>' + UI.escapar(grupo.nome) + '</span></div>'
         );
@@ -315,16 +315,18 @@
     }
 
     // ─── Eventos ───
+    // A linha inteira de um grupo pai expande/colapsa E seleciona ao mesmo
+    // tempo (a seta é só indicador visual). Subgrupos não têm o que expandir:
+    // o clique apenas seleciona.
     $('arvore').addEventListener('click', (ev) => {
-      const seta = ev.target.closest('[data-toggle]');
-      if (seta) {
-        const id = seta.dataset.toggle;
-        if (expandidos.has(id)) expandidos.delete(id); else expandidos.add(id);
-        renderArvore();
-        return;
-      }
       const item = ev.target.closest('.arvore-item[data-id]');
-      if (item) selecionar(item.dataset.id);
+      if (!item) return;
+      const id = item.dataset.id;
+      const grupo = arvore.find((g) => g.id === id);
+      if (grupo && (grupo.filhos || []).length > 0) {
+        if (expandidos.has(id)) expandidos.delete(id); else expandidos.add(id);
+      }
+      selecionar(id); // re-renderiza a árvore, refletindo o toggle acima
     });
 
     $('busca').addEventListener('input', debounce((ev) => {
