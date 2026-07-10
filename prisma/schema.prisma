@@ -255,21 +255,71 @@ model Produto {
 
 // ─── FORNECEDOR ───────────────────────────────────────────
 model Fornecedor {
-  id        String   @id @default(uuid())
-  tenantId  String
-  nome      String
-  cnpj      String
-  email     String?
-  telefone  String?
+  id       String  @id @default(uuid())
+  tenantId String
+  nome     String
+  // CNPJ (14 dígitos) quando pessoa_juridica; CPF (11) quando pessoa_fisica
+  cnpj     String
+  tipo     String  @default("pessoa_juridica") // pessoa_juridica | pessoa_fisica
+  email    String?
+  telefone String?
+  celular  String?
+  observacao String? @db.Text
+
+  // Tributário
+  contribuinteIcms String? // contribuinte | nao_contribuinte
+  regimeTributario String? // simples | presumido | real (mesmos valores do Tenant)
+
+  // Endereço
+  cep         String?
+  logradouro  String?
+  numero      String?
+  complemento String?
+  bairro      String?
+  cidade      String?
+  uf          String?
+
+  // Integração Contas a Pagar (módulo financeiro ainda não existe —
+  // captura de dado em texto para uso futuro)
+  finCategoria     String?
+  finTipoDocumento String?
+  finConta         String?
+  finCentroCusto   String?
+
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  nfes   Nfe[]
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id])
+  nfes           Nfe[]
+  representantes FornecedorRepresentante[]
 
   @@unique([tenantId, cnpj])
   @@index([tenantId])
+}
+
+// Representantes comerciais do fornecedor (1:N)
+model FornecedorRepresentante {
+  id           String   @id @default(uuid())
+  fornecedorId String
+  nome         String
+  email        String?
+  telefone     String?
+  celular      String?
+  criadoEm     DateTime @default(now())
+
+  fornecedor Fornecedor @relation(fields: [fornecedorId], references: [id])
+
+  @@index([fornecedorId])
+}
+
+// Cache das consultas ao CNPJ.ws (limite público de 3 req/min):
+// mesma consulta dentro de 30 dias sai daqui sem chamar a API.
+model CnpjConsultaCache {
+  id           String   @id @default(uuid())
+  cnpj         String   @unique
+  resposta     Json
+  consultadoEm DateTime @default(now())
 }
 
 // ─── NF-e ENTRADA ─────────────────────────────────────────

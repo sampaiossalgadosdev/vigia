@@ -5,6 +5,7 @@
  * Utilizado por: fornecedor.routes.js.
  */
 const service = require('../services/fornecedor.service');
+const cnpjConsultaService = require('../services/cnpjConsulta.service');
 const { success, asyncHandler, lerPaginacao } = require('../utils/response');
 
 const listar = asyncHandler(async (req, res) => {
@@ -28,4 +29,17 @@ const remover = asyncHandler(async (req, res) => {
   success(res, await service.remover(req.tenantId, req.params.id, req.usuario, req.ip));
 });
 
-module.exports = { listar, detalhar, criar, atualizar, remover };
+const consultarCnpj = asyncHandler(async (req, res) => {
+  success(res, await cnpjConsultaService.consultar(req.body.cnpj));
+});
+
+const compras = asyncHandler(async (req, res) => {
+  const pag = lerPaginacao(req.query);
+  success(res, await service.compras(req.tenantId, req.params.id, { ...pag, take: pag.limit }));
+});
+
+const produtos = asyncHandler(async (req, res) => {
+  success(res, await service.produtos(req.tenantId, req.params.id));
+});
+
+module.exports = { listar, detalhar, criar, atualizar, remover, consultarCnpj, compras, produtos };

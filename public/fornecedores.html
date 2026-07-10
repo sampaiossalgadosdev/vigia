@@ -7,6 +7,49 @@
   <link rel="icon" type="image/png" href="/img/favicon.png">
   <link rel="stylesheet" href="/css/app.css">
   <script src="/js/navbar.js"></script>
+  <style>
+    /* Cadastro de fornecedor em abas: modal largo com boxes */
+    #modalFornecedor .modal { max-width: 1080px; }
+
+    .box-fornecedor {
+      border: 1px solid var(--linha); border-radius: var(--raio);
+      padding: 16px; margin-bottom: 16px; background: var(--branco);
+    }
+    .box-fornecedor > h3 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--cinza); margin-bottom: 12px;
+    }
+    .boxes-lado-a-lado { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: stretch; }
+    .boxes-lado-a-lado .box-fornecedor { margin-bottom: 16px; }
+    @media (max-width: 900px) { .boxes-lado-a-lado { grid-template-columns: 1fr; } }
+
+    .campo-consulta { display: flex; gap: 8px; align-items: flex-end; }
+    .campo-consulta .campo { flex: 1; }
+    .campo-consulta .btn { white-space: nowrap; padding: 10px 14px; }
+
+    .radios-tipo { display: flex; gap: 18px; align-items: center; padding: 9px 0; }
+    .radios-tipo label { display: flex; gap: 6px; align-items: center; font-size: 14px; cursor: pointer; }
+
+    .tabela-representantes { width: 100%; border-collapse: collapse; }
+    .tabela-representantes th {
+      text-align: left; font-size: 12px; color: var(--cinza);
+      padding: 4px 6px 8px; font-weight: 600;
+    }
+    .tabela-representantes td { padding: 4px 6px; }
+    .tabela-representantes input { width: 100%; }
+    .btn-remover-rep {
+      background: none; border: 1px solid var(--linha); border-radius: 6px;
+      color: var(--alerta); padding: 6px 10px; font-size: 13px;
+    }
+    .btn-remover-rep:hover { background: var(--alerta); border-color: var(--alerta); color: #fff; }
+    .representantes-vazio { font-size: 13px; color: var(--cinza); padding: 6px; }
+
+    .aba-conteudo { display: none; }
+    .aba-conteudo.ativa { display: block; }
+    .aba-dica { font-size: 13px; color: var(--cinza); padding: 24px; text-align: center; }
+
+    .fin-aviso { font-size: 12.5px; color: var(--cinza); margin-top: 10px; }
+  </style>
 </head>
 <body>
   <div class="layout">
@@ -23,7 +66,7 @@
 
       <div class="painel">
         <table>
-          <thead><tr><th>Nome</th><th>CNPJ</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
+          <thead><tr><th>Nome</th><th>CNPJ/CPF</th><th>E-mail</th><th>Telefone</th><th></th></tr></thead>
           <tbody id="tabela"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
         </table>
         <div class="paginacao">
@@ -39,12 +82,126 @@
     <div class="modal">
       <h2 id="tituloModal">Novo fornecedor</h2>
       <div id="erroModal" class="msg-erro"></div>
-      <div class="form-grid">
-        <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="200"></div>
-        <div class="campo"><label>CNPJ *</label><input id="f_cnpj" maxlength="18" placeholder="Somente números"></div>
-        <div class="campo"><label>Telefone</label><input id="f_telefone" maxlength="20"></div>
-        <div class="campo cheio"><label>E-mail</label><input id="f_email" type="email"></div>
+
+      <div class="abas">
+        <button type="button" class="ativa" data-aba="dados">Dados Cadastrais</button>
+        <button type="button" data-aba="financeiro">Configurações Financeiras</button>
+        <button type="button" data-aba="compras">Histórico de Compras</button>
+        <button type="button" data-aba="produtos">Produtos</button>
       </div>
+
+      <!-- ─── Aba Dados Cadastrais ─── -->
+      <div class="aba-conteudo ativa" data-conteudo="dados">
+        <div class="boxes-lado-a-lado">
+          <div class="box-fornecedor">
+            <h3>Informações do Fornecedor</h3>
+            <div class="campo cheio"><label>Nome / Razão Social *</label><input id="f_nome" maxlength="200"></div>
+            <div class="campo cheio">
+              <label>Tipo</label>
+              <div class="radios-tipo">
+                <label><input type="radio" name="f_tipo" value="pessoa_juridica" checked> Pessoa Jurídica</label>
+                <label><input type="radio" name="f_tipo" value="pessoa_fisica"> Pessoa Física</label>
+              </div>
+            </div>
+            <div class="campo-consulta">
+              <div class="campo"><label id="labelDocumento">CNPJ *</label><input id="f_cnpj" maxlength="18" placeholder="Somente números"></div>
+              <button class="btn secundario" id="btnConsultarCnpj">Consultar</button>
+            </div>
+          </div>
+
+          <div class="box-fornecedor">
+            <h3>Dados para Contato</h3>
+            <div class="form-grid">
+              <div class="campo"><label>Telefone</label><input id="f_telefone" maxlength="20"></div>
+              <div class="campo"><label>Celular</label><input id="f_celular" maxlength="20"></div>
+              <div class="campo cheio"><label>E-mail</label><input id="f_email" type="email"></div>
+              <div class="campo cheio"><label>Observação</label><textarea id="f_observacao" rows="2" maxlength="1000"></textarea></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="box-fornecedor">
+          <h3>Configurações Tributárias</h3>
+          <div class="form-grid">
+            <div class="campo">
+              <label>Contribuinte ICMS</label>
+              <select id="f_contribuinteIcms">
+                <option value="">Não informado</option>
+                <option value="contribuinte">Contribuinte ICMS</option>
+                <option value="nao_contribuinte">Não Contribuinte</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Regime Tributário</label>
+              <select id="f_regimeTributario">
+                <option value="">Não informado</option>
+                <option value="simples">Simples Nacional</option>
+                <option value="presumido">Lucro Presumido</option>
+                <option value="real">Lucro Real</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="box-fornecedor">
+          <h3>Endereço</h3>
+          <div class="form-grid tres">
+            <div class="campo"><label>CEP</label><input id="f_cep" maxlength="9"></div>
+            <div class="campo"><label>Rua</label><input id="f_logradouro" maxlength="200"></div>
+            <div class="campo"><label>Número</label><input id="f_numero" maxlength="20"></div>
+            <div class="campo"><label>Complemento</label><input id="f_complemento" maxlength="100"></div>
+            <div class="campo"><label>Bairro</label><input id="f_bairro" maxlength="100"></div>
+            <div class="campo"><label>Cidade</label><input id="f_cidade" maxlength="100"></div>
+            <div class="campo"><label>Estado (UF)</label><input id="f_uf" maxlength="2" placeholder="Ex: SP" style="text-transform:uppercase"></div>
+          </div>
+        </div>
+
+        <div class="box-fornecedor">
+          <h3>Representantes do Fornecedor</h3>
+          <table class="tabela-representantes">
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Celular</th><th></th></tr></thead>
+            <tbody id="listaRepresentantes"></tbody>
+          </table>
+          <div class="representantes-vazio" id="representantesVazio">Nenhum representante adicionado.</div>
+          <button class="btn secundario pequeno" id="btnAddRepresentante" style="margin-top:8px">+ Adicionar representante</button>
+        </div>
+      </div>
+
+      <!-- ─── Aba Configurações Financeiras ─── -->
+      <div class="aba-conteudo" data-conteudo="financeiro">
+        <div class="box-fornecedor">
+          <h3>Integração Contas a Pagar do Financeiro</h3>
+          <div class="form-grid">
+            <div class="campo"><label>Categoria</label><input id="f_finCategoria" maxlength="120"></div>
+            <div class="campo"><label>Tipo do Documento</label><input id="f_finTipoDocumento" maxlength="120"></div>
+            <div class="campo"><label>Conta</label><input id="f_finConta" maxlength="120"></div>
+            <div class="campo"><label>Centro de Custo</label><input id="f_finCentroCusto" maxlength="120"></div>
+          </div>
+          <p class="fin-aviso">Estes campos ficam guardados para a integração com o módulo financeiro (em desenvolvimento).</p>
+        </div>
+      </div>
+
+      <!-- ─── Aba Histórico de Compras ─── -->
+      <div class="aba-conteudo" data-conteudo="compras">
+        <table>
+          <thead><tr><th>Data</th><th>Número do Documento</th><th>Qtde. de Itens</th><th>Valor Total</th></tr></thead>
+          <tbody id="tabelaCompras"></tbody>
+        </table>
+        <div class="paginacao">
+          <button class="btn secundario pequeno" id="btnComprasAnterior">Anterior</button>
+          <span id="infoCompras"></span>
+          <button class="btn secundario pequeno" id="btnComprasProxima">Próxima</button>
+        </div>
+      </div>
+
+      <!-- ─── Aba Produtos ─── -->
+      <div class="aba-conteudo" data-conteudo="produtos">
+        <table>
+          <thead><tr><th>Cód. Ref.</th><th>Produto</th><th>Última Compra</th><th>Valor Total do Item</th><th>Custo Unitário (última compra)</th></tr></thead>
+          <tbody id="tabelaProdutosForn"></tbody>
+        </table>
+      </div>
+
       <div class="rodape">
         <button class="btn secundario" id="btnCancelarFornecedor">Cancelar</button>
         <button class="btn" id="btnSalvar">Salvar</button>
@@ -59,6 +216,7 @@
   (() => {
     initNavbar();
     let pagina = 1, totalPaginas = 1, editandoId = null;
+    let paginaCompras = 1, totalPaginasCompras = 1;
 
     // Referências capturadas na injeção do script: se o usuário navegar para
     // outra página antes de um fetch terminar, buscar por id retornaria null;
@@ -66,9 +224,18 @@
     const $ = (id) => document.getElementById(id);
     const busca = $('busca'), tabela = $('tabela'), infoPagina = $('infoPagina');
     const tituloModal = $('tituloModal'), erroModal = $('erroModal');
-    const fNome = $('f_nome'), fCnpj = $('f_cnpj'), fTelefone = $('f_telefone'), fEmail = $('f_email');
+    const labelDocumento = $('labelDocumento'), listaRepresentantes = $('listaRepresentantes'),
+          representantesVazio = $('representantesVazio');
+    const tabelaCompras = $('tabelaCompras'), infoCompras = $('infoCompras'),
+          tabelaProdutosForn = $('tabelaProdutosForn');
 
-    /** Validação de CNPJ no frontend (formato + dígitos verificadores). */
+    // Campos simples do formulário (id do elemento = f_<campo do body>)
+    const CAMPOS = ['nome', 'cnpj', 'telefone', 'celular', 'email', 'observacao',
+      'contribuinteIcms', 'regimeTributario',
+      'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf',
+      'finCategoria', 'finTipoDocumento', 'finConta', 'finCentroCusto'];
+
+    /** Validações de documento no frontend (formato + dígitos verificadores). */
     function cnpjValido(valor) {
       const cnpj = String(valor || '').replace(/\D/g, '');
       if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
@@ -82,6 +249,22 @@
         && calc(n.slice(0, 13), [6,5,4,3,2,9,8,7,6,5,4,3,2]) === n[13];
     }
 
+    function cpfValido(valor) {
+      const cpf = String(valor || '').replace(/\D/g, '');
+      if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+      const calc = (qtd) => {
+        let soma = 0;
+        for (let i = 0; i < qtd; i++) soma += Number(cpf[i]) * (qtd + 1 - i);
+        const resto = (soma * 10) % 11;
+        return resto === 10 ? 0 : resto;
+      };
+      return calc(9) === Number(cpf[9]) && calc(10) === Number(cpf[10]);
+    }
+
+    const tipoSelecionado = () => document.querySelector('input[name="f_tipo"]:checked').value;
+    const dataBr = (v) => (v ? new Date(v).toLocaleDateString('pt-BR') : '-');
+
+    // ─── Lista principal ───
     async function carregar() {
       const termo = encodeURIComponent(busca.value.trim());
       const data = await API.get('/api/fornecedores?page=' + pagina + '&limit=20&search=' + termo);
@@ -102,11 +285,72 @@
       pagina = nova; carregar();
     }
 
+    // ─── Abas ───
+    function mostrarAba(aba) {
+      document.querySelectorAll('.abas [data-aba]').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.dataset.conteudo === aba));
+      if (aba === 'compras') carregarCompras();
+      if (aba === 'produtos') carregarProdutosForn();
+    }
+
+    // ─── Representantes (linhas editáveis) ───
+    function linhaRepresentante(r = {}) {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><input data-rep="nome" maxlength="200" placeholder="Nome do representante"></td>' +
+        '<td><input data-rep="email" type="email" placeholder="email@exemplo.com"></td>' +
+        '<td><input data-rep="telefone" maxlength="20"></td>' +
+        '<td><input data-rep="celular" maxlength="20"></td>' +
+        '<td><button type="button" class="btn-remover-rep" title="Remover">✕</button></td>';
+      tr.querySelector('[data-rep="nome"]').value = r.nome || '';
+      tr.querySelector('[data-rep="email"]').value = r.email || '';
+      tr.querySelector('[data-rep="telefone"]').value = r.telefone || '';
+      tr.querySelector('[data-rep="celular"]').value = r.celular || '';
+      tr.querySelector('.btn-remover-rep').addEventListener('click', () => { tr.remove(); atualizarVazioReps(); });
+      return tr;
+    }
+
+    function atualizarVazioReps() {
+      representantesVazio.style.display = listaRepresentantes.children.length ? 'none' : '';
+    }
+
+    function preencherRepresentantes(lista) {
+      listaRepresentantes.innerHTML = '';
+      (lista || []).forEach((r) => listaRepresentantes.appendChild(linhaRepresentante(r)));
+      atualizarVazioReps();
+    }
+
+    function coletarRepresentantes() {
+      return [...listaRepresentantes.querySelectorAll('tr')].map((tr) => ({
+        nome: tr.querySelector('[data-rep="nome"]').value.trim(),
+        email: tr.querySelector('[data-rep="email"]').value.trim(),
+        telefone: tr.querySelector('[data-rep="telefone"]').value.trim(),
+        celular: tr.querySelector('[data-rep="celular"]').value.trim(),
+      })).filter((r) => r.nome);
+    }
+
+    // ─── Abrir/preencher modal ───
+    function aplicarTipo(tipo) {
+      document.querySelector('input[name="f_tipo"][value="' + tipo + '"]').checked = true;
+      labelDocumento.textContent = tipo === 'pessoa_fisica' ? 'CPF *' : 'CNPJ *';
+    }
+
+    function limparFormulario() {
+      CAMPOS.forEach((campo) => { $('f_' + campo).value = ''; });
+      aplicarTipo('pessoa_juridica');
+      preencherRepresentantes([]);
+      tabelaCompras.innerHTML = '';
+      tabelaProdutosForn.innerHTML = '';
+      infoCompras.textContent = '';
+      paginaCompras = 1;
+    }
+
     function abrirNovo() {
       editandoId = null;
       tituloModal.textContent = 'Novo fornecedor';
       UI.limparErro(erroModal);
-      [fNome, fCnpj, fTelefone, fEmail].forEach((campo) => campo.value = '');
+      limparFormulario();
+      mostrarAba('dados');
       UI.abrirModal('modalFornecedor');
     }
 
@@ -115,33 +359,62 @@
       editandoId = id;
       tituloModal.textContent = 'Editar fornecedor';
       UI.limparErro(erroModal);
-      fNome.value = f.nome;
-      fCnpj.value = f.cnpj;
-      fTelefone.value = f.telefone || '';
-      fEmail.value = f.email || '';
+      limparFormulario();
+      CAMPOS.forEach((campo) => { $('f_' + campo).value = f[campo] || ''; });
+      aplicarTipo(f.tipo || 'pessoa_juridica');
+      preencherRepresentantes(f.representantes);
+      mostrarAba('dados');
       UI.abrirModal('modalFornecedor');
     }
 
+    // ─── Consulta CNPJ ───
+    async function consultarCnpj() {
+      const botao = $('btnConsultarCnpj');
+      if (tipoSelecionado() === 'pessoa_fisica') { mostrarToast('A consulta automática vale só para CNPJ (Pessoa Jurídica)', 'erro'); return; }
+      if (!cnpjValido($('f_cnpj').value)) { mostrarToast('Informe um CNPJ válido antes de consultar', 'erro'); return; }
+      botao.disabled = true;
+      botao.textContent = 'Consultando...';
+      try {
+        const d = await API.post('/api/fornecedores/consultar-cnpj', { cnpj: $('f_cnpj').value.replace(/\D/g, '') });
+        if (d.razaoSocial) $('f_nome').value = d.razaoSocial;
+        ['cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf'].forEach((campo) => {
+          if (d[campo]) $('f_' + campo).value = d[campo];
+        });
+        if (d.email && !$('f_email').value) $('f_email').value = d.email;
+        if (d.telefone && !$('f_telefone').value) $('f_telefone').value = d.telefone;
+        mostrarToast('Dados preenchidos pela Receita' + (d.deCache ? ' (consulta recente em cache)' : ''), 'sucesso');
+      } catch (e) {
+        mostrarToast(e.message || 'Falha na consulta — preencha manualmente', 'erro');
+      } finally {
+        botao.disabled = false;
+        botao.textContent = 'Consultar';
+      }
+    }
+
+    // ─── Salvar ───
     async function salvar() {
       UI.limparErro(erroModal);
-      const cnpj = fCnpj.value;
-      if (!cnpjValido(cnpj)) {
-        UI.erro(erroModal, 'CNPJ inválido: verifique os 14 dígitos.');
+      const tipo = tipoSelecionado();
+      const documento = $('f_cnpj').value;
+      const documentoOk = tipo === 'pessoa_fisica' ? cpfValido(documento) : cnpjValido(documento);
+      if (!documentoOk) {
+        UI.erro(erroModal, tipo === 'pessoa_fisica' ? 'CPF inválido: verifique os 11 dígitos.' : 'CNPJ inválido: verifique os 14 dígitos.');
+        mostrarAba('dados');
         return;
       }
-      const body = {
-        nome: fNome.value.trim(),
-        cnpj: cnpj.replace(/\D/g, ''),
-        telefone: fTelefone.value.trim(),
-        email: fEmail.value.trim(),
-      };
+      const body = { tipo, representantes: coletarRepresentantes() };
+      CAMPOS.forEach((campo) => { body[campo] = $('f_' + campo).value.trim(); });
+      body.cnpj = documento.replace(/\D/g, '');
+      body.uf = body.uf.toUpperCase();
       try {
         if (editandoId) await API.put('/api/fornecedores/' + editandoId, body);
         else await API.post('/api/fornecedores', body);
         UI.fecharModal('modalFornecedor');
+        mostrarToast('Fornecedor salvo', 'sucesso');
         carregar();
       } catch (e) {
         UI.erro(erroModal, e);
+        mostrarAba('dados');
       }
     }
 
@@ -152,12 +425,69 @@
       });
     }
 
+    // ─── Histórico de Compras ───
+    async function carregarCompras() {
+      if (!editandoId) {
+        tabelaCompras.innerHTML = '<tr><td colspan="4" class="aba-dica">Salve o fornecedor para ver o histórico de compras.</td></tr>';
+        infoCompras.textContent = '';
+        return;
+      }
+      const data = await API.get('/api/fornecedores/' + editandoId + '/compras?page=' + paginaCompras + '&limit=10');
+      totalPaginasCompras = data.totalPages || 1;
+      infoCompras.textContent = data.total ? 'Página ' + data.page + ' de ' + totalPaginasCompras + ' · ' + data.total + ' compras' : '';
+      if (!data.items.length) {
+        tabelaCompras.innerHTML = '<tr><td colspan="4" class="vazio">Nenhuma compra registrada deste fornecedor.</td></tr>';
+        return;
+      }
+      tabelaCompras.innerHTML = data.items.map((c) =>
+        '<tr><td>' + dataBr(c.dataEmissao) + '</td><td>' + UI.escapar(c.numeroNfe) + '</td>' +
+        '<td>' + c.qtdeItens + '</td><td>' + UI.moeda(c.valorTotal) + '</td></tr>'
+      ).join('');
+    }
+
+    function mudarPaginaCompras(delta) {
+      const nova = paginaCompras + delta;
+      if (nova < 1 || nova > totalPaginasCompras) return;
+      paginaCompras = nova; carregarCompras();
+    }
+
+    // ─── Produtos do fornecedor ───
+    async function carregarProdutosForn() {
+      if (!editandoId) {
+        tabelaProdutosForn.innerHTML = '<tr><td colspan="5" class="aba-dica">Salve o fornecedor para ver os produtos comprados dele.</td></tr>';
+        return;
+      }
+      const data = await API.get('/api/fornecedores/' + editandoId + '/produtos');
+      if (!data.items.length) {
+        tabelaProdutosForn.innerHTML = '<tr><td colspan="5" class="vazio">Nenhum produto comprado deste fornecedor ainda.</td></tr>';
+        return;
+      }
+      tabelaProdutosForn.innerHTML = data.items.map((p) =>
+        '<tr><td>' + UI.escapar(p.codigoReferencia || '-') + '</td><td>' + UI.escapar(p.nome) + '</td>' +
+        '<td>' + dataBr(p.ultimaCompra) + '</td><td>' + UI.moeda(p.valorTotalItem) + '</td>' +
+        '<td>' + UI.moeda(p.custoUnitario) + '</td></tr>'
+      ).join('');
+    }
+
     // ─── Eventos ───
     $('btnNovoFornecedor').addEventListener('click', abrirNovo);
     $('btnPaginaAnterior').addEventListener('click', () => mudarPagina(-1));
     $('btnPaginaProxima').addEventListener('click', () => mudarPagina(1));
+    $('btnComprasAnterior').addEventListener('click', () => mudarPaginaCompras(-1));
+    $('btnComprasProxima').addEventListener('click', () => mudarPaginaCompras(1));
     $('btnCancelarFornecedor').addEventListener('click', () => UI.fecharModal('modalFornecedor'));
     $('btnSalvar').addEventListener('click', salvar);
+    $('btnConsultarCnpj').addEventListener('click', consultarCnpj);
+    $('btnAddRepresentante').addEventListener('click', () => {
+      listaRepresentantes.appendChild(linhaRepresentante());
+      atualizarVazioReps();
+    });
+    document.querySelectorAll('input[name="f_tipo"]').forEach((radio) => {
+      radio.addEventListener('change', () => aplicarTipo(tipoSelecionado()));
+    });
+    document.querySelectorAll('.abas [data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => mostrarAba(btn.dataset.aba));
+    });
     busca.addEventListener('input', () => { pagina = 1; carregar(); });
     tabela.addEventListener('click', (ev) => {
       const btn = ev.target.closest('button[data-acao]');
