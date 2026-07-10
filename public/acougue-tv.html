@@ -62,6 +62,11 @@
 
     .modal-destaque-produto { font-size: 14px; color: var(--cinza); margin: -6px 0 14px; }
     .modal-destaque-produto b { color: var(--grafite); }
+
+    /* Centraliza o modal de destaque na tela (o padrão global alinha no topo).
+       O margin:auto mantém o centro e ainda permite rolar se faltar altura. */
+    #modalDestaque { align-items: center; }
+    #modalDestaque .modal { margin: auto; }
   </style>
 </head>
 <body>
