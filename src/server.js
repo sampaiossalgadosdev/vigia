@@ -75,6 +75,9 @@ app.use((err, req, res, next) => {
   return error(res, 'Erro interno do servidor', [], 500);
 });
 
-app.listen(appConfig.port, () => {
+const server = app.listen(appConfig.port, () => {
   logger.info(`VIGIA rodando em http://localhost:${appConfig.port} (${appConfig.env})`);
 });
+
+// WebSocket dos PDVs (mesmo host/porta da API HTTP)
+require('./ws/pdvGateway').init(server);
