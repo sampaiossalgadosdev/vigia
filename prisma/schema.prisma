@@ -71,6 +71,9 @@ model Tenant {
   certificadoUploadEm    DateTime?
   // Cursor da Distribuição DF-e: último NSU já recebido da SEFAZ.
   ultimoNsu              String      @default("0")
+  // Token do link público da tela Açougue TV (tv.html?token=...): liga a
+  // televisão ao tenant sem login. Gerado/regenerado no painel Açougue TV.
+  tvToken                String?     @unique
   criadoEm               DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
 

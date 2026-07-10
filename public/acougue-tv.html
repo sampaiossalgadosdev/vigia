@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Açougue TV</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
+  <style>
+    /* Estilos do painel Açougue TV (grid de cards das carnes) */
+    .link-tv-linha { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .link-tv-linha input {
+      flex: 1; min-width: 260px; padding: 10px 12px; font-size: 13px;
+      font-family: monospace; color: var(--grafite);
+      border: 1px solid var(--linha); border-radius: var(--raio); background: var(--fundo);
+    }
+    .link-tv-dica { font-size: 12.5px; color: var(--cinza); margin-top: 10px; }
+
+    .carnes-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 22px 0 14px; }
+    .carnes-topo .contagem { font-size: 14px; color: var(--cinza); }
+
+    .grid-carnes {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .carne-card {
+      background: var(--branco);
+      border: 1px solid var(--linha); border-radius: var(--raio);
+      overflow: hidden;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .carne-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(2,18,38,.08); }
+    .carne-foto {
+      width: 100%; height: 150px; object-fit: cover; display: block;
+      background: var(--azul-claro);
+    }
+    .carne-body { padding: 14px; }
+    .carne-badges { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+    .badge-carne {
+      font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+      background: var(--azul-claro); color: var(--azul-escuro);
+    }
+    .badge-carne.destaque { background: #fdf4e3; color: var(--amarelo); }
+    .carne-nome { font-size: 15px; font-weight: 700; color: var(--grafite); margin-bottom: 6px; line-height: 1.3; }
+    .carne-preco-original { font-size: 12px; color: var(--cinza); text-decoration: line-through; }
+    .carne-preco { font-size: 19px; font-weight: 700; color: var(--azul); }
+    .carne-preco small { font-size: 12px; font-weight: 400; color: var(--cinza); }
+    .carne-off { font-size: 12px; color: var(--verde); font-weight: 600; margin-top: 2px; }
+
+    .grid-vazio {
+      grid-column: 1 / -1; text-align: center; padding: 60px 20px;
+      color: var(--cinza); background: var(--branco);
+      border: 1px dashed var(--linha); border-radius: var(--raio);
+    }
+    .grid-vazio strong { display: block; font-size: 16px; color: var(--grafite); margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Açougue TV</h1>
+      </div>
+
+      <div class="painel">
+        <h2 style="font-size:15px;margin-bottom:10px">Link da TV</h2>
+        <div class="link-tv-linha">
+          <input id="inputLinkTv" readonly placeholder="Nenhum link gerado ainda">
+          <button class="btn secundario" id="btnCopiarLink">Copiar</button>
+          <button class="btn" id="btnGerarLink">Gerar link</button>
+        </div>
+        <p class="link-tv-dica">
+          Abra este link no navegador da televisão do açougue: ela fica conectada a este supermercado
+          e passa a exibir as carnes automaticamente. Gerar um novo link desconecta as TVs que usavam o anterior.
+        </p>
+      </div>
+
+      <div class="carnes-topo">
+        <span class="contagem" id="contagem">Carregando...</span>
+        <span class="contagem">Produtos com promoção vigente entram como destaque na TV.</span>
+      </div>
+      <div class="grid-carnes" id="gridCarnes"></div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+    const gridCarnes = $('gridCarnes'), contagem = $('contagem'),
+          inputLinkTv = $('inputLinkTv'), btnGerarLink = $('btnGerarLink'), btnCopiarLink = $('btnCopiarLink');
+
+    const FOTO_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="150"><rect fill="#e9f2fe" width="400" height="150"/><text fill="#5a6b7e" x="200" y="85" text-anchor="middle" font-size="40">🥩</text></svg>'
+    );
+
+    function montarLink(tvToken) {
+      return tvToken ? window.location.origin + '/tv.html?token=' + tvToken : '';
+    }
+
+    function renderCard(p) {
+      const badges = [];
+      if (p.destaque) badges.push('<span class="badge-carne destaque">★ Destaque</span>');
+      if (p.categoria) badges.push('<span class="badge-carne">' + UI.escapar(p.categoria) + '</span>');
+
+      const unidade = '<small>/' + UI.escapar((p.unidade || 'KG').toLowerCase()) + '</small>';
+      const preco = p.destaque
+        ? '<div class="carne-preco-original">De ' + UI.moeda(p.preco) + '</div>' +
+          '<div class="carne-preco">' + UI.moeda(p.precoPromocional) + unidade + '</div>' +
+          (p.percentualOff ? '<div class="carne-off">↓ ' + p.percentualOff + '% de desconto</div>' : '')
+        : '<div class="carne-preco">' + UI.moeda(p.preco) + unidade + '</div>';
+
+      return '<div class="carne-card">' +
+        '<img class="carne-foto" src="' + (p.imagemUrl ? UI.escapar(p.imagemUrl) : FOTO_PLACEHOLDER) + '" alt="" onerror="this.src=\'' + FOTO_PLACEHOLDER.replace(/'/g, '&#39;') + '\'">' +
+        '<div class="carne-body">' +
+        '<div class="carne-badges">' + badges.join('') + '</div>' +
+        '<div class="carne-nome">' + UI.escapar(p.nome) + '</div>' +
+        preco +
+        '</div></div>';
+    }
+
+    async function carregarCarnes() {
+      const data = await API.get('/api/acougue-tv/produtos');
+      if (!data.grupo) {
+        contagem.textContent = 'Grupo "Açougue" não encontrado';
+        gridCarnes.innerHTML = '<div class="grid-vazio"><strong>Crie o grupo de categorias "Açougue"</strong>' +
+          'A TV exibe os produtos ativos do grupo "Açougue" e de seus subgrupos. Crie-o em Produtos → Categorias de Produtos.</div>';
+        return;
+      }
+      contagem.textContent = data.total + ' produto' + (data.total !== 1 ? 's' : '') + ' no açougue' +
+        (data.categorias.length ? ' · ' + data.categorias.length + ' categorias' : '');
+      if (!data.items.length) {
+        gridCarnes.innerHTML = '<div class="grid-vazio"><strong>Nenhum produto no açougue</strong>' +
+          'Cadastre produtos nas categorias do grupo "Açougue" para exibi-los na TV.</div>';
+        return;
+      }
+      gridCarnes.innerHTML = data.items.map(renderCard).join('');
+    }
+
+    async function carregarLink() {
+      const data = await API.get('/api/acougue-tv/link');
+      inputLinkTv.value = montarLink(data.tvToken);
+      btnGerarLink.textContent = data.tvToken ? 'Gerar novo link' : 'Gerar link';
+    }
+
+    async function gerarLink() {
+      if (inputLinkTv.value && !confirm('Gerar um novo link desconecta as TVs que usam o link atual. Continuar?')) return;
+      const data = await API.post('/api/acougue-tv/link', {});
+      inputLinkTv.value = montarLink(data.tvToken);
+      btnGerarLink.textContent = 'Gerar novo link';
+      mostrarToast('Link da TV gerado', 'sucesso');
+    }
+
+    function copiarLink() {
+      if (!inputLinkTv.value) { mostrarToast('Gere o link primeiro', 'erro'); return; }
+      navigator.clipboard.writeText(inputLinkTv.value).then(() => mostrarToast('Link copiado', 'sucesso'));
+    }
+
+    btnGerarLink.addEventListener('click', () => gerarLink().catch((e) => mostrarToast(e.message, 'erro')));
+    btnCopiarLink.addEventListener('click', copiarLink);
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('acougue-tv.html');
+      await Promise.all([carregarCarnes(), carregarLink()]).catch((e) => mostrarToast(e.message, 'erro'));
+    })();
+  })();
+  </script>
+</body>
+</html>

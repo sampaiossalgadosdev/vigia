@@ -134,6 +134,7 @@ const Auth = (() => {
       ['nfe-entrada.html', 'NF-e de Entrada', 'estoque'],
       ['vendas.html', 'Vendas', 'vendas'],
       ['promocoes.html', 'Promoções', 'promocoes'],
+      ['acougue-tv.html', 'Açougue TV', 'produtos'],
       ['caixa.html', 'Caixa', 'caixa'],
       ['relatorios.html', 'Relatórios', 'relatorios'],
       ['ia.html', 'IA', 'ia'],

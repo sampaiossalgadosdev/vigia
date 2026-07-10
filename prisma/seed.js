@@ -8,6 +8,7 @@
  */
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { SUBGRUPOS_ACOUGUE, eanDoPlu } = require('./acougue-carnes');
 
 const prisma = new PrismaClient();
 
@@ -139,6 +140,23 @@ async function criarTenant({ nome, cnpjBase, email, regimeTributario, plano, sen
       })
     );
     seq++;
+  }
+
+  // Açougue completo: subgrupos do grupo "Açougue" com 8 carnes cada
+  // (mesmo catálogo aplicado em banco existente por scripts/seed-acougue.js)
+  for (const sub of SUBGRUPOS_ACOUGUE) {
+    const subgrupo = await prisma.categoria.create({
+      data: { tenantId: tenant.id, nome: sub.nome, parentId: categorias['Açougue'].id },
+    });
+    for (const [nomeC, ncm, preco, custo, estoque, minimo, plu] of sub.carnes) {
+      await prisma.produto.create({
+        data: {
+          tenantId: tenant.id, ean: eanDoPlu(plu), nome: nomeC, ncm, plu,
+          unidade: 'KG', vendidoPorPeso: true, preco, custoMedio: custo,
+          estoqueQtd: estoque, estoqueMin: minimo, categoriaId: subgrupo.id,
+        },
+      });
+    }
   }
 
   // Movimentações recentes para dashboard e painel de rede não ficarem vazios

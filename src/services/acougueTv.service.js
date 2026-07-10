@@ -1,0 +1,93 @@
+/**
+ * Arquivo: acougueTv.service.js
+ * Responsabilidade: Regras do Açougue TV — monta o painel de carnes (produtos
+ * do grupo "Açougue" e subgrupos) com preço promocional calculado, resolve a
+ * tela pública da TV via tvToken e gera/regenera o token do link da TV.
+ * Destaque = produto com promoção vigente (percentual/valor_fixo), reusando o
+ * módulo Promoções em vez de duplicar dado de desconto.
+ * Utilizado por: acougueTv.controller.
+ * Depende de: acougueTv.repository, promocao.repository, auditoria.repository.
+ */
+const crypto = require('crypto');
+const acougueTvRepo = require('../repositories/acougueTv.repository');
+const promocaoRepo = require('../repositories/promocao.repository');
+const auditoriaRepo = require('../repositories/auditoria.repository');
+const { AppError } = require('../utils/response');
+
+/**
+ * Preço unitário com a promoção aplicada — mesmo cálculo do backend de vendas
+ * (venda.service.normalizarPreco): percentual e valor_fixo mudam o preço;
+ * leve_pague não altera o unitário.
+ */
+function precoPromocional(preco, promocao) {
+  const base = Number(preco);
+  if (!promocao) return null;
+  if (promocao.tipo === 'percentual') return Math.round(base * (1 - Number(promocao.desconto) / 100) * 100) / 100;
+  if (promocao.tipo === 'valor_fixo') return Math.max(0, Math.round((base - Number(promocao.desconto)) * 100) / 100);
+  return null;
+}
+
+function montarItem(produto, promocao) {
+  const promo = precoPromocional(produto.preco, promocao);
+  const preco = Number(produto.preco);
+  return {
+    id: produto.id,
+    nome: produto.nome,
+    unidade: produto.unidade,
+    imagemUrl: produto.imagemUrl,
+    categoria: produto.categoria ? produto.categoria.nome : null,
+    preco,
+    precoPromocional: promo,
+    percentualOff: promo !== null && preco > 0 ? Math.round((1 - promo / preco) * 100) : null,
+    destaque: promo !== null,
+  };
+}
+
+/**
+ * Produtos exibidos na TV: tudo que está ativo no grupo "Açougue" ou em
+ * qualquer subgrupo dele. Sem o grupo, o painel orienta a criá-lo.
+ */
+async function painel(tenantId) {
+  const grupo = await acougueTvRepo.buscarGrupoAcougue(tenantId);
+  if (!grupo) return { grupo: null, categorias: [], items: [], total: 0 };
+
+  const categoriaIds = [grupo.id, ...grupo.filhos.map((f) => f.id)];
+  const [produtos, promocoes] = await Promise.all([
+    acougueTvRepo.listarProdutos(tenantId, categoriaIds),
+    promocaoRepo.vigentes(tenantId),
+  ]);
+  const promoPorProduto = new Map(promocoes.map((p) => [p.produtoId, p]));
+
+  const items = produtos.map((p) => montarItem(p, promoPorProduto.get(p.id)));
+  return { grupo: grupo.nome, categorias: grupo.filhos.map((f) => f.nome), items, total: items.length };
+}
+
+/** Tela pública da TV: autentica pelo token do link e devolve o mesmo painel. */
+async function telaTv(token) {
+  if (!token || !String(token).trim()) throw new AppError('Token da TV não informado', 401);
+  const tenant = await acougueTvRepo.buscarTenantPorTvToken(String(token).trim());
+  if (!tenant) throw new AppError('Token da TV inválido', 401);
+  const dados = await painel(tenant.id);
+  return { tenantNome: tenant.nome, ...dados };
+}
+
+async function obterLink(tenantId) {
+  const tenant = await acougueTvRepo.buscarTvToken(tenantId);
+  return { tvToken: tenant ? tenant.tvToken : null };
+}
+
+/**
+ * Gera (ou regenera) o token do link da TV. Regenerar invalida o link
+ * anterior — TVs já conectadas precisam abrir o link novo.
+ */
+async function gerarLink(tenantId, usuario, ip) {
+  const tvToken = crypto.randomBytes(24).toString('hex');
+  await acougueTvRepo.definirTvToken(tenantId, tvToken);
+  await auditoriaRepo.registrar({
+    tenantId, usuarioId: usuario.id, acao: 'editar', entidade: 'Tenant', entidadeId: tenantId,
+    depois: { tvToken: 'regenerado' }, ip,
+  });
+  return { tvToken };
+}
+
+module.exports = { painel, telaTv, obterLink, gerarLink };
