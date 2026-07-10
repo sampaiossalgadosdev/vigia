@@ -8,14 +8,16 @@
   <link rel="stylesheet" href="/css/app.css">
   <script src="/js/navbar.js"></script>
   <style>
-    /* Estilos do painel Açougue TV (grid de cards das carnes) */
-    .link-tv-linha { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .link-tv-linha input {
-      flex: 1; min-width: 260px; padding: 10px 12px; font-size: 13px;
-      font-family: monospace; color: var(--grafite);
-      border: 1px solid var(--linha); border-radius: var(--raio); background: var(--fundo);
+    /* Estilos do painel Açougue TV (token da TV e grid de cards das carnes) */
+    .token-tv-linha { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .token-tv-valor {
+      min-width: 170px; padding: 10px 16px; text-align: center;
+      font-family: monospace; font-size: 22px; font-weight: 700; letter-spacing: 6px;
+      color: var(--marinho); background: var(--fundo);
+      border: 1px solid var(--linha); border-radius: var(--raio);
     }
-    .link-tv-dica { font-size: 12.5px; color: var(--cinza); margin-top: 10px; }
+    .token-tv-valor.vazio { font-size: 13px; letter-spacing: 0; font-weight: 400; color: var(--cinza); font-family: inherit; }
+    .token-tv-dica { font-size: 12.5px; color: var(--cinza); margin-top: 10px; }
 
     .carnes-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 22px 0 14px; }
     .carnes-topo .contagem { font-size: 14px; color: var(--cinza); }
@@ -29,9 +31,10 @@
       background: var(--branco);
       border: 1px solid var(--linha); border-radius: var(--raio);
       overflow: hidden;
-      transition: transform .15s ease, box-shadow .15s ease;
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
     }
-    .carne-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(2,18,38,.08); }
+    .carne-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(2,18,38,.08); border-color: var(--azul); }
     .carne-foto {
       width: 100%; height: 150px; object-fit: cover; display: block;
       background: var(--azul-claro);
@@ -48,6 +51,7 @@
     .carne-preco { font-size: 19px; font-weight: 700; color: var(--azul); }
     .carne-preco small { font-size: 12px; font-weight: 400; color: var(--cinza); }
     .carne-off { font-size: 12px; color: var(--verde); font-weight: 600; margin-top: 2px; }
+    .carne-periodo { font-size: 11.5px; color: var(--cinza); margin-top: 6px; }
 
     .grid-vazio {
       grid-column: 1 / -1; text-align: center; padding: 60px 20px;
@@ -55,6 +59,9 @@
       border: 1px dashed var(--linha); border-radius: var(--raio);
     }
     .grid-vazio strong { display: block; font-size: 16px; color: var(--grafite); margin-bottom: 6px; }
+
+    .modal-destaque-produto { font-size: 14px; color: var(--cinza); margin: -6px 0 14px; }
+    .modal-destaque-produto b { color: var(--grafite); }
   </style>
 </head>
 <body>
@@ -66,24 +73,43 @@
       </div>
 
       <div class="painel">
-        <h2 style="font-size:15px;margin-bottom:10px">Link da TV</h2>
-        <div class="link-tv-linha">
-          <input id="inputLinkTv" readonly placeholder="Nenhum link gerado ainda">
-          <button class="btn secundario" id="btnCopiarLink">Copiar</button>
-          <button class="btn" id="btnGerarLink">Gerar link</button>
+        <h2 style="font-size:15px;margin-bottom:10px">Token da TV</h2>
+        <div class="token-tv-linha">
+          <span class="token-tv-valor vazio" id="tokenTv">Nenhum token gerado</span>
+          <button class="btn secundario" id="btnCopiarToken">Copiar</button>
+          <button class="btn" id="btnGerarToken">Gerar token</button>
         </div>
-        <p class="link-tv-dica">
-          Abra este link no navegador da televisão do açougue: ela fica conectada a este supermercado
-          e passa a exibir as carnes automaticamente. Gerar um novo link desconecta as TVs que usavam o anterior.
+        <p class="token-tv-dica">
+          Na televisão do açougue, abra <b>/tv.html</b> no navegador e digite este token para conectar.
+          Gerar um novo token desconecta as TVs que usavam o anterior.
         </p>
       </div>
 
       <div class="carnes-topo">
         <span class="contagem" id="contagem">Carregando...</span>
-        <span class="contagem">Produtos com promoção vigente entram como destaque na TV.</span>
+        <span class="contagem">Clique num produto para colocar em destaque na TV.</span>
       </div>
       <div class="grid-carnes" id="gridCarnes"></div>
     </main>
+  </div>
+
+  <!-- Modal de destaque: cria/edita/encerra a promoção que sustenta o destaque -->
+  <div class="modal-fundo" id="modalDestaque">
+    <div class="modal">
+      <h2>Destaque na TV</h2>
+      <p class="modal-destaque-produto" id="destaqueProduto"></p>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Novo preço no destaque (R$)</label><input id="f_precoDestaque" type="number" step="0.01" min="0.01" placeholder="Ex: 55,90"></div>
+        <div class="campo"><label>Início do destaque</label><input id="f_destaqueInicio" type="datetime-local"></div>
+        <div class="campo"><label>Fim do destaque</label><input id="f_destaqueFim" type="datetime-local"></div>
+      </div>
+      <p class="msg-erro" id="erroDestaque"></p>
+      <div class="rodape">
+        <button class="btn secundario" id="btnRemoverDestaque" style="display:none">Remover destaque</button>
+        <button class="btn secundario" id="btnCancelarDestaque">Cancelar</button>
+        <button class="btn" id="btnSalvarDestaque">Salvar destaque</button>
+      </div>
+    </div>
   </div>
 
   <script src="/js/api.js"></script>
@@ -94,14 +120,23 @@
     initNavbar();
     const $ = (id) => document.getElementById(id);
     const gridCarnes = $('gridCarnes'), contagem = $('contagem'),
-          inputLinkTv = $('inputLinkTv'), btnGerarLink = $('btnGerarLink'), btnCopiarLink = $('btnCopiarLink');
+          tokenTv = $('tokenTv'), btnGerarToken = $('btnGerarToken'), btnCopiarToken = $('btnCopiarToken'),
+          destaqueProduto = $('destaqueProduto'), erroDestaque = $('erroDestaque'),
+          fPrecoDestaque = $('f_precoDestaque'), fDestaqueInicio = $('f_destaqueInicio'), fDestaqueFim = $('f_destaqueFim'),
+          btnRemoverDestaque = $('btnRemoverDestaque'), btnSalvarDestaque = $('btnSalvarDestaque');
 
     const FOTO_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="150"><rect fill="#e9f2fe" width="400" height="150"/><text fill="#5a6b7e" x="200" y="85" text-anchor="middle" font-size="40">🥩</text></svg>'
     );
 
-    function montarLink(tvToken) {
-      return tvToken ? window.location.origin + '/tv.html?token=' + tvToken : '';
+    let itens = [];
+    let itemAtual = null;
+
+    /** Date/ISO → valor de <input type="datetime-local"> no fuso local. */
+    function paraInputLocal(data) {
+      const d = new Date(data);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 16);
     }
 
     function renderCard(p) {
@@ -113,10 +148,11 @@
       const preco = p.destaque
         ? '<div class="carne-preco-original">De ' + UI.moeda(p.preco) + '</div>' +
           '<div class="carne-preco">' + UI.moeda(p.precoPromocional) + unidade + '</div>' +
-          (p.percentualOff ? '<div class="carne-off">↓ ' + p.percentualOff + '% de desconto</div>' : '')
+          (p.percentualOff ? '<div class="carne-off">↓ ' + p.percentualOff + '% de desconto</div>' : '') +
+          (p.promocao ? '<div class="carne-periodo">' + UI.data(p.promocao.dataInicio) + ' até ' + UI.data(p.promocao.dataFim) + '</div>' : '')
         : '<div class="carne-preco">' + UI.moeda(p.preco) + unidade + '</div>';
 
-      return '<div class="carne-card">' +
+      return '<div class="carne-card" data-id="' + p.id + '" title="Clique para configurar o destaque">' +
         '<img class="carne-foto" src="' + (p.imagemUrl ? UI.escapar(p.imagemUrl) : FOTO_PLACEHOLDER) + '" alt="" onerror="this.src=\'' + FOTO_PLACEHOLDER.replace(/'/g, '&#39;') + '\'">' +
         '<div class="carne-body">' +
         '<div class="carne-badges">' + badges.join('') + '</div>' +
@@ -133,43 +169,125 @@
           'A TV exibe os produtos ativos do grupo "Açougue" e de seus subgrupos. Crie-o em Produtos → Categorias de Produtos.</div>';
         return;
       }
+      itens = data.items;
       contagem.textContent = data.total + ' produto' + (data.total !== 1 ? 's' : '') + ' no açougue' +
         (data.categorias.length ? ' · ' + data.categorias.length + ' categorias' : '');
-      if (!data.items.length) {
+      if (!itens.length) {
         gridCarnes.innerHTML = '<div class="grid-vazio"><strong>Nenhum produto no açougue</strong>' +
           'Cadastre produtos nas categorias do grupo "Açougue" para exibi-los na TV.</div>';
         return;
       }
-      gridCarnes.innerHTML = data.items.map(renderCard).join('');
+      gridCarnes.innerHTML = itens.map(renderCard).join('');
     }
 
-    async function carregarLink() {
-      const data = await API.get('/api/acougue-tv/link');
-      inputLinkTv.value = montarLink(data.tvToken);
-      btnGerarLink.textContent = data.tvToken ? 'Gerar novo link' : 'Gerar link';
+    // ── Token da TV ──
+    function mostrarToken(valor) {
+      if (valor) {
+        tokenTv.textContent = valor;
+        tokenTv.classList.remove('vazio');
+        btnGerarToken.textContent = 'Gerar novo token';
+      } else {
+        tokenTv.textContent = 'Nenhum token gerado';
+        tokenTv.classList.add('vazio');
+        btnGerarToken.textContent = 'Gerar token';
+      }
     }
 
-    async function gerarLink() {
-      if (inputLinkTv.value && !confirm('Gerar um novo link desconecta as TVs que usam o link atual. Continuar?')) return;
-      const data = await API.post('/api/acougue-tv/link', {});
-      inputLinkTv.value = montarLink(data.tvToken);
-      btnGerarLink.textContent = 'Gerar novo link';
-      mostrarToast('Link da TV gerado', 'sucesso');
+    async function carregarToken() {
+      const data = await API.get('/api/acougue-tv/token');
+      mostrarToken(data.tvToken);
     }
 
-    function copiarLink() {
-      if (!inputLinkTv.value) { mostrarToast('Gere o link primeiro', 'erro'); return; }
-      navigator.clipboard.writeText(inputLinkTv.value).then(() => mostrarToast('Link copiado', 'sucesso'));
+    async function gerarToken() {
+      if (!tokenTv.classList.contains('vazio') &&
+          !confirm('Gerar um novo token desconecta as TVs que usam o token atual. Continuar?')) return;
+      const data = await API.post('/api/acougue-tv/token', {});
+      mostrarToken(data.tvToken);
+      mostrarToast('Token da TV gerado', 'sucesso');
     }
 
-    btnGerarLink.addEventListener('click', () => gerarLink().catch((e) => mostrarToast(e.message, 'erro')));
-    btnCopiarLink.addEventListener('click', copiarLink);
+    function copiarToken() {
+      if (tokenTv.classList.contains('vazio')) { mostrarToast('Gere o token primeiro', 'erro'); return; }
+      navigator.clipboard.writeText(tokenTv.textContent).then(() => mostrarToast('Token copiado', 'sucesso'));
+    }
+
+    // ── Modal de destaque ──
+    function abrirDestaque(id) {
+      itemAtual = itens.find((p) => p.id === id);
+      if (!itemAtual) return;
+      UI.limparErro(erroDestaque);
+      destaqueProduto.innerHTML = '<b>' + UI.escapar(itemAtual.nome) + '</b> · preço atual ' +
+        UI.moeda(itemAtual.preco) + '/' + UI.escapar((itemAtual.unidade || 'KG').toLowerCase());
+
+      if (itemAtual.promocao) {
+        fPrecoDestaque.value = itemAtual.precoPromocional;
+        fDestaqueInicio.value = paraInputLocal(itemAtual.promocao.dataInicio);
+        fDestaqueFim.value = paraInputLocal(itemAtual.promocao.dataFim);
+        btnRemoverDestaque.style.display = '';
+      } else {
+        fPrecoDestaque.value = '';
+        fDestaqueInicio.value = paraInputLocal(new Date());
+        fDestaqueFim.value = paraInputLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+        btnRemoverDestaque.style.display = 'none';
+      }
+      UI.abrirModal('modalDestaque');
+    }
+
+    async function salvarDestaque() {
+      UI.limparErro(erroDestaque);
+      const novoPreco = Number(fPrecoDestaque.value);
+      if (!novoPreco || novoPreco <= 0) return UI.erro(erroDestaque, 'Informe o novo preço do destaque');
+      if (novoPreco >= itemAtual.preco) return UI.erro(erroDestaque, 'O preço do destaque deve ser menor que o preço atual (' + UI.moeda(itemAtual.preco) + ')');
+      if (!fDestaqueInicio.value || !fDestaqueFim.value) return UI.erro(erroDestaque, 'Informe o início e o fim do destaque');
+      if (new Date(fDestaqueFim.value) <= new Date(fDestaqueInicio.value)) return UI.erro(erroDestaque, 'O fim do destaque deve ser depois do início');
+
+      // O destaque é uma promoção de valor fixo: desconto = preço atual − novo preço.
+      const body = {
+        produtoId: itemAtual.id,
+        nome: 'Destaque TV — ' + itemAtual.nome,
+        tipo: 'valor_fixo',
+        desconto: +(itemAtual.preco - novoPreco).toFixed(2),
+        dataInicio: fDestaqueInicio.value,
+        dataFim: fDestaqueFim.value,
+      };
+      try {
+        if (itemAtual.promocao) await API.put('/api/promocoes/' + itemAtual.promocao.id, body);
+        else await API.post('/api/promocoes', body);
+        UI.fecharModal('modalDestaque');
+        mostrarToast('Destaque salvo', 'sucesso');
+        await carregarCarnes();
+      } catch (e) {
+        UI.erro(erroDestaque, e);
+      }
+    }
+
+    async function removerDestaque() {
+      if (!itemAtual || !itemAtual.promocao) return;
+      try {
+        await API.del('/api/promocoes/' + itemAtual.promocao.id);
+        UI.fecharModal('modalDestaque');
+        mostrarToast('Destaque removido', 'sucesso');
+        await carregarCarnes();
+      } catch (e) {
+        UI.erro(erroDestaque, e);
+      }
+    }
+
+    gridCarnes.addEventListener('click', (ev) => {
+      const card = ev.target.closest('.carne-card[data-id]');
+      if (card) abrirDestaque(card.dataset.id);
+    });
+    btnGerarToken.addEventListener('click', () => gerarToken().catch((e) => mostrarToast(e.message, 'erro')));
+    btnCopiarToken.addEventListener('click', copiarToken);
+    btnSalvarDestaque.addEventListener('click', salvarDestaque);
+    btnRemoverDestaque.addEventListener('click', removerDestaque);
+    $('btnCancelarDestaque').addEventListener('click', () => UI.fecharModal('modalDestaque'));
 
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
       await Auth.montarSidebar('acougue-tv.html');
-      await Promise.all([carregarCarnes(), carregarLink()]).catch((e) => mostrarToast(e.message, 'erro'));
+      await Promise.all([carregarCarnes(), carregarToken()]).catch((e) => mostrarToast(e.message, 'erro'));
     })();
   })();
   </script>

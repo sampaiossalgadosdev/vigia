@@ -40,6 +40,8 @@ function montarItem(produto, promocao) {
     precoPromocional: promo,
     percentualOff: promo !== null && preco > 0 ? Math.round((1 - promo / preco) * 100) : null,
     destaque: promo !== null,
+    // Promoção que sustenta o destaque — o painel usa para editar/encerrar
+    promocao: promocao ? { id: promocao.id, dataInicio: promocao.dataInicio, dataFim: promocao.dataFim } : null,
   };
 }
 
@@ -71,23 +73,49 @@ async function telaTv(token) {
   return { tenantNome: tenant.nome, ...dados };
 }
 
-async function obterLink(tenantId) {
+async function obterToken(tenantId) {
   const tenant = await acougueTvRepo.buscarTvToken(tenantId);
   return { tvToken: tenant ? tenant.tvToken : null };
 }
 
-/**
- * Gera (ou regenera) o token do link da TV. Regenerar invalida o link
- * anterior — TVs já conectadas precisam abrir o link novo.
- */
-async function gerarLink(tenantId, usuario, ip) {
-  const tvToken = crypto.randomBytes(24).toString('hex');
-  await acougueTvRepo.definirTvToken(tenantId, tvToken);
-  await auditoriaRepo.registrar({
-    tenantId, usuarioId: usuario.id, acao: 'editar', entidade: 'Tenant', entidadeId: tenantId,
-    depois: { tvToken: 'regenerado' }, ip,
-  });
-  return { tvToken };
+// Sem caracteres ambíguos (I/O/0/1) — o token é digitado à mão na TV.
+const TOKEN_LETRAS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const TOKEN_NUMEROS = '23456789';
+const TOKEN_SIMBOLOS = '#$%&*@+';
+
+/** Token curto de 6 caracteres com pelo menos uma letra, um número e um símbolo. */
+function gerarTokenCurto() {
+  const todos = TOKEN_LETRAS + TOKEN_NUMEROS + TOKEN_SIMBOLOS;
+  const sorteia = (chars) => chars[crypto.randomInt(chars.length)];
+  const partes = [sorteia(TOKEN_LETRAS), sorteia(TOKEN_NUMEROS), sorteia(TOKEN_SIMBOLOS)];
+  while (partes.length < 6) partes.push(sorteia(todos));
+  for (let i = partes.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [partes[i], partes[j]] = [partes[j], partes[i]];
+  }
+  return partes.join('');
 }
 
-module.exports = { painel, telaTv, obterLink, gerarLink };
+/**
+ * Gera (ou regenera) o token de acesso da TV. Regenerar invalida o token
+ * anterior — TVs já conectadas precisam digitar o novo.
+ */
+async function gerarToken(tenantId, usuario, ip) {
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const tvToken = gerarTokenCurto();
+    try {
+      await acougueTvRepo.definirTvToken(tenantId, tvToken);
+      await auditoriaRepo.registrar({
+        tenantId, usuarioId: usuario.id, acao: 'editar', entidade: 'Tenant', entidadeId: tenantId,
+        depois: { tvToken: 'regenerado' }, ip,
+      });
+      return { tvToken };
+    } catch (e) {
+      // P2002 = colisão com o token único de outro tenant: sorteia outro
+      if (e.code !== 'P2002') throw e;
+    }
+  }
+  throw new AppError('Não foi possível gerar o token da TV, tente novamente', 500);
+}
+
+module.exports = { painel, telaTv, obterToken, gerarToken };

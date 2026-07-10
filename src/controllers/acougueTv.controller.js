@@ -9,12 +9,12 @@ const tv = asyncHandler(async (req, res) => {
   success(res, await service.telaTv(req.query.token));
 });
 
-const link = asyncHandler(async (req, res) => {
-  success(res, await service.obterLink(req.tenantId));
+const token = asyncHandler(async (req, res) => {
+  success(res, await service.obterToken(req.tenantId));
 });
 
-const gerarLink = asyncHandler(async (req, res) => {
-  success(res, await service.gerarLink(req.tenantId, req.usuario, req.ip), 201);
+const gerarToken = asyncHandler(async (req, res) => {
+  success(res, await service.gerarToken(req.tenantId, req.usuario, req.ip), 201);
 });
 
-module.exports = { painel, tv, link, gerarLink };
+module.exports = { painel, tv, token, gerarToken };
