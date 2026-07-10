@@ -22,6 +22,19 @@
     .carnes-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 22px 0 14px; }
     .carnes-topo .contagem { font-size: 14px; color: var(--cinza); }
 
+    /* Barra de busca das carnes */
+    .filtros-carnes { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 16px; }
+    .filtros-carnes .campo { display: flex; flex-direction: column; gap: 4px; }
+    .filtros-carnes label { font-size: 12px; font-weight: 600; color: var(--cinza); }
+    .filtros-carnes input, .filtros-carnes select {
+      padding: 9px 12px; font-size: 14px; font-family: inherit;
+      color: var(--grafite); background: var(--branco);
+      border: 1px solid var(--linha); border-radius: var(--raio);
+    }
+    .filtros-carnes input:focus, .filtros-carnes select:focus { outline: 2px solid var(--azul); border-color: var(--azul); }
+    .filtros-carnes .campo-nome input { min-width: 220px; }
+    .filtros-carnes .campo-preco input { width: 130px; }
+
     .grid-carnes {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -90,6 +103,22 @@
         </p>
       </div>
 
+      <div class="painel filtros-carnes">
+        <div class="campo campo-nome">
+          <label>Nome</label>
+          <input id="f_busca_nome" placeholder="Ex: picanha" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label>Grupo</label>
+          <select id="f_busca_grupo"><option value="">Todos</option></select>
+        </div>
+        <div class="campo campo-preco">
+          <label>Preço até (R$)</label>
+          <input id="f_busca_preco" type="number" step="0.01" min="0" placeholder="Ex: 30,00">
+        </div>
+        <button class="btn secundario" id="btnLimparBusca">Limpar</button>
+      </div>
+
       <div class="carnes-topo">
         <span class="contagem" id="contagem">Carregando...</span>
         <span class="contagem">Clique num produto para colocar em destaque na TV.</span>
@@ -128,7 +157,8 @@
           tokenTv = $('tokenTv'), btnGerarToken = $('btnGerarToken'), btnCopiarToken = $('btnCopiarToken'),
           destaqueProduto = $('destaqueProduto'), erroDestaque = $('erroDestaque'),
           fPrecoDestaque = $('f_precoDestaque'), fDestaqueInicio = $('f_destaqueInicio'), fDestaqueFim = $('f_destaqueFim'),
-          btnRemoverDestaque = $('btnRemoverDestaque'), btnSalvarDestaque = $('btnSalvarDestaque');
+          btnRemoverDestaque = $('btnRemoverDestaque'), btnSalvarDestaque = $('btnSalvarDestaque'),
+          fBuscaNome = $('f_busca_nome'), fBuscaGrupo = $('f_busca_grupo'), fBuscaPreco = $('f_busca_preco');
 
     const FOTO_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
       '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="150"><rect fill="#e9f2fe" width="400" height="150"/><text fill="#5a6b7e" x="200" y="85" text-anchor="middle" font-size="40">🥩</text></svg>'
@@ -166,6 +196,56 @@
         '</div></div>';
     }
 
+    /** Texto sem acentos e em minúsculas, para a busca por nome não depender de acentuação. */
+    function normalizar(texto) {
+      return String(texto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    /** Preenche o select de grupo com as categorias presentes nos itens carregados. */
+    function montarOpcoesGrupo() {
+      const selecionado = fBuscaGrupo.value;
+      const grupos = [...new Set(itens.map((p) => p.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+      fBuscaGrupo.innerHTML = '<option value="">Todos</option>' +
+        grupos.map((g) => '<option value="' + UI.escapar(g) + '">' + UI.escapar(g) + '</option>').join('');
+      if (grupos.includes(selecionado)) fBuscaGrupo.value = selecionado;
+    }
+
+    /** Aplica nome/grupo/preço sobre os itens carregados e redesenha o grid. */
+    function aplicarFiltros() {
+      const nome = normalizar(fBuscaNome.value.trim());
+      const grupo = fBuscaGrupo.value;
+      const precoMax = fBuscaPreco.value !== '' ? Number(fBuscaPreco.value) : null;
+
+      const filtrados = itens.filter((p) => {
+        if (nome && !normalizar(p.nome).includes(nome)) return false;
+        if (grupo && p.categoria !== grupo) return false;
+        // Compara com o preço realmente exibido na TV (promocional quando em destaque)
+        const precoEfetivo = p.precoPromocional !== null && p.precoPromocional !== undefined ? p.precoPromocional : p.preco;
+        if (precoMax !== null && !Number.isNaN(precoMax) && precoEfetivo > precoMax) return false;
+        return true;
+      });
+
+      const filtrando = nome || grupo || precoMax !== null;
+      contagem.textContent = filtrando
+        ? filtrados.length + ' de ' + itens.length + ' produtos'
+        : itens.length + ' produto' + (itens.length !== 1 ? 's' : '') + ' no açougue';
+
+      if (!filtrados.length) {
+        gridCarnes.innerHTML = '<div class="grid-vazio"><strong>Nenhum produto encontrado</strong>' +
+          (filtrando ? 'Ajuste os filtros de nome, grupo ou preço.' : 'Cadastre produtos nas categorias do grupo "Açougue" para exibi-los na TV.') +
+          '</div>';
+        return;
+      }
+      gridCarnes.innerHTML = filtrados.map(renderCard).join('');
+    }
+
+    function limparFiltros() {
+      fBuscaNome.value = '';
+      fBuscaGrupo.value = '';
+      fBuscaPreco.value = '';
+      aplicarFiltros();
+    }
+
     async function carregarCarnes() {
       const data = await API.get('/api/acougue-tv/produtos');
       if (!data.grupo) {
@@ -175,14 +255,8 @@
         return;
       }
       itens = data.items;
-      contagem.textContent = data.total + ' produto' + (data.total !== 1 ? 's' : '') + ' no açougue' +
-        (data.categorias.length ? ' · ' + data.categorias.length + ' categorias' : '');
-      if (!itens.length) {
-        gridCarnes.innerHTML = '<div class="grid-vazio"><strong>Nenhum produto no açougue</strong>' +
-          'Cadastre produtos nas categorias do grupo "Açougue" para exibi-los na TV.</div>';
-        return;
-      }
-      gridCarnes.innerHTML = itens.map(renderCard).join('');
+      montarOpcoesGrupo();
+      aplicarFiltros();
     }
 
     // ── Token da TV ──
@@ -282,6 +356,10 @@
       const card = ev.target.closest('.carne-card[data-id]');
       if (card) abrirDestaque(card.dataset.id);
     });
+    fBuscaNome.addEventListener('input', aplicarFiltros);
+    fBuscaGrupo.addEventListener('change', aplicarFiltros);
+    fBuscaPreco.addEventListener('input', aplicarFiltros);
+    $('btnLimparBusca').addEventListener('click', limparFiltros);
     btnGerarToken.addEventListener('click', () => gerarToken().catch((e) => mostrarToast(e.message, 'erro')));
     btnCopiarToken.addEventListener('click', copiarToken);
     btnSalvarDestaque.addEventListener('click', salvarDestaque);
