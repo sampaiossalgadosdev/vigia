@@ -34,6 +34,7 @@ function filtroListagem(tenantId, { search, categoriaId, ativo, situacao, nome, 
       { ean: { contains: search } },
       { marca: { contains: search, mode: 'insensitive' } },
       { plu: { contains: search } },
+      { codigoReferencia: { contains: search, mode: 'insensitive' } },
     ];
   return where;
 }
