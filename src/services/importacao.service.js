@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const prisma = require('../config/database');
 const produtoRepo = require('../repositories/produto.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
+const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
 const { lerPlanilha, gerarModeloXlsx } = require('../utils/planilha');
 const { AppError } = require('../utils/response');
 
@@ -151,6 +152,25 @@ async function confirmar(tenantId, tokenImportacao, usuario, ip) {
       dados.push({ ...resto, categoriaId, tenantId });
     }
     const criados = await produtoRepo.criarVarios(tx, dados);
+
+    // Fase 2a: cada produto recém-criado nasce com sua linha de estoque no
+    // Depósito Principal. createMany não devolve ids, então rebusca pelos
+    // EANs enviados; skipDuplicates protege contra reprocessar um produto
+    // já existente que por acaso compartilhe EAN (ignorado pelo createMany
+    // acima, mas que já pode ter EstoqueProduto).
+    if (criados.count > 0) {
+      const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(tx, tenantId);
+      const eansEnviados = dados.map((d) => d.ean);
+      const produtosCriados = await tx.produto.findMany({
+        where: { tenantId, ean: { in: eansEnviados } },
+        select: { id: true, estoqueQtd: true },
+      });
+      await tx.estoqueProduto.createMany({
+        data: produtosCriados.map((p) => ({ produtoId: p.id, depositoId: deposito.id, quantidade: p.estoqueQtd })),
+        skipDuplicates: true,
+      });
+    }
+
     return { enviados: registro.validos.length, inseridos: criados.count, ignorados: registro.validos.length - criados.count };
   });
 

@@ -6,6 +6,7 @@
  * Não contém regra de negócio.
  */
 const prisma = require('../config/database');
+const estoqueDepositoRepo = require('./estoqueDeposito.repository');
 
 async function buscarNfePorChave(chaveAcesso) {
   return prisma.nfe.findUnique({ where: { chaveAcesso } });
@@ -110,11 +111,11 @@ async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
 
       await tx.produto.update({
         where: { id: produto.id },
-        data: {
-          estoqueQtd: estoqueAtual + qtd,
-          custoMedio: Math.round(novoCusto * 100) / 100,
-        },
+        data: { custoMedio: Math.round(novoCusto * 100) / 100 },
       });
+      // Fase 2a: quantidade entra pelo Depósito Principal, que já
+      // recalcula Produto.estoqueQtd como agregado dos depósitos.
+      await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produto.id, qtd);
 
       await tx.movimentacaoEstoque.create({
         data: {
@@ -161,8 +162,9 @@ async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEnt
           : (estoqueAtual * Number(produto.custoMedio) + qtd * custoNovo) / (estoqueAtual + qtd);
       await tx.produto.update({
         where: { id: produtoId },
-        data: { estoqueQtd: estoqueAtual + qtd, custoMedio: Math.round(novoCusto * 100) / 100 },
+        data: { custoMedio: Math.round(novoCusto * 100) / 100 },
       });
+      await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produtoId, qtd);
       await tx.movimentacaoEstoque.create({
         data: {
           tenantId: nfe.tenantId, produtoId, tipo: 'entrada', quantidade: qtd,

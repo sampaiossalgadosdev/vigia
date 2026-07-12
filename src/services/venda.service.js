@@ -4,6 +4,8 @@ const produtoRepo = require('../repositories/produto.repository');
 const promocaoRepo = require('../repositories/promocao.repository');
 const caixaRepo = require('../repositories/caixa.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
+const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
+const estoqueDepositoService = require('../services/estoqueDeposito.service');
 const { AppError, paginado } = require('../utils/response');
 
 function normalizarPreco(preco, desconto, tipo) {
@@ -85,9 +87,12 @@ async function registrar(tenantId, body, usuario, ip) {
 
     for (const item of itensData) {
       const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
-      const estoqueAtual = Number(produto.estoqueQtd);
       const qtd = Number(item.quantidade);
-      await tx.produto.update({ where: { id: produto.id }, data: { estoqueQtd: estoqueAtual - qtd } });
+      // Decrementa no Depósito Principal (Fase 2a) — bloqueia com AppError
+      // (e a transação inteira dá rollback) se permiteEstoqueNegativo=false
+      // e a venda deixaria o estoque negativo; senão, preserva o
+      // comportamento atual (permite e sinaliza pro log de auditoria abaixo).
+      const resultado = await estoqueDepositoService.decrementarComRegra(tx, tenantId, produto.id, produto.nome, qtd);
       await tx.movimentacaoEstoque.create({
         data: {
           tenantId,
@@ -100,8 +105,8 @@ async function registrar(tenantId, body, usuario, ip) {
           usuarioId: usuario.id,
         },
       });
-      if (estoqueAtual < qtd) {
-        await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: estoqueAtual, solicitado: qtd }, ip });
+      if (resultado.ficouNegativo) {
+        await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: resultado.estoqueAnterior, solicitado: qtd }, ip });
       }
     }
 
@@ -132,7 +137,7 @@ async function cancelar(tenantId, id, usuario, motivo, ip) {
   await vendaRepo.atualizarStatus(tenantId, id, { status: 'cancelada', canceladoEm: new Date(), canceladoPor: usuario.id, motivoCancelamento: motivo });
   for (const item of venda.itens) {
     const produto = await produtoRepo.buscarPorId(tenantId, item.produtoId);
-    await prisma.produto.update({ where: { id: produto.id }, data: { estoqueQtd: Number(produto.estoqueQtd) + Number(item.quantidade) } });
+    await estoqueDepositoRepo.ajustarEstoquePrincipal(prisma, tenantId, produto.id, Number(item.quantidade));
     await prisma.movimentacaoEstoque.create({ data: { tenantId, produtoId: produto.id, tipo: 'devolucao', quantidade: Number(item.quantidade), custoUnit: Number(item.custoUnitario), origem: 'devolucao', origemId: venda.id, usuarioId: usuario.id } });
   }
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'cancelar', entidade: 'Venda', entidadeId: id, depois: { motivo }, ip });

@@ -117,6 +117,7 @@ model Tenant {
   promocoes       Promocao[]
   caixas          Caixa[]
   nfeDistribuicao NfeDistribuicao[]
+  depositos       Deposito[]
 }
 
 // ─── REFRESH TOKEN ────────────────────────────────────────
@@ -272,6 +273,7 @@ model Produto {
   decisoesIA    DecisaoIA[]
   itensVenda    VendaItem[]
   promocoes     Promocao[]
+  estoques      EstoqueProduto[]
 
   @@unique([tenantId, ean])
   @@unique([tenantId, codigoReferencia])
@@ -280,6 +282,47 @@ model Produto {
   @@index([tenantId, categoriaId])
   @@index([tenantId, ativo])
   @@index([plu])
+}
+
+// ─── DEPÓSITO (Fase 2a — fundação de múltiplos depósitos) ─
+// Todo tenant tem exatamente 1 depósito com principal=true (o "Depósito
+// Principal", criado no backfill pra tenants existentes e sob demanda pra
+// tenants novos — ver estoqueDeposito.repository.garantirDepositoPrincipal).
+// Esta fase não implementa transferência entre depósitos nem UI pra
+// escolher outro depósito na venda — todo fluxo hoje usa o principal.
+model Deposito {
+  id       String   @id @default(uuid())
+  tenantId String
+  nome     String
+  principal Boolean @default(false) // exatamente 1 por tenant deve ser true
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  estoques EstoqueProduto[]
+
+  @@index([tenantId])
+}
+
+// Saldo de um produto num depósito específico. Produto.estoqueQtd continua
+// existindo como TOTAL AGREGADO (soma de EstoqueProduto de todos os
+// depósitos daquele produto) — sincronizado pela camada de service
+// (estoqueDeposito.repository.recalcularEstoqueAgregado), não por trigger.
+model EstoqueProduto {
+  id                     String   @id @default(uuid())
+  produtoId              String
+  depositoId             String
+  quantidade             Decimal  @default(0) @db.Decimal(10, 3)
+  // true preserva o comportamento ATUAL do sistema (estoque negativo
+  // livre) — default seguro pra não quebrar nada na migração. Quem quiser
+  // travar um produto específico contra estoque negativo muda isso pra
+  // false depois, pelo cadastro do produto.
+  permiteEstoqueNegativo Boolean  @default(true)
+
+  produto  Produto  @relation(fields: [produtoId], references: [id])
+  deposito Deposito @relation(fields: [depositoId], references: [id])
+
+  @@unique([produtoId, depositoId])
 }
 
 // ─── FORNECEDOR ───────────────────────────────────────────

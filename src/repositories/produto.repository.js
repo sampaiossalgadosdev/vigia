@@ -5,6 +5,7 @@
  * Não contém regra de negócio.
  */
 const prisma = require('../config/database');
+const estoqueDepositoRepo = require('./estoqueDeposito.repository');
 
 /**
  * Filtros por coluna da listagem de produtos (padrão ERP): todos opcionais
@@ -98,9 +99,16 @@ async function criarComCodigoSequencial(tenantId, dados) {
       where: { id: tenantId },
       data: { ultimoCodigoReferencia: { increment: 1 } },
     });
-    return tx.produto.create({
+    const produto = await tx.produto.create({
       data: { ...dados, tenantId, codigoReferencia: String(tenant.ultimoCodigoReferencia) },
     });
+    // Fase 2a: toda criação de produto já nasce com sua linha de estoque no
+    // Depósito Principal, espelhando o estoqueQtd inicial informado.
+    const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(tx, tenantId);
+    await tx.estoqueProduto.create({
+      data: { produtoId: produto.id, depositoId: deposito.id, quantidade: produto.estoqueQtd },
+    });
+    return produto;
   });
 }
 

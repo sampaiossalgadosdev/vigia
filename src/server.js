@@ -40,6 +40,7 @@ app.use('/api/produtos', require('./routes/produto.routes'));
 app.use('/api/categorias', require('./routes/categoria.routes'));
 app.use('/api/fornecedores', require('./routes/fornecedor.routes'));
 app.use('/api/estoque', require('./routes/estoque.routes'));
+app.use('/api/depositos', require('./routes/deposito.routes'));
 app.use('/api/nfe-entrada', require('./routes/nfe-entrada.routes'));
 app.use('/api/usuarios', require('./routes/usuario.routes'));
 app.use('/api/perfis', require('./routes/perfil.routes'));

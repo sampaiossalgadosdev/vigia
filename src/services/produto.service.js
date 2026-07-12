@@ -7,8 +7,10 @@
  * Depende de: ProdutoRepository, AuditoriaRepository.
  * Não realiza acesso HTTP nem acesso direto ao Prisma.
  */
+const prisma = require('../config/database');
 const produtoRepo = require('../repositories/produto.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
+const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
 const { AppError, paginado } = require('../utils/response');
 
 /**
@@ -45,7 +47,10 @@ async function listar(tenantId, query, pag) {
 async function detalhar(tenantId, id) {
   const produto = await produtoRepo.buscarPorId(tenantId, id);
   if (!produto) throw new AppError('Produto não encontrado', 404);
-  return produto;
+  // Fase 2a: permiteEstoqueNegativo vive no EstoqueProduto do Depósito
+  // Principal, não no Produto — mescla aqui pra tela de edição.
+  const estoquePrincipal = await estoqueDepositoRepo.buscarEstoquePrincipal(prisma, tenantId, id);
+  return { ...produto, permiteEstoqueNegativo: estoquePrincipal ? estoquePrincipal.permiteEstoqueNegativo : true };
 }
 
 async function criar(tenantId, body, usuario, ip) {
@@ -62,6 +67,10 @@ async function criar(tenantId, body, usuario, ip) {
   }
 
   const produto = await produtoRepo.criarComCodigoSequencial(tenantId, dados);
+  if (body.permiteEstoqueNegativo !== undefined) {
+    const permite = body.permiteEstoqueNegativo === true || body.permiteEstoqueNegativo === 'true';
+    await estoqueDepositoRepo.definirPermiteNegativo(prisma, tenantId, produto.id, permite);
+  }
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'criar', entidade: 'Produto',
     entidadeId: produto.id, depois: { nome: produto.nome, ean: produto.ean, preco: String(produto.preco) }, ip,
@@ -94,7 +103,20 @@ async function atualizar(tenantId, id, body, usuario, ip) {
   if (vendidoPorPeso && !(dados.plu ?? atual.plu))
     throw new AppError('PLU é obrigatório para produtos vendidos por peso', 422);
 
+  // Fase 2a: estoqueQtd não é mais coluna livre — é o agregado dos
+  // depósitos. Edição manual aqui vira um "set" no Depósito Principal
+  // (definirEstoquePrincipal já recalcula Produto.estoqueQtd sozinho).
+  const novoEstoqueQtd = dados.estoqueQtd;
+  delete dados.estoqueQtd;
+
   const produto = await produtoRepo.atualizar(tenantId, id, dados);
+
+  if (novoEstoqueQtd !== undefined)
+    await estoqueDepositoRepo.definirEstoquePrincipal(prisma, tenantId, id, novoEstoqueQtd);
+  if (body.permiteEstoqueNegativo !== undefined) {
+    const permite = body.permiteEstoqueNegativo === true || body.permiteEstoqueNegativo === 'true';
+    await estoqueDepositoRepo.definirPermiteNegativo(prisma, tenantId, id, permite);
+  }
 
   const precoMudou = dados.preco !== undefined && Number(atual.preco) !== dados.preco;
   await auditoriaRepo.registrar({

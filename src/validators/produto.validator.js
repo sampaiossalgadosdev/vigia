@@ -27,6 +27,7 @@ const regrasBase = (opcional = false) => {
     body('estoqueMin').optional({ values: 'null' }).isFloat({ min: 0 }).withMessage('Estoque mínimo deve ser >= 0'),
     body('categoriaId').optional({ values: 'falsy' }).isUUID().withMessage('categoriaId inválido'),
     body('vendidoPorPeso').optional().isBoolean().withMessage('vendidoPorPeso deve ser booleano'),
+    body('permiteEstoqueNegativo').optional().isBoolean().withMessage('permiteEstoqueNegativo deve ser booleano'),
     body('plu')
       .if(body('vendidoPorPeso').equals('true'))
       .matches(/^\d{4,6}$/)

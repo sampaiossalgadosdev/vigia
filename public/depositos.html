@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Depósitos</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Depósitos</h1>
+      </div>
+
+      <div class="barra-acoes">
+        <button class="btn" id="btnNovoDeposito">Novo Depósito</button>
+      </div>
+
+      <div id="erroGeral" class="msg-erro"></div>
+
+      <div class="painel">
+        <table>
+          <thead><tr><th>Nome</th><th>Situação</th></tr></thead>
+          <tbody id="tabela"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal criar depósito -->
+  <div class="modal-fundo" id="modalDeposito">
+    <div class="modal">
+      <h2>Novo Depósito</h2>
+      <div id="erroModal" class="msg-erro"></div>
+      <div class="form-grid">
+        <div class="campo cheio"><label>Nome *</label><input id="f_nome" maxlength="100"></div>
+      </div>
+      <div class="rodape">
+        <button class="btn secundario" id="btnCancelarDeposito">Cancelar</button>
+        <button class="btn" id="btnSalvar">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+    const erroGeral = $('erroGeral');
+
+    async function carregar() {
+      const depositos = await API.get('/api/depositos');
+      $('tabela').innerHTML = depositos.length
+        ? depositos.map((d) =>
+            '<tr><td>' + UI.escapar(d.nome) + (d.principal ? ' <span class="tag ok">Principal</span>' : '') + '</td>' +
+            '<td>' + (d.ativo ? '<span class="tag ok">Ativo</span>' : '<span class="tag neutro">Inativo</span>') + '</td></tr>'
+          ).join('')
+        : '<tr><td colspan="2" class="vazio">Nenhum depósito cadastrado.</td></tr>';
+    }
+
+    function abrirNovo() {
+      $('f_nome').value = '';
+      UI.limparErro($('erroModal'));
+      UI.abrirModal('modalDeposito');
+      $('f_nome').focus();
+    }
+
+    async function salvar() {
+      const nome = $('f_nome').value.trim();
+      UI.limparErro($('erroModal'));
+      if (nome.length < 2) { UI.erro($('erroModal'), 'Nome é obrigatório (mínimo 2 caracteres).'); return; }
+      try {
+        await API.post('/api/depositos', { nome });
+        UI.fecharModal('modalDeposito');
+        mostrarToast('Depósito criado com sucesso');
+        await carregar();
+      } catch (e) {
+        UI.erro($('erroModal'), e);
+      }
+    }
+
+    $('btnNovoDeposito').addEventListener('click', abrirNovo);
+    $('btnCancelarDeposito').addEventListener('click', () => UI.fecharModal('modalDeposito'));
+    $('btnSalvar').addEventListener('click', salvar);
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('depositos.html');
+      try {
+        await carregar();
+      } catch (e) {
+        UI.erro(erroGeral, e);
+      }
+    })();
+  })();
+  </script>
+</body>
+</html>

@@ -76,6 +76,9 @@
             <div class="campo"><label>Preço da última compra</label><input id="m_ultPreco" readonly></div>
             <div class="campo"><label>Fornecedor da última compra</label><input id="m_ultFornecedor" readonly></div>
             <div class="campo"><label>Data da última compra</label><input id="m_ultData" readonly></div>
+            <div class="campo">
+              <label><input type="checkbox" id="m_permiteNegativo" style="width:auto"> Permite estoque negativo</label>
+            </div>
           </div>
         </div>
       </div>
@@ -168,6 +171,7 @@
       $('m_ultPreco').value = ultima.preco != null ? UI.moeda(ultima.preco) : 'Sem compras registradas';
       $('m_ultFornecedor').value = ultima.fornecedor || '-';
       $('m_ultData').value = dataBr(ultima.data);
+      $('m_permiteNegativo').checked = produto.permiteEstoqueNegativo !== false;
       // Preços
       precoMedioNum = Number(produto.custoMedio || 0);
       $('m_precoMedio').value = UI.moeda(produto.custoMedio);
@@ -240,6 +244,7 @@
         preco: $('m_precoVenda').value, // preço de venda vigente (o PDV usa este)
         ean: $('m_ean').value.trim(),
         codigoReferencia: $('m_codRef').value.trim(),
+        permiteEstoqueNegativo: $('m_permiteNegativo').checked,
       };
 
       const btn = $('btnSalvar');
