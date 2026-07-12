@@ -17,17 +17,91 @@
         <h1>Depósitos</h1>
       </div>
 
-      <div class="barra-acoes">
-        <button class="btn" id="btnNovoDeposito">Novo Depósito</button>
+      <div class="abas">
+        <button class="ativa" data-aba="lista">Depósitos</button>
+        <button data-aba="transferencia">Transferência</button>
+        <button data-aba="transformacao">Transformação</button>
       </div>
 
-      <div id="erroGeral" class="msg-erro"></div>
+      <!-- Aba 1: lista de depósitos (já existente) -->
+      <div class="aba-conteudo ativa" id="aba-lista">
+        <div class="barra-acoes">
+          <button class="btn" id="btnNovoDeposito">Novo Depósito</button>
+        </div>
+        <div id="erroGeral" class="msg-erro"></div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Nome</th><th>Situação</th></tr></thead>
+            <tbody id="tabela"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
 
-      <div class="painel">
-        <table>
-          <thead><tr><th>Nome</th><th>Situação</th></tr></thead>
-          <tbody id="tabela"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody>
-        </table>
+      <!-- Aba 2: transferência entre depósitos -->
+      <div class="aba-conteudo" id="aba-transferencia">
+        <div class="painel">
+          <h2>Transferir estoque entre depósitos</h2>
+          <div id="erroTransferencia" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo cheio">
+              <label>Produto *</label>
+              <input type="search" id="tr_buscaProduto" placeholder="Buscar por nome ou EAN">
+              <div id="tr_resultadosProduto" style="max-height:160px;overflow-y:auto"></div>
+              <div id="tr_produtoSelecionado" style="font-size:13px;color:var(--cinza);margin-top:4px"></div>
+            </div>
+            <div class="campo"><label>Depósito de origem *</label><select id="tr_depositoOrigem"></select></div>
+            <div class="campo"><label>Depósito de destino *</label><select id="tr_depositoDestino"></select></div>
+            <div class="campo" id="tr_campoLote" style="display:none">
+              <label>Lote de origem *</label>
+              <select id="tr_lote"></select>
+            </div>
+            <div class="campo"><label>Quantidade *</label><input type="number" step="0.001" id="tr_quantidade"></div>
+            <div class="campo cheio"><label>Motivo *</label><input type="text" id="tr_motivo" maxlength="255" placeholder="Mínimo 5 caracteres"></div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnTransferir">Transferir</button>
+          </div>
+          <div id="resultadoTransferencia" class="msg-erro" style="display:none;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Aba 3: transformação de produto -->
+      <div class="aba-conteudo" id="aba-transformacao">
+        <div class="painel">
+          <h2>Transformar produto</h2>
+          <p style="font-size:14px;color:var(--cinza);margin-bottom:12px">Ex: peixe inteiro processado em filé — consome do produto de origem e gera estoque do produto de destino.</p>
+          <div id="erroTransformacao" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo cheio">
+              <label>Produto de origem *</label>
+              <input type="search" id="tf_buscaOrigem" placeholder="Buscar por nome ou EAN">
+              <div id="tf_resultadosOrigem" style="max-height:160px;overflow-y:auto"></div>
+              <div id="tf_origemSelecionada" style="font-size:13px;color:var(--cinza);margin-top:4px"></div>
+            </div>
+            <div class="campo cheio">
+              <label>Produto de destino *</label>
+              <input type="search" id="tf_buscaDestino" placeholder="Buscar por nome ou EAN">
+              <div id="tf_resultadosDestino" style="max-height:160px;overflow-y:auto"></div>
+              <div id="tf_destinoSelecionado" style="font-size:13px;color:var(--cinza);margin-top:4px"></div>
+            </div>
+            <div class="campo"><label>Depósito *</label><select id="tf_deposito"></select></div>
+            <div class="campo" id="tf_campoLoteOrigem" style="display:none">
+              <label>Lote de origem *</label>
+              <select id="tf_loteOrigem"></select>
+            </div>
+            <div class="campo" id="tf_campoValidadeDestino" style="display:none">
+              <label>Validade do lote gerado *</label>
+              <input type="date" id="tf_validadeDestino">
+            </div>
+            <div class="campo"><label>Quantidade consumida da origem *</label><input type="number" step="0.001" id="tf_quantidadeOrigem"></div>
+            <div class="campo"><label>Quantidade gerada no destino *</label><input type="number" step="0.001" id="tf_quantidadeDestino"></div>
+            <div class="campo cheio"><label>Motivo *</label><input type="text" id="tf_motivo" maxlength="255" placeholder="Mínimo 5 caracteres"></div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnTransformar">Transformar</button>
+          </div>
+          <div id="resultadoTransformacao" class="msg-erro" style="display:none;margin-top:12px"></div>
+        </div>
       </div>
     </main>
   </div>
@@ -55,15 +129,27 @@
     initNavbar();
     const $ = (id) => document.getElementById(id);
     const erroGeral = $('erroGeral');
+    let listaDepositos = [];
 
+    function trocarAba(aba) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
+    }
+
+    // ─── Aba 1: lista de depósitos ───
     async function carregar() {
-      const depositos = await API.get('/api/depositos');
-      $('tabela').innerHTML = depositos.length
-        ? depositos.map((d) =>
+      listaDepositos = await API.get('/api/depositos');
+      $('tabela').innerHTML = listaDepositos.length
+        ? listaDepositos.map((d) =>
             '<tr><td>' + UI.escapar(d.nome) + (d.principal ? ' <span class="tag ok">Principal</span>' : '') + '</td>' +
             '<td>' + (d.ativo ? '<span class="tag ok">Ativo</span>' : '<span class="tag neutro">Inativo</span>') + '</td></tr>'
           ).join('')
         : '<tr><td colspan="2" class="vazio">Nenhum depósito cadastrado.</td></tr>';
+
+      const opcoes = listaDepositos.map((d) => '<option value="' + d.id + '">' + UI.escapar(d.nome) + (d.principal ? ' (Principal)' : '') + '</option>').join('');
+      $('tr_depositoOrigem').innerHTML = opcoes;
+      $('tr_depositoDestino').innerHTML = opcoes;
+      $('tf_deposito').innerHTML = opcoes;
     }
 
     function abrirNovo() {
@@ -87,6 +173,167 @@
       }
     }
 
+    // ─── Busca de produto (mesmo padrão do modal de vincular item em estoque.html) ───
+    async function buscarProduto(termo, containerId) {
+      if (termo.trim().length < 2) { $(containerId).innerHTML = ''; return; }
+      const data = await API.get('/api/produtos?limit=8&search=' + encodeURIComponent(termo));
+      $(containerId).innerHTML = data.items.map((p) =>
+        '<div style="padding:6px 0;border-bottom:1px solid var(--linha);cursor:pointer" data-acao="selecionar" data-id="' + p.id + '" data-nome="' + UI.escapar(p.nome) + '" data-lote="' + !!p.controlaLote + '">' +
+        UI.escapar(p.nome) + ' <small>' + p.ean + '</small></div>'
+      ).join('');
+    }
+
+    // ─── Aba 2: transferência ───
+    let produtoTransferencia = null;
+
+    async function atualizarLoteTransferencia() {
+      const depositoOrigemId = $('tr_depositoOrigem').value;
+      if (!produtoTransferencia || !produtoTransferencia.controlaLote || !depositoOrigemId) {
+        $('tr_campoLote').style.display = 'none';
+        return;
+      }
+      const lotes = await API.get('/api/estoque/lotes?produtoId=' + produtoTransferencia.id + '&depositoId=' + depositoOrigemId);
+      $('tr_lote').innerHTML = lotes.map((l) =>
+        '<option value="' + l.id + '">' + (l.numeroLote || 'sem número') + ' · venc. ' + UI.data(l.dataValidade) + ' · qtd ' + l.quantidade + '</option>'
+      ).join('');
+      $('tr_campoLote').style.display = 'block';
+    }
+
+    $('tr_buscaProduto').addEventListener('input', (ev) => buscarProduto(ev.target.value, 'tr_resultadosProduto'));
+    $('tr_resultadosProduto').addEventListener('click', async (ev) => {
+      const item = ev.target.closest('[data-acao="selecionar"]');
+      if (!item) return;
+      produtoTransferencia = { id: item.dataset.id, nome: item.dataset.nome, controlaLote: item.dataset.lote === 'true' };
+      $('tr_produtoSelecionado').textContent = 'Selecionado: ' + produtoTransferencia.nome;
+      $('tr_resultadosProduto').innerHTML = '';
+      $('tr_buscaProduto').value = '';
+      await atualizarLoteTransferencia();
+    });
+    $('tr_depositoOrigem').addEventListener('change', atualizarLoteTransferencia);
+
+    async function transferir() {
+      UI.limparErro($('erroTransferencia'));
+      $('resultadoTransferencia').style.display = 'none';
+      if (!produtoTransferencia) { UI.erro($('erroTransferencia'), 'Selecione um produto.'); return; }
+      const depositoOrigemId = $('tr_depositoOrigem').value;
+      const depositoDestinoId = $('tr_depositoDestino').value;
+      const quantidade = $('tr_quantidade').value;
+      const motivo = $('tr_motivo').value;
+      if (!quantidade) { UI.erro($('erroTransferencia'), 'Informe a quantidade.'); return; }
+      if (depositoOrigemId === depositoDestinoId) { UI.erro($('erroTransferencia'), 'Depósito de origem e destino devem ser diferentes.'); return; }
+      if (produtoTransferencia.controlaLote && !$('tr_lote').value) { UI.erro($('erroTransferencia'), 'Selecione o lote de origem.'); return; }
+
+      try {
+        await API.post('/api/estoque/transferencia', {
+          produtoId: produtoTransferencia.id,
+          depositoOrigemId,
+          depositoDestinoId,
+          quantidade: Number(quantidade),
+          motivo,
+          loteId: produtoTransferencia.controlaLote ? $('tr_lote').value : undefined,
+        });
+        const nomeOrigem = (listaDepositos.find((d) => d.id === depositoOrigemId) || {}).nome || depositoOrigemId;
+        const nomeDestino = (listaDepositos.find((d) => d.id === depositoDestinoId) || {}).nome || depositoDestinoId;
+        const box = $('resultadoTransferencia');
+        box.style.display = 'block'; box.style.background = '#eaf7ed'; box.style.color = '#1e7e34';
+        box.textContent = 'Transferência realizada: ' + quantidade + ' unidade(s) de ' + produtoTransferencia.nome + ' movidas de ' + nomeOrigem + ' para ' + nomeDestino + '.';
+        produtoTransferencia = null;
+        $('tr_produtoSelecionado').textContent = '';
+        $('tr_quantidade').value = ''; $('tr_motivo').value = '';
+        $('tr_campoLote').style.display = 'none';
+      } catch (e) {
+        UI.erro($('erroTransferencia'), e);
+      }
+    }
+    $('btnTransferir').addEventListener('click', transferir);
+
+    // ─── Aba 3: transformação ───
+    let produtoOrigemTransformacao = null;
+    let produtoDestinoTransformacao = null;
+
+    async function atualizarLoteOrigemTransformacao() {
+      const depositoId = $('tf_deposito').value;
+      if (!produtoOrigemTransformacao || !produtoOrigemTransformacao.controlaLote || !depositoId) {
+        $('tf_campoLoteOrigem').style.display = 'none';
+        return;
+      }
+      const lotes = await API.get('/api/estoque/lotes?produtoId=' + produtoOrigemTransformacao.id + '&depositoId=' + depositoId);
+      $('tf_loteOrigem').innerHTML = lotes.map((l) =>
+        '<option value="' + l.id + '">' + (l.numeroLote || 'sem número') + ' · venc. ' + UI.data(l.dataValidade) + ' · qtd ' + l.quantidade + '</option>'
+      ).join('');
+      $('tf_campoLoteOrigem').style.display = 'block';
+    }
+
+    function atualizarValidadeDestinoTransformacao() {
+      $('tf_campoValidadeDestino').style.display = produtoDestinoTransformacao && produtoDestinoTransformacao.controlaLote ? 'block' : 'none';
+    }
+
+    $('tf_buscaOrigem').addEventListener('input', (ev) => buscarProduto(ev.target.value, 'tf_resultadosOrigem'));
+    $('tf_resultadosOrigem').addEventListener('click', async (ev) => {
+      const item = ev.target.closest('[data-acao="selecionar"]');
+      if (!item) return;
+      produtoOrigemTransformacao = { id: item.dataset.id, nome: item.dataset.nome, controlaLote: item.dataset.lote === 'true' };
+      $('tf_origemSelecionada').textContent = 'Selecionado: ' + produtoOrigemTransformacao.nome;
+      $('tf_resultadosOrigem').innerHTML = '';
+      $('tf_buscaOrigem').value = '';
+      await atualizarLoteOrigemTransformacao();
+    });
+
+    $('tf_buscaDestino').addEventListener('input', (ev) => buscarProduto(ev.target.value, 'tf_resultadosDestino'));
+    $('tf_resultadosDestino').addEventListener('click', (ev) => {
+      const item = ev.target.closest('[data-acao="selecionar"]');
+      if (!item) return;
+      produtoDestinoTransformacao = { id: item.dataset.id, nome: item.dataset.nome, controlaLote: item.dataset.lote === 'true' };
+      $('tf_destinoSelecionado').textContent = 'Selecionado: ' + produtoDestinoTransformacao.nome;
+      $('tf_resultadosDestino').innerHTML = '';
+      $('tf_buscaDestino').value = '';
+      atualizarValidadeDestinoTransformacao();
+    });
+
+    $('tf_deposito').addEventListener('change', atualizarLoteOrigemTransformacao);
+
+    async function transformar() {
+      UI.limparErro($('erroTransformacao'));
+      $('resultadoTransformacao').style.display = 'none';
+      if (!produtoOrigemTransformacao) { UI.erro($('erroTransformacao'), 'Selecione o produto de origem.'); return; }
+      if (!produtoDestinoTransformacao) { UI.erro($('erroTransformacao'), 'Selecione o produto de destino.'); return; }
+      const depositoId = $('tf_deposito').value;
+      const quantidadeOrigemConsumida = $('tf_quantidadeOrigem').value;
+      const quantidadeDestinoGerada = $('tf_quantidadeDestino').value;
+      const motivo = $('tf_motivo').value;
+      if (!quantidadeOrigemConsumida || !quantidadeDestinoGerada) { UI.erro($('erroTransformacao'), 'Informe as quantidades consumida e gerada.'); return; }
+      if (produtoOrigemTransformacao.controlaLote && !$('tf_loteOrigem').value) { UI.erro($('erroTransformacao'), 'Selecione o lote de origem.'); return; }
+      if (produtoDestinoTransformacao.controlaLote && !$('tf_validadeDestino').value) { UI.erro($('erroTransformacao'), 'Informe a validade do lote gerado no destino.'); return; }
+
+      try {
+        await API.post('/api/estoque/transformacao', {
+          produtoOrigemId: produtoOrigemTransformacao.id,
+          produtoDestinoId: produtoDestinoTransformacao.id,
+          depositoId,
+          quantidadeOrigemConsumida: Number(quantidadeOrigemConsumida),
+          quantidadeDestinoGerada: Number(quantidadeDestinoGerada),
+          motivo,
+          loteOrigemId: produtoOrigemTransformacao.controlaLote ? $('tf_loteOrigem').value : undefined,
+          dataValidadeDestino: produtoDestinoTransformacao.controlaLote ? $('tf_validadeDestino').value : undefined,
+        });
+        const box = $('resultadoTransformacao');
+        box.style.display = 'block'; box.style.background = '#eaf7ed'; box.style.color = '#1e7e34';
+        box.textContent = 'Transformação realizada: ' + quantidadeOrigemConsumida + ' unidade(s) de ' + produtoOrigemTransformacao.nome +
+          ' geraram ' + quantidadeDestinoGerada + ' unidade(s) de ' + produtoDestinoTransformacao.nome + '.';
+        produtoOrigemTransformacao = null; produtoDestinoTransformacao = null;
+        $('tf_origemSelecionada').textContent = ''; $('tf_destinoSelecionado').textContent = '';
+        $('tf_quantidadeOrigem').value = ''; $('tf_quantidadeDestino').value = ''; $('tf_motivo').value = ''; $('tf_validadeDestino').value = '';
+        $('tf_campoLoteOrigem').style.display = 'none'; $('tf_campoValidadeDestino').style.display = 'none';
+      } catch (e) {
+        UI.erro($('erroTransformacao'), e);
+      }
+    }
+    $('btnTransformar').addEventListener('click', transformar);
+
+    // ─── Eventos gerais ───
+    document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
+    });
     $('btnNovoDeposito').addEventListener('click', abrirNovo);
     $('btnCancelarDeposito').addEventListener('click', () => UI.fecharModal('modalDeposito'));
     $('btnSalvar').addEventListener('click', salvar);

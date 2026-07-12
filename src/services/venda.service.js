@@ -176,6 +176,14 @@ async function cancelar(tenantId, id, usuario, motivo, ip) {
   return { cancelada: true };
 }
 
+/** XML da NFC-e salvo na venda (Fase 1c complemento) — inclui rejeitadas, que também gravam o XML tentado. */
+async function buscarXml(tenantId, id) {
+  const venda = await vendaRepo.buscarXml(tenantId, id);
+  if (!venda) throw new AppError('Venda não encontrada', 404);
+  if (!venda.xmlNfce) throw new AppError('Esta venda não tem XML de NFC-e salvo — nunca foi emitida', 404);
+  return { vendaId: venda.id, chaveNfce: venda.chaveNfce, xml: venda.xmlNfce };
+}
+
 async function sync(tenantId, vendas) {
   const resultados = [];
   for (const venda of vendas || []) {
@@ -191,4 +199,4 @@ async function sync(tenantId, vendas) {
   return resultados;
 }
 
-module.exports = { listar, detalhar, registrar, cancelar, sync };
+module.exports = { listar, detalhar, registrar, cancelar, sync, buscarXml };

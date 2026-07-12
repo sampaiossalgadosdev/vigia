@@ -23,6 +23,7 @@ router.get('/movimentacoes', gestao, controller.movimentacoes);
 router.get('/pendentes', gestao, controller.pendentes);
 router.get('/alertas-validade', gestao, controller.alertasValidade);
 router.post('/promocoes-relampago/gerar', gestao, controller.gerarPromocoesRelampago);
+router.get('/lotes', gestao, controller.lotesAtivos);
 router.post('/ajuste', gestao, controller.ajustar);
 router.post('/transferencia', gestao, controller.transferir);
 router.post('/transformacao', gestao, controller.transformar);

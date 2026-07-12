@@ -63,9 +63,43 @@
         </div>
       </div>
 
-      <!-- Aba 2: histórico de ajustes -->
+      <!-- Aba 2: ajuste avulso + histórico de ajustes -->
       <div class="aba-conteudo" id="aba-ajustes">
         <div class="painel">
+          <h2>Ajuste de estoque avulso</h2>
+          <p style="font-size:14px;color:var(--cinza);margin-bottom:12px">Corrige a quantidade de um produto fora do fluxo de inventário — ex: perda identificada, erro de contagem pontual.</p>
+          <div id="erroAjuste" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo cheio">
+              <label>Produto *</label>
+              <input type="search" id="aj_buscaProduto" placeholder="Buscar por nome ou EAN">
+              <div id="aj_resultadosProduto" style="max-height:160px;overflow-y:auto"></div>
+              <div id="aj_produtoSelecionado" style="font-size:13px;color:var(--cinza);margin-top:4px"></div>
+            </div>
+            <div class="campo">
+              <label>Depósito *</label>
+              <select id="aj_deposito"></select>
+            </div>
+            <div class="campo" id="aj_campoLote" style="display:none">
+              <label>Lote *</label>
+              <select id="aj_lote"></select>
+            </div>
+            <div class="campo">
+              <label>Nova quantidade *</label>
+              <input type="number" step="0.001" id="aj_novaQuantidade">
+            </div>
+            <div class="campo cheio">
+              <label>Motivo *</label>
+              <input type="text" id="aj_motivo" maxlength="255" placeholder="Mínimo 5 caracteres">
+            </div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnRegistrarAjuste">Registrar ajuste</button>
+          </div>
+        </div>
+
+        <div class="painel">
+          <h2>Histórico de ajustes</h2>
           <table>
             <thead><tr><th>Data</th><th>Produto</th><th>Antes</th><th>Depois</th><th>Motivo</th><th>Origem</th></tr></thead>
             <tbody id="tabelaAjustes"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
@@ -93,7 +127,9 @@
     // ─── Iniciar inventário ───
     async function carregarDepositos() {
       const depositos = await API.get('/api/depositos');
-      $('f_deposito').innerHTML = depositos.map((d) => '<option value="' + d.id + '">' + UI.escapar(d.nome) + (d.principal ? ' (Principal)' : '') + '</option>').join('');
+      const opcoes = depositos.map((d) => '<option value="' + d.id + '">' + UI.escapar(d.nome) + (d.principal ? ' (Principal)' : '') + '</option>').join('');
+      $('f_deposito').innerHTML = opcoes;
+      $('aj_deposito').innerHTML = opcoes;
     }
 
     async function carregarCategorias() {
@@ -172,6 +208,77 @@
       if (input.value === '') { alert('Informe a quantidade contada'); return; }
       salvarContagem(tr.dataset.produto, input.value);
     });
+
+    // ─── Ajuste de estoque avulso ───
+    let produtoAjusteSelecionado = null;
+
+    async function buscarProdutoAjuste(termo) {
+      if (termo.trim().length < 2) { $('aj_resultadosProduto').innerHTML = ''; return; }
+      const data = await API.get('/api/produtos?limit=8&search=' + encodeURIComponent(termo));
+      $('aj_resultadosProduto').innerHTML = data.items.map((p) =>
+        '<div style="padding:6px 0;border-bottom:1px solid var(--linha);cursor:pointer" data-acao="selecionar-produto-ajuste" data-id="' + p.id + '" data-nome="' + UI.escapar(p.nome) + '" data-lote="' + !!p.controlaLote + '">' +
+        UI.escapar(p.nome) + ' <small>' + p.ean + '</small></div>'
+      ).join('');
+    }
+
+    async function selecionarProdutoAjuste(id, nome, controlaLote) {
+      produtoAjusteSelecionado = { id, nome, controlaLote };
+      $('aj_produtoSelecionado').textContent = 'Selecionado: ' + nome;
+      $('aj_resultadosProduto').innerHTML = '';
+      $('aj_buscaProduto').value = '';
+      await atualizarCampoLoteAjuste();
+    }
+
+    async function atualizarCampoLoteAjuste() {
+      const depositoId = $('aj_deposito').value;
+      if (!produtoAjusteSelecionado || !produtoAjusteSelecionado.controlaLote || !depositoId) {
+        $('aj_campoLote').style.display = 'none';
+        return;
+      }
+      const lotes = await API.get('/api/estoque/lotes?produtoId=' + produtoAjusteSelecionado.id + '&depositoId=' + depositoId);
+      $('aj_lote').innerHTML = lotes.map((l) =>
+        '<option value="' + l.id + '">' + (l.numeroLote || 'sem número') + ' · venc. ' + UI.data(l.dataValidade) + ' · qtd ' + l.quantidade + '</option>'
+      ).join('');
+      $('aj_campoLote').style.display = 'block';
+    }
+
+    async function registrarAjuste() {
+      UI.limparErro($('erroAjuste'));
+      if (!produtoAjusteSelecionado) { UI.erro($('erroAjuste'), 'Selecione um produto.'); return; }
+      const depositoId = $('aj_deposito').value;
+      const novaQuantidade = $('aj_novaQuantidade').value;
+      const motivo = $('aj_motivo').value;
+      if (novaQuantidade === '') { UI.erro($('erroAjuste'), 'Informe a nova quantidade.'); return; }
+      if (produtoAjusteSelecionado.controlaLote && !$('aj_lote').value) { UI.erro($('erroAjuste'), 'Selecione o lote.'); return; }
+
+      try {
+        await API.post('/api/estoque/ajuste', {
+          produtoId: produtoAjusteSelecionado.id,
+          depositoId,
+          novaQuantidade: Number(novaQuantidade),
+          motivo,
+          loteId: produtoAjusteSelecionado.controlaLote ? $('aj_lote').value : undefined,
+        });
+        mostrarToast('Ajuste registrado com sucesso');
+        produtoAjusteSelecionado = null;
+        $('aj_produtoSelecionado').textContent = '';
+        $('aj_novaQuantidade').value = '';
+        $('aj_motivo').value = '';
+        $('aj_campoLote').style.display = 'none';
+        await carregarAjustes();
+      } catch (e) {
+        UI.erro($('erroAjuste'), e);
+      }
+    }
+
+    $('aj_buscaProduto').addEventListener('input', (ev) => buscarProdutoAjuste(ev.target.value));
+    $('aj_resultadosProduto').addEventListener('click', (ev) => {
+      const item = ev.target.closest('[data-acao="selecionar-produto-ajuste"]');
+      if (!item) return;
+      selecionarProdutoAjuste(item.dataset.id, item.dataset.nome, item.dataset.lote === 'true');
+    });
+    $('aj_deposito').addEventListener('change', atualizarCampoLoteAjuste);
+    $('btnRegistrarAjuste').addEventListener('click', registrarAjuste);
 
     // ─── Histórico de ajustes ───
     async function carregarAjustes() {

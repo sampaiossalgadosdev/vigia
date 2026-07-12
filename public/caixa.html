@@ -17,7 +17,11 @@
       </div>
       <div class="cards">
         <div class="card"><div class="rotulo">Status</div><div class="valor" id="statusCaixa">—</div></div>
-        <div class="card"><div class="rotulo">Vendas do dia</div><div class="valor" id="vendasDia">—</div></div>
+        <!-- Fechamento "cego": este card é escondido enquanto o modal de
+             fechamento estiver aberto (ver abrirModalFechar/fecharModalFechar),
+             pra não expor o valor do sistema antes do operador informar o que
+             ele contou. Ver Fase 4a. -->
+        <div class="card" id="cardVendasDia"><div class="rotulo">Vendas do dia</div><div class="valor" id="vendasDia">—</div></div>
       </div>
       <div class="barra-acoes">
         <button class="btn" id="btnAbrirCaixa">Abrir caixa</button>
@@ -27,6 +31,45 @@
       <div class="painel"><h2>Histórico</h2><table><thead><tr><th>Data</th><th>Status</th><th>Fechamento</th></tr></thead><tbody id="historicoCaixa"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table></div>
     </main>
   </div>
+
+  <!-- Modal de fechamento de caixa "cego": o valor do sistema (Vendas do
+       dia) NÃO aparece em nenhum lugar deste modal enquanto o operador não
+       submete o valor que ele contou (etapa 1). Só depois do POST
+       /api/caixa/fechar responder é que a comparação lado a lado aparece
+       (etapa 2) — usando exatamente os valores já calculados pelo backend
+       (caixa.service.fechar), sem recalcular nada aqui. -->
+  <div class="modal-fundo" id="modalFechar">
+    <div class="modal">
+      <h2>Fechar caixa</h2>
+      <div id="erroFechar" class="msg-erro"></div>
+
+      <div id="fecharEtapaContagem">
+        <p style="font-size:14px;color:var(--cinza);margin-bottom:12px">
+          Conte o dinheiro em caixa e informe o valor abaixo. O valor calculado pelo sistema só será exibido depois que você confirmar.
+        </p>
+        <div class="campo">
+          <label>Valor contado por você (R$) *</label>
+          <input type="number" step="0.01" min="0" id="f_valorContado" autocomplete="off">
+        </div>
+        <div class="rodape">
+          <button class="btn secundario" id="btnCancelarFechar">Cancelar</button>
+          <button class="btn" id="btnConfirmarFechar">Confirmar fechamento</button>
+        </div>
+      </div>
+
+      <div id="fecharEtapaResultado" style="display:none">
+        <div class="cards">
+          <div class="card"><div class="rotulo">Valor contado</div><div class="valor" id="resValorContado">—</div></div>
+          <div class="card"><div class="rotulo">Valor do sistema</div><div class="valor" id="resValorSistema">—</div></div>
+          <div class="card"><div class="rotulo">Diferença</div><div class="valor" id="resDiferenca">—</div></div>
+        </div>
+        <div class="rodape">
+          <button class="btn" id="btnConcluirFechar">Concluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/api.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/toast.js"></script>
@@ -38,6 +81,7 @@
     // nos elementos órfãos a escrita tardia é um no-op inofensivo.
     const $ = (id) => document.getElementById(id);
     const statusCaixa = $('statusCaixa'), vendasDia = $('vendasDia'), historicoCaixa = $('historicoCaixa');
+    const cardVendasDia = $('cardVendasDia');
 
     async function carregar() {
       const atual = await API.get('/api/caixa/atual');
@@ -49,10 +93,57 @@
     }
     async function abrirCaixa() { const valor = prompt('Valor de abertura'); if (valor === null) return; await API.post('/api/caixa/abrir', { valorAbertura: valor }); await carregar(); }
     async function sangria() { const tipo = prompt('Tipo (sangria/suprimento)'); const valor = prompt('Valor'); const motivo = prompt('Motivo'); if (valor === null) return; await API.post('/api/caixa/sangria', { tipo, valor, motivo }); await carregar(); }
-    async function fecharCaixa() { const valor = prompt('Valor de fechamento'); if (valor === null) return; await API.post('/api/caixa/fechar', { valorFechamento: valor }); await carregar(); }
+
+    // ─── Fechamento de caixa "cego" ───
+    function abrirModalFechar() {
+      // Esconder só por CSS não basta — o valor continuaria no
+      // innerHTML/textContent, visível via "Inspecionar elemento" sem
+      // nenhuma habilidade técnica. Por isso o dado é REMOVIDO do elemento
+      // (textContent = ''), não só escondido — nada do valor do sistema
+      // sobra no DOM enquanto o modal de contagem estiver aberto. É
+      // reposto (com o dado atual, via carregar()) só ao fechar o modal,
+      // seja cancelando ou concluindo o fechamento.
+      cardVendasDia.style.display = 'none';
+      vendasDia.textContent = '';
+      UI.limparErro($('erroFechar'));
+      $('f_valorContado').value = '';
+      $('fecharEtapaContagem').style.display = 'block';
+      $('fecharEtapaResultado').style.display = 'none';
+      UI.abrirModal('modalFechar');
+      $('f_valorContado').focus();
+    }
+
+    async function fecharModalFechar() {
+      UI.fecharModal('modalFechar');
+      cardVendasDia.style.display = '';
+      await carregar(); // repõe o valor no DOM (foi removido ao abrir o modal), sempre com o dado atual
+    }
+
+    async function confirmarFechamento() {
+      UI.limparErro($('erroFechar'));
+      const valorContado = $('f_valorContado').value;
+      if (valorContado === '') { UI.erro($('erroFechar'), 'Informe o valor contado.'); return; }
+      try {
+        // Só a partir daqui o backend responde com o valor do sistema e a
+        // diferença — nada disso existe na tela antes deste POST.
+        const fechado = await API.post('/api/caixa/fechar', { valorFechamento: valorContado });
+        $('resValorContado').textContent = UI.moeda(fechado.valorFechamento);
+        $('resValorSistema').textContent = UI.moeda(fechado.totalVendas);
+        $('resDiferenca').textContent = UI.moeda(fechado.diferenca);
+        $('fecharEtapaContagem').style.display = 'none';
+        $('fecharEtapaResultado').style.display = 'block';
+      } catch (e) {
+        UI.erro($('erroFechar'), e);
+      }
+    }
+
     $('btnAbrirCaixa').addEventListener('click', abrirCaixa);
     $('btnSangria').addEventListener('click', sangria);
-    $('btnFecharCaixa').addEventListener('click', fecharCaixa);
+    $('btnFecharCaixa').addEventListener('click', abrirModalFechar);
+    $('btnCancelarFechar').addEventListener('click', fecharModalFechar);
+    $('btnConfirmarFechar').addEventListener('click', confirmarFechamento);
+    $('btnConcluirFechar').addEventListener('click', fecharModalFechar);
+
     (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('caixa.html'); await carregar(); })();
   })();
   </script>

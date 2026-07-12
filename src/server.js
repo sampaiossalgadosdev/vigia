@@ -52,6 +52,8 @@ app.use('/api/vendas', require('./routes/venda.routes'));
 app.use('/api/promocoes', require('./routes/promocao.routes'));
 app.use('/api/acougue-tv', require('./routes/acougue-tv.routes'));
 app.use('/api/caixa', require('./routes/caixa.routes'));
+app.use('/api/contas-pagar', require('./routes/contaPagar.routes'));
+app.use('/api/contas-receber', require('./routes/contaReceber.routes'));
 app.use('/api/relatorios', require('./routes/relatorio.routes'));
 app.use('/api/sync', require('./routes/sync.routes'));
 app.use('/api/ia', require('./routes/ia.routes'));

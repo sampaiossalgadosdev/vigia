@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Financeiro</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Financeiro</h1>
+      </div>
+
+      <div class="abas">
+        <button class="ativa" data-aba="pagar">Contas a Pagar</button>
+        <button data-aba="receber">Contas a Receber</button>
+      </div>
+
+      <!-- Aba 1: Contas a Pagar -->
+      <div class="aba-conteudo ativa" id="aba-pagar">
+        <div class="painel">
+          <h2>Nova conta a pagar</h2>
+          <div id="erroPagar" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo cheio"><label>Descrição *</label><input id="p_descricao" maxlength="255"></div>
+            <div class="campo"><label>Valor *</label><input id="p_valor" type="number" step="0.01" min="0.01"></div>
+            <div class="campo"><label>Vencimento *</label><input id="p_vencimento" type="date"></div>
+            <div class="campo"><label>Fornecedor</label><select id="p_fornecedor"><option value="">Sem fornecedor</option></select></div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnCriarPagar">Adicionar</button>
+          </div>
+        </div>
+
+        <div class="barra-acoes">
+          <select id="filtroPagar">
+            <option value="">Todas</option>
+            <option value="aberto">Abertas</option>
+            <option value="pago">Pagas</option>
+            <option value="cancelado">Canceladas</option>
+          </select>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Descrição</th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead>
+            <tbody id="tabelaPagar"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Aba 2: Contas a Receber -->
+      <div class="aba-conteudo" id="aba-receber">
+        <div class="painel">
+          <h2>Nova conta a receber</h2>
+          <div id="erroReceber" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo cheio"><label>Descrição *</label><input id="r_descricao" maxlength="255"></div>
+            <div class="campo"><label>Valor *</label><input id="r_valor" type="number" step="0.01" min="0.01"></div>
+            <div class="campo"><label>Vencimento *</label><input id="r_vencimento" type="date"></div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnCriarReceber">Adicionar</button>
+          </div>
+        </div>
+
+        <div class="barra-acoes">
+          <select id="filtroReceber">
+            <option value="">Todas</option>
+            <option value="aberto">Abertas</option>
+            <option value="recebido">Recebidas</option>
+            <option value="cancelado">Canceladas</option>
+          </select>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th><th></th></tr></thead>
+            <tbody id="tabelaReceber"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+
+    function trocarAba(aba) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
+    }
+
+    const tagStatus = (s) => '<span class="tag ' + (s === 'aberto' ? 'pendente' : s === 'pago' || s === 'recebido' ? 'ok' : 'neutro') + '">' + s + '</span>';
+
+    // ─── Contas a Pagar ───
+    async function carregarFornecedores() {
+      const data = await API.get('/api/fornecedores?limit=200');
+      $('p_fornecedor').innerHTML = '<option value="">Sem fornecedor</option>' +
+        data.items.map((f) => '<option value="' + f.id + '">' + UI.escapar(f.nome) + '</option>').join('');
+    }
+
+    async function carregarPagar() {
+      const status = $('filtroPagar').value;
+      const data = await API.get('/api/contas-pagar?limit=100' + (status ? '&status=' + status : ''));
+      $('tabelaPagar').innerHTML = data.items.length ? data.items.map((c) =>
+        '<tr><td>' + UI.escapar(c.descricao) + '</td><td>' + (c.fornecedor ? UI.escapar(c.fornecedor.nome) : '-') + '</td>' +
+        '<td>' + UI.moeda(c.valor) + '</td><td>' + UI.data(c.dataVencimento) + '</td><td>' + tagStatus(c.status) + '</td>' +
+        '<td>' + (c.status === 'aberto'
+          ? '<button class="btn pequeno" data-acao="baixar-pagar" data-id="' + c.id + '">Dar baixa</button> ' +
+            '<button class="btn secundario pequeno" data-acao="cancelar-pagar" data-id="' + c.id + '">Cancelar</button>'
+          : '') + '</td></tr>'
+      ).join('') : '<tr><td colspan="6" class="vazio">Nenhuma conta encontrada.</td></tr>';
+    }
+
+    async function criarPagar() {
+      UI.limparErro($('erroPagar'));
+      try {
+        await API.post('/api/contas-pagar', {
+          descricao: $('p_descricao').value.trim(),
+          valor: $('p_valor').value,
+          dataVencimento: $('p_vencimento').value,
+          fornecedorId: $('p_fornecedor').value || undefined,
+        });
+        $('p_descricao').value = ''; $('p_valor').value = ''; $('p_vencimento').value = ''; $('p_fornecedor').value = '';
+        mostrarToast('Conta a pagar adicionada');
+        await carregarPagar();
+      } catch (e) { UI.erro($('erroPagar'), e); }
+    }
+
+    async function baixarPagar(id) {
+      const forma = prompt('Forma de pagamento (opcional):') || undefined;
+      try {
+        await API.post('/api/contas-pagar/' + id + '/baixa', { formaPagamento: forma });
+        mostrarToast('Baixa registrada');
+        await carregarPagar();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function cancelarPagar(id) {
+      const motivo = prompt('Motivo do cancelamento (mínimo 5 caracteres):');
+      if (!motivo) return;
+      try {
+        await API.post('/api/contas-pagar/' + id + '/cancelar', { motivo });
+        mostrarToast('Conta cancelada');
+        await carregarPagar();
+      } catch (e) { alert(e.message); }
+    }
+
+    // ─── Contas a Receber ───
+    async function carregarReceber() {
+      const status = $('filtroReceber').value;
+      const data = await API.get('/api/contas-receber?limit=100' + (status ? '&status=' + status : ''));
+      $('tabelaReceber').innerHTML = data.items.length ? data.items.map((c) =>
+        '<tr><td>' + UI.escapar(c.descricao) + '</td><td>' + UI.moeda(c.valor) + '</td><td>' + UI.data(c.dataVencimento) + '</td>' +
+        '<td>' + tagStatus(c.status) + '</td>' +
+        '<td>' + (c.status === 'aberto'
+          ? '<button class="btn pequeno" data-acao="baixar-receber" data-id="' + c.id + '">Dar baixa</button> ' +
+            '<button class="btn secundario pequeno" data-acao="cancelar-receber" data-id="' + c.id + '">Cancelar</button>'
+          : '') + '</td></tr>'
+      ).join('') : '<tr><td colspan="5" class="vazio">Nenhuma conta encontrada.</td></tr>';
+    }
+
+    async function criarReceber() {
+      UI.limparErro($('erroReceber'));
+      try {
+        await API.post('/api/contas-receber', {
+          descricao: $('r_descricao').value.trim(),
+          valor: $('r_valor').value,
+          dataVencimento: $('r_vencimento').value,
+        });
+        $('r_descricao').value = ''; $('r_valor').value = ''; $('r_vencimento').value = '';
+        mostrarToast('Conta a receber adicionada');
+        await carregarReceber();
+      } catch (e) { UI.erro($('erroReceber'), e); }
+    }
+
+    async function baixarReceber(id) {
+      const forma = prompt('Forma de recebimento (opcional):') || undefined;
+      try {
+        await API.post('/api/contas-receber/' + id + '/baixa', { formaRecebimento: forma });
+        mostrarToast('Baixa registrada');
+        await carregarReceber();
+      } catch (e) { alert(e.message); }
+    }
+
+    async function cancelarReceber(id) {
+      const motivo = prompt('Motivo do cancelamento (mínimo 5 caracteres):');
+      if (!motivo) return;
+      try {
+        await API.post('/api/contas-receber/' + id + '/cancelar', { motivo });
+        mostrarToast('Conta cancelada');
+        await carregarReceber();
+      } catch (e) { alert(e.message); }
+    }
+
+    // ─── Eventos ───
+    document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
+    });
+    $('btnCriarPagar').addEventListener('click', criarPagar);
+    $('btnCriarReceber').addEventListener('click', criarReceber);
+    $('filtroPagar').addEventListener('change', carregarPagar);
+    $('filtroReceber').addEventListener('change', carregarReceber);
+    $('tabelaPagar').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao]');
+      if (!btn) return;
+      if (btn.dataset.acao === 'baixar-pagar') baixarPagar(btn.dataset.id);
+      if (btn.dataset.acao === 'cancelar-pagar') cancelarPagar(btn.dataset.id);
+    });
+    $('tabelaReceber').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao]');
+      if (!btn) return;
+      if (btn.dataset.acao === 'baixar-receber') baixarReceber(btn.dataset.id);
+      if (btn.dataset.acao === 'cancelar-receber') cancelarReceber(btn.dataset.id);
+    });
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('financeiro.html');
+      await carregarFornecedores();
+      await carregarPagar();
+      await carregarReceber();
+    })();
+  })();
+  </script>
+</body>
+</html>

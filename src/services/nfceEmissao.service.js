@@ -152,15 +152,22 @@ async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
     tenant
   );
 
+  // O XML é salvo SEMPRE, mesmo se a SEFAZ rejeitar (cStat != 100) — é o
+  // registro do que foi de fato tentado enviar, não só do que foi aceito.
+  // Por isso este update acontece antes do throw abaixo, numa única
+  // chamada (nunca dois writes): os campos de autorização só entram no
+  // mesmo objeto quando a emissão realmente é aceita.
+  const dadosAtualizacao = { xmlNfce: resultado.xml };
+  if (resultado.cStat === '100') {
+    dadosAtualizacao.chaveNfce = resultado.chaveAcesso;
+    dadosAtualizacao.emitidoEm = new Date();
+    dadosAtualizacao.emitidoViaContingencia = resultado.viaContingencia;
+    dadosAtualizacao.protocoloAutorizacao = resultado.protocolo;
+  }
+  const atualizada = await vendaRepo.atualizarStatus(tenantId, vendaId, dadosAtualizacao);
+
   if (resultado.cStat !== '100')
     throw new AppError(`NFC-e rejeitada pela SEFAZ: ${resultado.cStat} - ${resultado.xMotivo}`, 422);
-
-  const atualizada = await vendaRepo.atualizarStatus(tenantId, vendaId, {
-    chaveNfce: resultado.chaveAcesso,
-    emitidoEm: new Date(),
-    emitidoViaContingencia: resultado.viaContingencia,
-    protocoloAutorizacao: resultado.protocolo,
-  });
 
   await auditoriaRepo.registrar({
     tenantId, acao: 'emitir_nfce', entidade: 'Venda', entidadeId: vendaId,

@@ -61,6 +61,11 @@ async function buscarParaEmissao(tenantId, id) {
   });
 }
 
+/** Só o essencial pra consulta do XML salvo (Fase 1c complemento) — evita trazer itens/pagamentos à toa. */
+async function buscarXml(tenantId, id) {
+  return prisma.venda.findFirst({ where: { id, tenantId }, select: { id: true, xmlNfce: true, chaveNfce: true } });
+}
+
 async function buscarPorIdLocal(tenantId, idLocal) {
   return prisma.venda.findFirst({ where: { tenantId, chaveNfce: idLocal } });
 }
@@ -70,4 +75,4 @@ async function listarResumoDiario(tenantId, inicio, fim) {
   return prisma.venda.findMany({ where, orderBy: { criadoEm: 'asc' }, include: { pagamentos: true } });
 }
 
-module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao };
+module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao, buscarXml };

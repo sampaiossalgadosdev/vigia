@@ -49,6 +49,10 @@ const gerarPromocoesRelampago = asyncHandler(async (req, res) => {
   success(res, await service.gerarPromocoesRelampago(req.tenantId, req.usuario, req.ip, req.body.dias));
 });
 
+const lotesAtivos = asyncHandler(async (req, res) => {
+  success(res, await service.listarLotesAtivos(req.tenantId, req.query.produtoId, req.query.depositoId));
+});
+
 const ajustar = asyncHandler(async (req, res) => {
   const { produtoId, depositoId, novaQuantidade, motivo, loteId } = req.body;
   success(res, await service.ajustarEstoque(req.tenantId, req.usuario.id, produtoId, depositoId, novaQuantidade, motivo, loteId), 201);
@@ -66,5 +70,5 @@ const transformar = asyncHandler(async (req, res) => {
 
 module.exports = {
   uploadNfe, confirmarNfe, listarNfes, detalharNfe, vincularItem, movimentacoes, pendentes,
-  alertasValidade, gerarPromocoesRelampago, ajustar, transferir, transformar,
+  alertasValidade, gerarPromocoesRelampago, ajustar, transferir, transformar, lotesAtivos,
 };

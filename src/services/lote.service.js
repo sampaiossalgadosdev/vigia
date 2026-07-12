@@ -10,6 +10,7 @@
  * Utilizado por: VendaService, EstoqueRepository, EstoqueService.
  * Depende de: LoteRepository, EstoqueDepositoRepository, PromocaoRepository.
  */
+const prisma = require('../config/database');
 const loteRepo = require('../repositories/lote.repository');
 const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
 const promocaoRepo = require('../repositories/promocao.repository');
@@ -160,4 +161,21 @@ async function gerarPromocoesRelampago(tenantId, usuario, ip, dias) {
   return { criadas, jaTemPromocaoAtiva };
 }
 
-module.exports = { consumirVendaFifo, registrarEntrada, alertasValidade, gerarPromocoesRelampago, DESCONTO_RELAMPAGO_PERCENTUAL };
+/**
+ * Lotes ativos de um produto num depósito específico, mais antigo primeiro
+ * — usado pelas telas (ajuste, transferência) pra montar o seletor de lote.
+ * Devolve lista vazia se o depósito não existe ou o produto nunca teve
+ * estoque ali (não é erro — só não há lote pra escolher).
+ */
+async function listarLotesAtivosDoDeposito(tenantId, produtoId, depositoId) {
+  const deposito = await estoqueDepositoRepo.buscarPorId(tenantId, depositoId);
+  if (!deposito) return [];
+  const estoqueProduto = await estoqueDepositoRepo.buscarEstoqueProduto(prisma, produtoId, depositoId);
+  if (!estoqueProduto) return [];
+  return loteRepo.listarAtivosOrdenados(prisma, estoqueProduto.id);
+}
+
+module.exports = {
+  consumirVendaFifo, registrarEntrada, alertasValidade, gerarPromocoesRelampago, DESCONTO_RELAMPAGO_PERCENTUAL,
+  listarLotesAtivosDoDeposito,
+};

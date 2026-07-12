@@ -187,6 +187,11 @@ async function gerarPromocoesRelampago(tenantId, usuario, ip, dias) {
   return loteService.gerarPromocoesRelampago(tenantId, usuario, ip, dias);
 }
 
+/** Lotes ativos de um produto num depósito — usado pelas telas de ajuste/transferência pra montar o seletor de lote. */
+async function listarLotesAtivos(tenantId, produtoId, depositoId) {
+  return loteService.listarLotesAtivosDoDeposito(tenantId, produtoId, depositoId);
+}
+
 /** Ajuste de estoque manual auditável (Fase 2c) — ver ajusteEstoque.service.js. */
 async function ajustarEstoque(tenantId, usuarioId, produtoId, depositoId, novaQuantidade, motivo, loteId) {
   return ajusteEstoqueService.ajusteEstoque(tenantId, usuarioId, produtoId, depositoId, novaQuantidade, motivo, loteId);
@@ -205,5 +210,5 @@ async function transformarProduto(tenantId, usuarioId, produtoOrigemId, produtoD
 module.exports = {
   uploadNfe, confirmarNfe, vincularItem, listarNfes, detalharNfe,
   listarMovimentacoes, listarPendentes, alertasValidade, gerarPromocoesRelampago, ajustarEstoque,
-  transferirEstoque, transformarProduto,
+  transferirEstoque, transformarProduto, listarLotesAtivos,
 };

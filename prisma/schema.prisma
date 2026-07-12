@@ -119,6 +119,8 @@ model Tenant {
   nfeDistribuicao NfeDistribuicao[]
   depositos       Deposito[]
   inventarios     Inventario[]
+  contasPagar     ContaPagar[]
+  contasReceber   ContaReceber[]
 }
 
 // ─── REFRESH TOKEN ────────────────────────────────────────
@@ -168,6 +170,7 @@ enum ModuloSistema {
   caixa
   relatorios
   ia
+  financeiro
 }
 
 enum NivelPermissao {
@@ -398,6 +401,7 @@ model Fornecedor {
   tenant         Tenant                    @relation(fields: [tenantId], references: [id])
   nfes           Nfe[]
   representantes FornecedorRepresentante[]
+  contasPagar    ContaPagar[]
 
   @@unique([tenantId, cnpj])
   @@index([tenantId])
@@ -654,13 +658,21 @@ model Venda {
   emitidoEm              DateTime? // momento da autorização (não confundir com criadoEm, que é o momento da venda)
   emitidoViaContingencia Boolean   @default(false) // true quando autorizado via SVC (SEFAZ do estado estava fora do ar)
   protocoloAutorizacao   String?
+  // XML gerado na tentativa de emissão (Fase 1c complemento) — salvo mesmo
+  // quando a SEFAZ rejeita (cStat != 100): é o registro do que foi de fato
+  // tentado enviar, não só do que foi aceito. Sem campo equivalente pro
+  // cancelamento por ora — ver justificativa no service (nem o mock nem o
+  // caminho real de cancelamento produzem hoje uma string de XML própria
+  // pro nosso código guardar.
+  xmlNfce                String?   @db.Text
   protocoloCancelamento  String?
   criadoEm           DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tenant     Tenant           @relation(fields: [tenantId], references: [id])
-  itens      VendaItem[]
-  pagamentos VendaPagamento[]
+  tenant        Tenant           @relation(fields: [tenantId], references: [id])
+  itens         VendaItem[]
+  pagamentos    VendaPagamento[]
+  contasReceber ContaReceber[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -792,4 +804,49 @@ model Sangria {
 
   @@index([caixaId])
   @@index([tenantId])
+}
+
+// ─── FINANCEIRO (Fase 4a — fundação) ──────────────────────
+model ContaPagar {
+  id             String    @id @default(uuid())
+  tenantId       String
+  fornecedorId   String? // opcional — nem toda despesa tem fornecedor cadastrado (ex: aluguel, água)
+  descricao      String
+  valor          Decimal   @db.Decimal(10, 2)
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  status         String    @default("aberto") // aberto | pago | cancelado
+  formaPagamento String? // preenchido só na baixa
+  observacao     String?
+  criadoPorId    String
+  criadoEm       DateTime  @default(now())
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  fornecedor Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, dataVencimento])
+}
+
+model ContaReceber {
+  id               String    @id @default(uuid())
+  tenantId         String
+  vendaId          String? // opcional — vínculo com uma venda (ex: recebível de cartão que ainda não caiu), null para recebíveis manuais/avulsos
+  descricao        String
+  valor            Decimal   @db.Decimal(10, 2)
+  dataVencimento   DateTime
+  dataRecebimento  DateTime?
+  status           String    @default("aberto") // aberto | recebido | cancelado
+  formaRecebimento String?
+  observacao       String?
+  criadoPorId      String
+  criadoEm         DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  venda  Venda? @relation(fields: [vendaId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, dataVencimento])
 }

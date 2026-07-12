@@ -109,6 +109,32 @@ test('emitirNfce: mock simula rejeição (cStat != 100) — erro com motivo, Ven
   }
 });
 
+test('emitirNfce: Venda.xmlNfce é populado com o XML gerado tanto em sucesso quanto em rejeição da SEFAZ', async () => {
+  const tenantSucesso = await criarTenantCompleto('03b');
+  const { produto: produtoSucesso, venda: vendaSucesso } = await criarVendaDeTeste(tenantSucesso.id);
+  try {
+    const atualizada = await emitirNfce(tenantSucesso.id, vendaSucesso.id);
+    assert.ok(atualizada.xmlNfce, 'xmlNfce deve ser populado quando a emissão é aceita');
+    assert.match(atualizada.xmlNfce, /<.*NFe/i, 'deve conter algo parecido com XML de NFe');
+  } finally {
+    await limpar(tenantSucesso.id, vendaSucesso.id, produtoSucesso.id);
+  }
+
+  const tenantRejeicao = await criarTenantCompleto('03c');
+  const { produto: produtoRejeicao, venda: vendaRejeicao } = await criarVendaDeTeste(tenantRejeicao.id);
+  try {
+    const chamarRejeitando = async () => ({ cStat: '204', xMotivo: 'Rejeição: duplicidade de NF-e' });
+    await assert.rejects(() => emitirNfce(tenantRejeicao.id, vendaRejeicao.id, { chamarWebservice: chamarRejeitando }));
+
+    const depois = await prisma.venda.findUnique({ where: { id: vendaRejeicao.id } });
+    assert.ok(depois.xmlNfce, 'xmlNfce deve ser populado MESMO quando a SEFAZ rejeita — é o registro do que foi tentado enviar');
+    assert.equal(depois.chaveNfce, 'localid-abc123', 'mas os campos de autorização (chave/protocolo) não podem ser preenchidos numa rejeição');
+    assert.equal(depois.protocoloAutorizacao, null);
+  } finally {
+    await limpar(tenantRejeicao.id, vendaRejeicao.id, produtoRejeicao.id);
+  }
+});
+
 test('cancelarNfce: dentro da janela — sucesso simulado, status da Venda atualizado', async () => {
   const tenant = await criarTenantCompleto('04');
   const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '3'.repeat(44), emitidoEm: new Date() });

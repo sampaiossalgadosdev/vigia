@@ -22,4 +22,8 @@ const sync = asyncHandler(async (req, res) => {
   success(res, await service.sync(req.tenantId, req.body.vendas || []));
 });
 
-module.exports = { listar, detalhar, registrar, cancelar, sync };
+const buscarXml = asyncHandler(async (req, res) => {
+  success(res, await service.buscarXml(req.tenantId, req.params.id));
+});
+
+module.exports = { listar, detalhar, registrar, cancelar, sync, buscarXml };

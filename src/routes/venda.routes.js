@@ -11,6 +11,7 @@ const gestao = exigePermissao('vendas');
 // tenant pode vender, independente da matriz de permissões da retaguarda.
 router.get('/', gestao, controller.listar);
 router.get('/:id', gestao, controller.detalhar);
+router.get('/:id/xml', gestao, controller.buscarXml);
 router.post('/', controller.registrar);
 router.post('/:id/cancelar', gestao, controller.cancelar);
 router.post('/sync', controller.sync);
