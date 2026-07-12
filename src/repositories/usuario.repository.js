@@ -43,8 +43,8 @@ async function criar(dados) {
   return prisma.usuario.create({ data: dados });
 }
 
-async function atualizar(id, dados) {
-  return prisma.usuario.update({ where: { id }, data: dados });
+async function atualizar(tenantId, id, dados) {
+  return prisma.usuario.update({ where: { id, tenantId }, data: dados });
 }
 
 // ─── Refresh tokens ───────────────────────────────────────

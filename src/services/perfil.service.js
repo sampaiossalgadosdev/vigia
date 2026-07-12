@@ -20,6 +20,17 @@ function normalizarPermissoes(permissoesBody = []) {
   return MODULOS.map((modulo) => ({ modulo, nivel: porModulo.get(modulo) || 'bloqueado' }));
 }
 
+/**
+ * Só o Dono do tenant pode conceder nível acesso_completo em qualquer módulo —
+ * sem isso, um usuário não-Dono com acesso à tela de Perfis poderia criar ou
+ * editar um Perfil com acesso_completo (inclusive no módulo "usuarios"),
+ * escalando o próprio privilégio.
+ */
+function garantirPodeConcederAcessoCompleto(permissoes, solicitante) {
+  if (permissoes && permissoes.some((p) => p.nivel === 'acesso_completo') && !solicitante.isDono)
+    throw new AppError('Apenas o proprietário da conta pode conceder o nível de acesso completo', 403);
+}
+
 async function listar(tenantId, pag) {
   const { items, total } = await perfilRepo.listar(tenantId, pag);
   return paginado(
@@ -39,6 +50,7 @@ async function criar(tenantId, body, solicitante, ip) {
   if (existente) throw new AppError('Já existe um perfil com este nome', 409);
 
   const permissoes = normalizarPermissoes(body.permissoes);
+  garantirPodeConcederAcessoCompleto(permissoes, solicitante);
   const perfil = await perfilRepo.criar(tenantId, { nome: body.nome, descricao: body.descricao, permissoes });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: solicitante.id, acao: 'criar', entidade: 'Perfil',
@@ -57,7 +69,8 @@ async function atualizar(tenantId, id, body, solicitante, ip) {
   }
 
   const permissoes = body.permissoes ? normalizarPermissoes(body.permissoes) : undefined;
-  const perfil = await perfilRepo.atualizar(id, { nome: body.nome, descricao: body.descricao, permissoes });
+  garantirPodeConcederAcessoCompleto(permissoes, solicitante);
+  const perfil = await perfilRepo.atualizar(tenantId, id, { nome: body.nome, descricao: body.descricao, permissoes });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: solicitante.id, acao: 'editar', entidade: 'Perfil', entidadeId: id,
     antes: { nome: atual.nome }, depois: { nome: perfil.nome, permissoes }, ip,
@@ -73,7 +86,7 @@ async function remover(tenantId, id, solicitante, ip) {
   if (vinculados > 0)
     throw new AppError('Existem usuários vinculados a este perfil. Troque o perfil deles antes de excluir.', 409);
 
-  await perfilRepo.desativar(id);
+  await perfilRepo.desativar(tenantId, id);
   await auditoriaRepo.registrar({
     tenantId, usuarioId: solicitante.id, acao: 'desativar', entidade: 'Perfil', entidadeId: id,
     antes: { nome: atual.nome }, ip,

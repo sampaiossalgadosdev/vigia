@@ -39,22 +39,22 @@ async function criar(tenantId, { nome, descricao, permissoes }) {
   });
 }
 
-async function atualizar(id, { nome, descricao, permissoes }) {
+async function atualizar(tenantId, id, { nome, descricao, permissoes }) {
   return prisma.$transaction(async (tx) => {
     if (permissoes) {
       await tx.permissaoPerfil.deleteMany({ where: { perfilId: id } });
       await tx.permissaoPerfil.createMany({ data: permissoes.map((p) => ({ ...p, perfilId: id })) });
     }
     return tx.perfil.update({
-      where: { id },
+      where: { id, tenantId },
       data: { ...(nome !== undefined ? { nome } : {}), ...(descricao !== undefined ? { descricao } : {}) },
       include: { permissoes: true },
     });
   });
 }
 
-async function desativar(id) {
-  return prisma.perfil.update({ where: { id }, data: { ativo: false } });
+async function desativar(tenantId, id) {
+  return prisma.perfil.update({ where: { id, tenantId }, data: { ativo: false } });
 }
 
 async function contarUsuariosVinculados(perfilId) {

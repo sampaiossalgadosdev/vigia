@@ -20,12 +20,12 @@ async function criar(dados) {
   return prisma.promocao.create({ data: dados, include: { produto: true } });
 }
 
-async function atualizar(id, dados) {
-  return prisma.promocao.update({ where: { id }, data: dados, include: { produto: true } });
+async function atualizar(tenantId, id, dados) {
+  return prisma.promocao.update({ where: { id, tenantId }, data: dados, include: { produto: true } });
 }
 
-async function encerrar(id) {
-  return prisma.promocao.update({ where: { id }, data: { ativa: false }, include: { produto: true } });
+async function encerrar(tenantId, id) {
+  return prisma.promocao.update({ where: { id, tenantId }, data: { ativa: false }, include: { produto: true } });
 }
 
 async function vigentes(tenantId) {

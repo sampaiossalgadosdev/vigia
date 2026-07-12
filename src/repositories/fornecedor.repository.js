@@ -36,8 +36,8 @@ async function criar(dados) {
   return prisma.fornecedor.create({ data: dados, include: { representantes: true } });
 }
 
-async function atualizar(id, dados) {
-  return prisma.fornecedor.update({ where: { id }, data: dados });
+async function atualizar(tenantId, id, dados) {
+  return prisma.fornecedor.update({ where: { id, tenantId }, data: dados });
 }
 
 /** Troca a lista inteira de representantes do fornecedor (padrão replace-all da edição). */

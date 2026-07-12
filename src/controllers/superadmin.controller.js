@@ -6,6 +6,7 @@
  */
 const service = require('../services/superadmin.service');
 const importacao = require('../services/importacao.service');
+const configuracaoFiscalService = require('../services/configuracaoFiscal.service');
 const { success, asyncHandler, lerPaginacao } = require('../utils/response');
 
 const login = asyncHandler(async (req, res) => {
@@ -31,6 +32,14 @@ const statsTenant = asyncHandler(async (req, res) => {
 
 const salvarCertificado = asyncHandler(async (req, res) => {
   success(res, await service.salvarCertificado(req.params.id, req.file, req.body.senha));
+});
+
+const salvarConfiguracaoFiscal = asyncHandler(async (req, res) => {
+  success(res, await configuracaoFiscalService.salvarConfiguracaoFiscal(req.params.id, req.body));
+});
+
+const configuracaoFiscalCompleta = asyncHandler(async (req, res) => {
+  success(res, await configuracaoFiscalService.configuracaoFiscalCompleta(req.params.id));
 });
 
 const modeloProdutos = asyncHandler(async (req, res) => {
@@ -74,6 +83,7 @@ const desatrelarTenant = asyncHandler(async (req, res) => {
 
 module.exports = {
   login, listarTenants, criarTenant, atualizarTenant, salvarCertificado, statsTenant,
+  salvarConfiguracaoFiscal, configuracaoFiscalCompleta,
   modeloProdutos, importarPreview, importarConfirmar,
   listarSuperusuarios, criarSuperusuario, atualizarSuperusuario,
   atrelarTenants, desatrelarTenant,

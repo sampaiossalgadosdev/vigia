@@ -104,8 +104,8 @@ async function criarComCodigoSequencial(tenantId, dados) {
   });
 }
 
-async function atualizar(id, dados) {
-  return prisma.produto.update({ where: { id }, data: dados });
+async function atualizar(tenantId, id, dados) {
+  return prisma.produto.update({ where: { id, tenantId }, data: dados });
 }
 
 async function listarPorIds(tenantId, ids) {

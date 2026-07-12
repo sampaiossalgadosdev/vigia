@@ -94,7 +94,7 @@ async function atualizar(tenantId, id, body, usuario, ip) {
   if (vendidoPorPeso && !(dados.plu ?? atual.plu))
     throw new AppError('PLU é obrigatório para produtos vendidos por peso', 422);
 
-  const produto = await produtoRepo.atualizar(id, dados);
+  const produto = await produtoRepo.atualizar(tenantId, id, dados);
 
   const precoMudou = dados.preco !== undefined && Number(atual.preco) !== dados.preco;
   await auditoriaRepo.registrar({
@@ -154,7 +154,7 @@ async function atualizarEmLote(tenantId, body, usuario, ip) {
  */
 async function remover(tenantId, id, usuario, ip) {
   const atual = await detalhar(tenantId, id);
-  await produtoRepo.atualizar(id, { ativo: false });
+  await produtoRepo.atualizar(tenantId, id, { ativo: false });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'excluir', entidade: 'Produto',
     entidadeId: id, antes: { nome: atual.nome, ean: atual.ean }, ip,

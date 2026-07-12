@@ -25,7 +25,7 @@ async function criar(tenantId, body, usuario, ip) {
 
 async function atualizar(tenantId, id, body, usuario, ip) {
   const atual = await detalhar(tenantId, id);
-  const promocao = await promocaoRepo.atualizar(id, { ...body, dataInicio: new Date(body.dataInicio), dataFim: new Date(body.dataFim) });
+  const promocao = await promocaoRepo.atualizar(tenantId, id, { ...body, dataInicio: new Date(body.dataInicio), dataFim: new Date(body.dataFim) });
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'editar', entidade: 'Promocao', entidadeId: id, antes: { nome: atual.nome }, depois: { nome: promocao.nome }, ip });
   pdvGateway.notificarSync(tenantId, 'promocoes');
   return promocao;
@@ -33,7 +33,7 @@ async function atualizar(tenantId, id, body, usuario, ip) {
 
 async function remover(tenantId, id, usuario, ip) {
   const atual = await detalhar(tenantId, id);
-  const promocao = await promocaoRepo.encerrar(id);
+  const promocao = await promocaoRepo.encerrar(tenantId, id);
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'excluir', entidade: 'Promocao', entidadeId: id, antes: { nome: atual.nome }, depois: { nome: promocao.nome }, ip });
   pdvGateway.notificarSync(tenantId, 'promocoes');
   return { encerrada: true, promocao };

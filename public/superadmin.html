@@ -95,12 +95,39 @@
         </div>
       </div>
       <div>
-        <h2 style="font-size:15px;margin:14px 0 8px">Certificado digital A1 (consulta SEFAZ)</h2>
+        <h2 style="font-size:15px;margin:14px 0 8px">Certificado digital A1 (consulta SEFAZ / emissão NFC-e)</h2>
         <div class="form-grid">
           <div class="campo"><label>Arquivo .pfx</label><input type="file" id="t_certArquivo" accept=".pfx,.p12"></div>
           <div class="campo"><label>Senha do certificado</label><input id="t_certSenha" type="password" autocomplete="new-password" placeholder="Vazio se o certificado não tiver senha"></div>
         </div>
         <p id="infoCert" style="font-size:13px;color:#666;margin:4px 0 0"></p>
+      </div>
+      <div>
+        <h2 style="font-size:15px;margin:14px 0 8px">Configuração Fiscal (NFC-e — Reforma 2026)</h2>
+        <div class="form-grid">
+          <div class="campo"><label>CSC de Produção</label><input id="t_cscProducao" type="password" autocomplete="new-password" placeholder="Deixe em branco para manter o atual"></div>
+          <div class="campo"><label>ID do CSC de Produção</label><input id="t_cscProducaoId"></div>
+          <div class="campo"><label>CSC de Homologação</label><input id="t_cscHomologacao" type="password" autocomplete="new-password" placeholder="Deixe em branco para manter o atual"></div>
+          <div class="campo"><label>ID do CSC de Homologação</label><input id="t_cscHomologacaoId"></div>
+          <div class="campo"><label>CNAE</label><input id="t_cnae" placeholder="Ex: 4711-3/02"></div>
+          <div class="campo"><label>Inscrição Estadual</label><input id="t_ie"></div>
+          <div class="campo"><label>Ambiente fiscal</label>
+            <select id="t_ambienteFiscal"><option value="homologacao">Homologação</option><option value="producao">Produção</option></select>
+          </div>
+        </div>
+        <h3 style="font-size:13px;margin:12px 0 6px;color:#666">Endereço do emitente (enderEmit da NFC-e)</h3>
+        <div class="form-grid">
+          <div class="campo"><label>Logradouro</label><input id="t_logradouro"></div>
+          <div class="campo"><label>Número</label><input id="t_numero"></div>
+          <div class="campo"><label>Complemento</label><input id="t_complemento"></div>
+          <div class="campo"><label>Bairro</label><input id="t_bairro"></div>
+          <div class="campo"><label>Município</label><input id="t_municipio"></div>
+          <div class="campo"><label>Código do Município (IBGE)</label><input id="t_codigoMunicipioIbge" maxlength="7" placeholder="7 dígitos"></div>
+          <div class="campo"><label>CEP</label><input id="t_cep" maxlength="9"></div>
+        </div>
+        <p id="infoFiscal" style="font-size:13px;color:#666;margin:4px 0 0"></p>
+        <button type="button" class="btn secundario pequeno" style="margin-top:6px" onclick="verificarConfiguracaoFiscal()">Verificar configuração completa</button>
+        <p id="statusConfigFiscal" style="font-size:13px;margin:6px 0 0"></p>
       </div>
       <div id="areaDono">
         <h2 style="font-size:15px;margin:14px 0 8px">Dono inicial (opcional)</h2>
@@ -260,8 +287,13 @@
       document.getElementById('tituloTenant').textContent = 'Novo tenant';
       document.getElementById('areaDono').style.display = 'block';
       document.getElementById('erroTenant').classList.remove('visivel');
-      ['t_nome','t_cnpj','t_email','t_uf','d_nome','d_email','d_senha','t_certArquivo','t_certSenha'].forEach((id) => document.getElementById(id).value = '');
+      ['t_nome','t_cnpj','t_email','t_uf','d_nome','d_email','d_senha','t_certArquivo','t_certSenha',
+       't_cscProducao','t_cscProducaoId','t_cscHomologacao','t_cscHomologacaoId','t_cnae','t_ie',
+       't_logradouro','t_numero','t_complemento','t_bairro','t_municipio','t_codigoMunicipioIbge','t_cep'].forEach((id) => document.getElementById(id).value = '');
+      document.getElementById('t_ambienteFiscal').value = 'homologacao';
       document.getElementById('infoCert').textContent = '';
+      document.getElementById('infoFiscal').textContent = '';
+      document.getElementById('statusConfigFiscal').textContent = '';
       UI.abrirModal('modalTenant');
     }
 
@@ -279,12 +311,34 @@
       document.getElementById('t_certArquivo').value = '';
       document.getElementById('t_certSenha').value = '';
       document.getElementById('infoCert').textContent = t.temCertificado
-        ? 'Certificado enviado em ' + new Date(t.certificadoUploadEm).toLocaleString('pt-BR') + '. Enviar um novo arquivo substitui o atual.'
+        ? 'Certificado enviado em ' + new Date(t.certificadoUploadEm).toLocaleString('pt-BR') +
+          (t.certificadoValidade ? ' · válido até ' + new Date(t.certificadoValidade).toLocaleDateString('pt-BR') : '') +
+          '. Enviar um novo arquivo substitui o atual.'
         : 'Nenhum certificado cadastrado.';
+
+      // CSCs são write-only (nunca voltam do backend em texto legível) — só os IDs, que não são segredo.
+      document.getElementById('t_cscProducao').value = '';
+      document.getElementById('t_cscHomologacao').value = '';
+      document.getElementById('t_cscProducaoId').value = t.cscProducaoId || '';
+      document.getElementById('t_cscHomologacaoId').value = t.cscHomologacaoId || '';
+      document.getElementById('t_cnae').value = t.cnae || '';
+      document.getElementById('t_ie').value = t.inscricaoEstadual || '';
+      document.getElementById('t_ambienteFiscal').value = t.ambienteFiscal || 'homologacao';
+      document.getElementById('t_logradouro').value = t.logradouro || '';
+      document.getElementById('t_numero').value = t.numero || '';
+      document.getElementById('t_complemento').value = t.complemento || '';
+      document.getElementById('t_bairro').value = t.bairro || '';
+      document.getElementById('t_municipio').value = t.municipio || '';
+      document.getElementById('t_codigoMunicipioIbge').value = t.codigoMunicipioIbge || '';
+      document.getElementById('t_cep').value = t.cep || '';
+      document.getElementById('infoFiscal').textContent =
+        'CSC produção: ' + (t.temCscProducao ? 'configurado' : 'não configurado') +
+        ' · CSC homologação: ' + (t.temCscHomologacao ? 'configurado' : 'não configurado');
+      document.getElementById('statusConfigFiscal').textContent = '';
       UI.abrirModal('modalTenant');
     }
 
-    /** Envia o .pfx pro backend, que valida a senha antes de salvar. */
+    /** Envia o .pfx pro backend, que valida a senha (e o CNPJ do certificado) antes de salvar. */
     async function enviarCertificado(tenantId) {
       const input = document.getElementById('t_certArquivo');
       if (!input.files.length) return;
@@ -292,6 +346,47 @@
       form.append('certificado', input.files[0]);
       form.append('senha', document.getElementById('t_certSenha').value);
       await AdminApi.post('/api/superadmin/tenants/' + tenantId + '/certificado', form);
+    }
+
+    /**
+     * Grava CSCs/CNAE/IE/ambiente fiscal. Os campos de CSC só vão no body se
+     * o usuário digitou algo novo — em branco significa "manter o atual"
+     * (o backend nunca devolve o valor pra recolocar aqui).
+     */
+    async function enviarConfiguracaoFiscal(tenantId) {
+      const body = {
+        cnae: document.getElementById('t_cnae').value.trim(),
+        inscricaoEstadual: document.getElementById('t_ie').value.trim(),
+        ambienteFiscal: document.getElementById('t_ambienteFiscal').value,
+        cscProducaoId: document.getElementById('t_cscProducaoId').value.trim(),
+        cscHomologacaoId: document.getElementById('t_cscHomologacaoId').value.trim(),
+        logradouro: document.getElementById('t_logradouro').value.trim(),
+        numero: document.getElementById('t_numero').value.trim(),
+        complemento: document.getElementById('t_complemento').value.trim(),
+        bairro: document.getElementById('t_bairro').value.trim(),
+        municipio: document.getElementById('t_municipio').value.trim(),
+        codigoMunicipioIbge: document.getElementById('t_codigoMunicipioIbge').value.trim(),
+        cep: document.getElementById('t_cep').value.trim(),
+      };
+      const cscProducao = document.getElementById('t_cscProducao').value;
+      const cscHomologacao = document.getElementById('t_cscHomologacao').value;
+      if (cscProducao) body.cscProducao = cscProducao;
+      if (cscHomologacao) body.cscHomologacao = cscHomologacao;
+      await AdminApi.put('/api/superadmin/tenants/' + tenantId + '/configuracao-fiscal', body);
+    }
+
+    /** Checa (Fase 1a) se os campos obrigatórios pra emissão de NFC-e já estão todos preenchidos. */
+    async function verificarConfiguracaoFiscal() {
+      const statusEl = document.getElementById('statusConfigFiscal');
+      if (!editandoTenantId) { statusEl.textContent = 'Salve o tenant primeiro.'; statusEl.style.color = '#b42318'; return; }
+      try {
+        const data = await AdminApi.get('/api/superadmin/tenants/' + editandoTenantId + '/configuracao-fiscal/completa');
+        statusEl.textContent = data.completa ? 'Configuração fiscal completa.' : 'Faltando: ' + data.camposFaltantes.join(', ');
+        statusEl.style.color = data.completa ? '#1a7f37' : '#b42318';
+      } catch (e) {
+        statusEl.textContent = e.message;
+        statusEl.style.color = '#b42318';
+      }
     }
 
     async function salvarTenant() {
@@ -318,9 +413,11 @@
           const data = await AdminApi.post('/api/superadmin/tenants', body);
           tenantId = data.tenant.id;
         }
-        // Certificado vai num request próprio; se a senha estiver errada o
-        // backend rejeita sem salvar e o modal permanece aberto com o erro.
+        // Certificado e configuração fiscal vão em requests próprios; se
+        // algum for rejeitado (ex: senha errada, CNPJ do certificado não
+        // bate), o modal permanece aberto com o erro.
         await enviarCertificado(tenantId);
+        await enviarConfiguracaoFiscal(tenantId);
         UI.fecharModal('modalTenant');
         carregarTenants();
       } catch (e) { erroEl.textContent = e.message; erroEl.classList.add('visivel'); }

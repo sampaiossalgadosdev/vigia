@@ -18,7 +18,7 @@ async function abrir(tenantId, body, usuario, ip) {
 async function fechar(tenantId, body, usuario, ip) {
   const caixa = await caixaRepo.buscarAberto(tenantId);
   if (!caixa) throw new AppError('Nenhum caixa aberto', 404);
-  const fechado = await caixaRepo.fechar(caixa.id, { status: 'fechado', valorFechamento: Number(body.valorFechamento || 0), diferenca: Number(body.valorFechamento || 0) - Number(caixa.totalVendas), fechadoEm: new Date(), observacao: body.observacao || null });
+  const fechado = await caixaRepo.fechar(tenantId, caixa.id, { status: 'fechado', valorFechamento: Number(body.valorFechamento || 0), diferenca: Number(body.valorFechamento || 0) - Number(caixa.totalVendas), fechadoEm: new Date(), observacao: body.observacao || null });
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'fechar', entidade: 'Caixa', entidadeId: caixa.id, depois: { valorFechamento: String(fechado.valorFechamento) }, ip });
   return fechado;
 }

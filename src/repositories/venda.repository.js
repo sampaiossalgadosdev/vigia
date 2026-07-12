@@ -46,6 +46,21 @@ async function atualizarStatus(tenantId, id, dados) {
   return prisma.venda.update({ where: { id, tenantId }, data: dados });
 }
 
+/**
+ * Venda com os campos de produto necessários pra montar o XML da NFC-e
+ * (NCM, CFOP, código de referência) — buscarPorId não traz esses campos
+ * porque é usado pelas telas de detalhe/listagem, que não precisam deles.
+ */
+async function buscarParaEmissao(tenantId, id) {
+  return prisma.venda.findFirst({
+    where: { id, tenantId },
+    include: {
+      itens: { include: { produto: { select: { id: true, nome: true, codigoReferencia: true, ncm: true, cfop: true, unidade: true } } } },
+      pagamentos: true,
+    },
+  });
+}
+
 async function buscarPorIdLocal(tenantId, idLocal) {
   return prisma.venda.findFirst({ where: { tenantId, chaveNfce: idLocal } });
 }
@@ -55,4 +70,4 @@ async function listarResumoDiario(tenantId, inicio, fim) {
   return prisma.venda.findMany({ where, orderBy: { criadoEm: 'asc' }, include: { pagamentos: true } });
 }
 
-module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario };
+module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao };

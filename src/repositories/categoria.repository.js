@@ -38,8 +38,8 @@ async function criar(dados) {
   return prisma.categoria.create({ data: dados });
 }
 
-async function atualizar(id, dados) {
-  return prisma.categoria.update({ where: { id }, data: dados });
+async function atualizar(tenantId, id, dados) {
+  return prisma.categoria.update({ where: { id, tenantId }, data: dados });
 }
 
 async function contarFilhosAtivos(tenantId, id) {

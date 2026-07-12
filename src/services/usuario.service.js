@@ -67,7 +67,7 @@ async function atualizar(tenantId, id, body, solicitante, ip) {
   }
   if (body.senha) dados.senha = await gerarHash(body.senha);
 
-  const usuario = await usuarioRepo.atualizar(id, dados);
+  const usuario = await usuarioRepo.atualizar(tenantId, id, dados);
   await auditoriaRepo.registrar({
     tenantId, usuarioId: solicitante.id, acao: 'editar', entidade: 'Usuario', entidadeId: id,
     antes: { nome: atual.nome, perfilId: atual.perfilId },
@@ -85,7 +85,7 @@ async function remover(tenantId, id, solicitante, ip) {
   if (!atual) throw new AppError('Usuário não encontrado', 404);
   if (atual.isDono) throw new AppError('O usuário Dono não pode ser desativado', 409);
 
-  await usuarioRepo.atualizar(id, { ativo: false });
+  await usuarioRepo.atualizar(tenantId, id, { ativo: false });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: solicitante.id, acao: 'desativar', entidade: 'Usuario',
     entidadeId: id, antes: { nome: atual.nome, email: atual.email }, ip,

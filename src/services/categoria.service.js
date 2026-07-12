@@ -54,7 +54,7 @@ async function criar(tenantId, body, usuario, ip) {
     parentId: body.parentId || null,
   };
   const categoria = existente
-    ? await categoriaRepo.atualizar(existente.id, { ...dados, ativo: true })
+    ? await categoriaRepo.atualizar(tenantId, existente.id, { ...dados, ativo: true })
     : await categoriaRepo.criar({ ...dados, tenantId });
 
   await auditoriaRepo.registrar({
@@ -93,7 +93,7 @@ async function atualizar(tenantId, id, body, usuario, ip) {
     dados.parentId = novoPai;
   }
 
-  const categoria = await categoriaRepo.atualizar(id, dados);
+  const categoria = await categoriaRepo.atualizar(tenantId, id, dados);
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'editar', entidade: 'Categoria', entidadeId: id,
     antes: { nome: atual.nome, markupPercent: atual.markupPercent, parentId: atual.parentId },
@@ -117,7 +117,7 @@ async function remover(tenantId, id, usuario, ip) {
   if (produtos > 0)
     throw new AppError('Esta categoria ainda tem ' + produtos + ' produto(s) vinculado(s) — mova os produtos pra outra categoria primeiro', 422);
 
-  await categoriaRepo.atualizar(id, { ativo: false });
+  await categoriaRepo.atualizar(tenantId, id, { ativo: false });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'excluir', entidade: 'Categoria',
     entidadeId: id, antes: { nome: atual.nome, parentId: atual.parentId }, ip,

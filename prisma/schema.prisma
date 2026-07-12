@@ -65,10 +65,34 @@ model Tenant {
   ativo                  Boolean     @default(true)
   ultimoCodigoReferencia Int         @default(0)
   // Certificado digital A1 do tenant, criptografado com AES-256-GCM
-  // (chave em CERT_ENCRYPTION_KEY). Gerido só pelo Super Admin.
+  // (chave em CERT_ENCRYPTION_KEY). Gerido só pelo Super Admin. É o MESMO
+  // certificado usado tanto pra Distribuição DF-e/manifestação (NF-e de
+  // entrada) quanto pra emissão de NFC-e própria (Reforma 2026) — uma
+  // empresa tem um único A1 por CNPJ, reaproveitado aqui de propósito.
   certificadoPfx         Bytes?
   certificadoSenha       String?
   certificadoUploadEm    DateTime?
+  certificadoValidade    DateTime? // data de expiração (extraída do certificado no upload, quando possível)
+  // Configuração fiscal p/ emissão de NFC-e (Reforma 2026) — Fase 1a: só
+  // armazenamento, sem cálculo/emissão ainda. CSCs são criptografados com o
+  // mesmo mecanismo do certificado (certcrypto.js).
+  cscProducao            String?
+  cscProducaoId          String?
+  cscHomologacao         String?
+  cscHomologacaoId       String?
+  cnae                   String?
+  inscricaoEstadual      String?
+  ambienteFiscal         String      @default("homologacao") // homologacao | producao (por tenant; distinto do env global SEFAZ_AMBIENTE usado na Distribuição DF-e)
+  // Endereço do emitente — obrigatório pra montar o grupo enderEmit da
+  // NFC-e (sem ele nenhuma nota é autorizada, nem em homologação). UF já
+  // existe acima (campo `uf`), reaproveitado aqui, não duplicado.
+  logradouro             String?
+  numero                 String?
+  complemento            String?
+  bairro                 String?
+  municipio              String?
+  codigoMunicipioIbge    String? // 7 dígitos, exigido pela SEFAZ no campo cMun
+  cep                    String?
   // Cursor da Distribuição DF-e: último NSU já recebido da SEFAZ.
   ultimoNsu              String      @default("0")
   // Token do link público da tela Açougue TV (tv.html?token=...): liga a
@@ -228,6 +252,11 @@ model Produto {
   cfop             String? // 4 dígitos, ex: 5102
   origem           String? // nacional | importado
   configTributaria String? // tributado_integral | substituicao_tributaria | isento | nao_tributado
+  // Reforma Tributária 2026 (IBS/CBS) — nullable: produtos existentes ainda
+  // não têm isso preenchido; a migração de dados fica pra outra etapa.
+  cstIbsCbs        String? // classificador de situação tributária IBS/CBS
+  cClassTrib       String? // classificador de tributação (código da Reforma)
+  brstbs           String? // Nomenclatura Brasileira de Serviços — só quando o item for serviço
   estoqueQtd       Decimal  @default(0) @db.Decimal(10, 3)
   estoqueMin       Decimal  @default(0) @db.Decimal(10, 3)
   imagemUrl        String?
@@ -493,11 +522,16 @@ model Venda {
   desconto           Decimal   @default(0) @db.Decimal(10, 2)
   troco              Decimal   @default(0) @db.Decimal(10, 2)
   cpfConsumidor      String?
-  chaveNfce          String?
+  chaveNfce          String? // chave de acesso REAL de 44 dígitos após autorização da SEFAZ (Fase 1c) — antes disso, só o localId do PDV
   status             String    @default("concluida") // concluida | cancelada | pendente_sync
   canceladoEm        DateTime?
   canceladoPor       String?
   motivoCancelamento String?
+  // Emissão fiscal da NFC-e (Fase 1c) — preenchidos por nfceEmissao.service.
+  emitidoEm              DateTime? // momento da autorização (não confundir com criadoEm, que é o momento da venda)
+  emitidoViaContingencia Boolean   @default(false) // true quando autorizado via SVC (SEFAZ do estado estava fora do ar)
+  protocoloAutorizacao   String?
+  protocoloCancelamento  String?
   criadoEm           DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -522,6 +556,13 @@ model VendaItem {
   subtotal      Decimal @db.Decimal(10, 2)
   total         Decimal @db.Decimal(10, 2)
   promocaoId    String?
+  // Reforma Tributária 2026 (IBS/CBS) — snapshot do que foi calculado NESTA
+  // venda: se a alíquota/classificação do produto mudar depois, a venda
+  // antiga continua mostrando o valor de fato aplicado no momento da venda.
+  valorIbs           Decimal? @db.Decimal(10, 2)
+  valorCbs           Decimal? @db.Decimal(10, 2)
+  cstIbsCbsAplicado  String?
+  cClassTribAplicado String?
 
   venda    Venda     @relation(fields: [vendaId], references: [id])
   produto  Produto   @relation(fields: [produtoId], references: [id])
@@ -536,6 +577,9 @@ model VendaPagamento {
   vendaId String
   forma   String // dinheiro | credito | debito | pix | voucher | outros
   valor   Decimal @db.Decimal(10, 2)
+  // Placeholder de schema pro futuro Split Payment da Reforma — nenhuma
+  // lógica de segregação real ainda, só o campo existindo pra não travar depois.
+  valorTributoSegregado Decimal? @default(0) @db.Decimal(10, 2)
 
   venda Venda @relation(fields: [vendaId], references: [id])
 

@@ -8,8 +8,8 @@ async function abrir(dados) {
   return prisma.caixa.create({ data: dados });
 }
 
-async function fechar(id, dados) {
-  return prisma.caixa.update({ where: { id }, data: dados });
+async function fechar(tenantId, id, dados) {
+  return prisma.caixa.update({ where: { id, tenantId }, data: dados });
 }
 
 async function criarMovimentacao(dados) {

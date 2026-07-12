@@ -16,16 +16,26 @@ const { gerarAccessToken } = require('../utils/jwt');
 const { comparar, gerarHash } = require('../utils/bcrypt');
 const { validarCnpj, limparCnpj } = require('../utils/cnpj');
 const { criptografar, criptografarTexto } = require('../utils/certcrypto');
+const { extrairDoP12 } = require('../utils/certificadoInfo');
 const { AppError, paginado } = require('../utils/response');
 
 const PLANOS = ['standard', 'pro'];
 const UFS = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
 
-/** Remove os campos sensíveis do certificado das respostas da API. */
-function semCertificado(tenant) {
+/**
+ * Remove os campos sensíveis (blobs criptografados) das respostas da API:
+ * certificado A1 e os CSCs de homologação/produção. Nunca devolve o
+ * conteúdo cifrado, só se ele existe ou não.
+ */
+function semSegredosFiscais(tenant) {
   if (!tenant) return tenant;
-  const { certificadoPfx, certificadoSenha, ...resto } = tenant;
-  return { ...resto, temCertificado: !!certificadoPfx };
+  const { certificadoPfx, certificadoSenha, cscProducao, cscHomologacao, ...resto } = tenant;
+  return {
+    ...resto,
+    temCertificado: !!certificadoPfx,
+    temCscProducao: !!cscProducao,
+    temCscHomologacao: !!cscHomologacao,
+  };
 }
 
 async function login(email, senha) {
@@ -58,12 +68,14 @@ async function criarTenant(body) {
   if (existente) throw new AppError('Já existe um tenant com este CNPJ', 409);
 
   if (body.plano && !PLANOS.includes(body.plano)) throw new AppError('Plano deve ser standard ou pro', 422);
-  if (body.uf && !UFS.includes(String(body.uf).toUpperCase()))
-    throw new AppError('UF inválida', 422);
+  // UF obrigatória: precisamos dela pra escolher a URL certa de webservice
+  // da SEFAZ por estado na emissão de NFC-e (Fase 1c).
+  if (!body.uf) throw new AppError('UF é obrigatória para cadastrar o tenant', 422);
+  if (!UFS.includes(String(body.uf).toUpperCase())) throw new AppError('UF inválida', 422);
 
   const tenant = await superadminRepo.criarTenant({
     nome: body.nome, cnpj, email: body.email, telefone: body.telefone || null,
-    uf: body.uf ? String(body.uf).toUpperCase() : null,
+    uf: String(body.uf).toUpperCase(),
     plano: body.plano || 'standard', regimeTributario: body.regimeTributario || 'simples',
   });
 
@@ -81,7 +93,7 @@ async function criarTenant(body) {
     tenantId: tenant.id, acao: 'criar', entidade: 'Tenant', entidadeId: tenant.id,
     depois: { nome: tenant.nome, cnpj: tenant.cnpj, plano: tenant.plano },
   });
-  return { tenant: semCertificado(tenant), dono: dono ? { id: dono.id, email: dono.email } : null };
+  return { tenant: semSegredosFiscais(tenant), dono: dono ? { id: dono.id, email: dono.email } : null };
 }
 
 async function atualizarTenant(id, body) {
@@ -115,14 +127,19 @@ async function atualizarTenant(id, body) {
     antes: { nome: atual.nome, plano: atual.plano, ativo: atual.ativo },
     depois: { nome: tenant.nome, plano: tenant.plano, ativo: tenant.ativo },
   });
-  return semCertificado(tenant);
+  return semSegredosFiscais(tenant);
 }
 
 /**
  * Valida e grava o certificado digital A1 do tenant. O .pfx é aberto em
  * memória com a senha informada (ou sem senha) — se o parse falhar, nada é
- * salvo. Binário e senha são criptografados (AES-256-GCM) antes de persistir;
- * nenhum dado sensível vai pra Auditoria nem pra logs.
+ * salvo. Extrai o CNPJ do certificado (convenção e-CNPJ) e rejeita se não
+ * bater com o CNPJ já cadastrado do tenant; extrai também a validade,
+ * quando o certificado seguir essa convenção. Binário e senha são
+ * criptografados (AES-256-GCM) antes de persistir; nenhum dado sensível vai
+ * pra Auditoria nem pra logs. Este é o MESMO certificado usado na
+ * Distribuição DF-e (NF-e de entrada) — uma empresa tem um único A1 por
+ * CNPJ, usado também na futura emissão de NFC-e (Fase 1b/1c).
  */
 async function salvarCertificado(id, arquivo, senha) {
   const tenant = await superadminRepo.buscarTenantPorId(id);
@@ -130,23 +147,31 @@ async function salvarCertificado(id, arquivo, senha) {
   if (!arquivo || !arquivo.buffer) throw new AppError('Envie o arquivo .pfx do certificado', 422);
 
   const senhaCert = senha || '';
+  let p12;
   try {
     const asn1 = forge.asn1.fromDer(forge.util.createBuffer(arquivo.buffer.toString('binary')));
-    forge.pkcs12.pkcs12FromAsn1(asn1, senhaCert);
+    p12 = forge.pkcs12.pkcs12FromAsn1(asn1, senhaCert);
   } catch (e) {
     throw new AppError('Senha do certificado incorreta ou certificado inválido', 422);
   }
+
+  const { cnpj: cnpjCertificado, validade } = extrairDoP12(p12);
+  if (!cnpjCertificado)
+    throw new AppError('Não foi possível validar o CNPJ deste certificado — confira manualmente se é o certificado correto antes de prosseguir.', 422);
+  if (cnpjCertificado !== tenant.cnpj)
+    throw new AppError('O CNPJ do certificado não corresponde ao CNPJ cadastrado deste supermercado', 422);
 
   const atualizado = await superadminRepo.atualizarTenant(id, {
     certificadoPfx: criptografar(arquivo.buffer),
     certificadoSenha: senhaCert ? criptografarTexto(senhaCert) : null,
     certificadoUploadEm: new Date(),
+    certificadoValidade: validade,
   });
   await auditoriaRepo.registrar({
     tenantId: id, acao: 'editar', entidade: 'Tenant', entidadeId: id,
     depois: { certificadoAtualizado: true, arquivo: arquivo.originalname, tamanhoBytes: arquivo.size },
   });
-  return { certificadoUploadEm: atualizado.certificadoUploadEm };
+  return { certificadoUploadEm: atualizado.certificadoUploadEm, certificadoValidade: atualizado.certificadoValidade };
 }
 
 async function statsTenant(id) {
@@ -214,4 +239,5 @@ async function desatrelarTenant(superusuarioId, tenantId) {
 module.exports = {
   login, listarTenants, criarTenant, atualizarTenant, salvarCertificado, statsTenant, validarTenantExiste,
   listarSuperusuarios, criarSuperusuario, atualizarSuperusuario, atrelarTenants, desatrelarTenant,
+  semSegredosFiscais,
 };

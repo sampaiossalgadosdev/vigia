@@ -82,7 +82,7 @@ async function atualizar(tenantId, id, body, usuario, ip) {
     }
     dados.cnpj = cnpj;
   }
-  const fornecedor = await fornecedorRepo.atualizar(id, dados);
+  const fornecedor = await fornecedorRepo.atualizar(tenantId, id, dados);
 
   const representantes = normalizarRepresentantes(body.representantes);
   if (representantes !== undefined) await fornecedorRepo.substituirRepresentantes(id, representantes);
@@ -96,7 +96,7 @@ async function atualizar(tenantId, id, body, usuario, ip) {
 
 async function remover(tenantId, id, usuario, ip) {
   const atual = await detalhar(tenantId, id);
-  await fornecedorRepo.atualizar(id, { ativo: false });
+  await fornecedorRepo.atualizar(tenantId, id, { ativo: false });
   await auditoriaRepo.registrar({
     tenantId, usuarioId: usuario.id, acao: 'excluir', entidade: 'Fornecedor',
     entidadeId: id, antes: { nome: atual.nome }, ip,
