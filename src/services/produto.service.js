@@ -33,6 +33,10 @@ function normalizar(body) {
   if (body.vendidoPorPeso !== undefined)
     dados.vendidoPorPeso = body.vendidoPorPeso === true || body.vendidoPorPeso === 'true';
   if (dados.vendidoPorPeso === false) dados.plu = null;
+  // Fase 2b: controlaLote é booleano igual vendidoPorPeso — precisa ficar
+  // fora do loop de `campos` acima, senão `false || null` viraria null.
+  if (body.controlaLote !== undefined)
+    dados.controlaLote = body.controlaLote === true || body.controlaLote === 'true';
   return dados;
 }
 

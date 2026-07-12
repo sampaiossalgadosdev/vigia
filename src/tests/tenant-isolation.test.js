@@ -11,6 +11,7 @@ const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const prisma = require('../config/database');
 const produtoRepo = require('../repositories/produto.repository');
+const caixaRepo = require('../repositories/caixa.repository');
 
 function cnpjTeste(sufixo) {
   return '99' + Date.now().toString().slice(-11) + sufixo;
@@ -45,6 +46,36 @@ test('produtoRepository.atualizar não altera produto de outro tenant', async ()
   } finally {
     if (produtoA) await prisma.produto.delete({ where: { id: produtoA.id } }).catch(() => {});
     if (produtoB) await prisma.produto.delete({ where: { id: produtoB.id } }).catch(() => {});
+    await prisma.tenant.delete({ where: { id: tenantA.id } }).catch(() => {});
+    await prisma.tenant.delete({ where: { id: tenantB.id } }).catch(() => {});
+  }
+});
+
+test('caixaRepository.atualizar (reaproveitado por venda.service.js em registrar/cancelar) não altera caixa de outro tenant', async () => {
+  const tenantA = await prisma.tenant.create({
+    data: { nome: 'Teste Isolamento Caixa A', cnpj: cnpjTeste('03'), email: 'isolamento-caixa-a@teste.com' },
+  });
+  const tenantB = await prisma.tenant.create({
+    data: { nome: 'Teste Isolamento Caixa B', cnpj: cnpjTeste('04'), email: 'isolamento-caixa-b@teste.com' },
+  });
+  let caixaB;
+
+  try {
+    caixaB = await prisma.caixa.create({
+      data: { tenantId: tenantB.id, valorAbertura: 0, totalVendas: 100 },
+    });
+
+    // Tenant A (ex.: dentro de venda.service.registrar/cancelar) só tem o
+    // UUID do caixa em mãos — se esse UUID pertencer a outro tenant (bug ou
+    // ataque), o update tem que falhar, não silenciosamente afetar o caixa
+    // errado. Simula exatamente os dois pontos corrigidos na Fase 0/complemento:
+    // o update de totais dentro da transação da venda, e a reversão no cancelamento.
+    await assert.rejects(() => caixaRepo.atualizar(prisma, tenantA.id, caixaB.id, { totalVendas: 999999 }));
+
+    const depois = await prisma.caixa.findUnique({ where: { id: caixaB.id } });
+    assert.equal(Number(depois.totalVendas), 100, 'caixa de outro tenant não pode ter os totais alterados');
+  } finally {
+    if (caixaB) await prisma.caixa.delete({ where: { id: caixaB.id } }).catch(() => {});
     await prisma.tenant.delete({ where: { id: tenantA.id } }).catch(() => {});
     await prisma.tenant.delete({ where: { id: tenantB.id } }).catch(() => {});
   }

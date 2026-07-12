@@ -7,6 +7,7 @@
  */
 const prisma = require('../config/database');
 const estoqueDepositoRepo = require('./estoqueDeposito.repository');
+const loteService = require('../services/lote.service');
 
 async function buscarNfePorChave(chaveAcesso) {
   return prisma.nfe.findUnique({ where: { chaveAcesso } });
@@ -51,7 +52,7 @@ async function buscarNfePorId(tenantId, id) {
     where: { id, tenantId },
     include: {
       fornecedor: true,
-      itens: { include: { produto: { select: { id: true, nome: true, ean: true } } }, orderBy: { descricao: 'asc' } },
+      itens: { include: { produto: { select: { id: true, nome: true, ean: true, controlaLote: true } } }, orderBy: { descricao: 'asc' } },
     },
   });
 }
@@ -91,8 +92,12 @@ async function listarMovimentacoes(tenantId, { produtoId, tipo, inicio, fim }, {
 /**
  * Executa a confirmação de entrada de NF-e dentro de uma transação:
  * para cada item ok, atualiza estoque + custo médio ponderado e cria movimentação.
+ * `lotesPorItem` é um mapa { [nfeItemId]: { numeroLote, dataValidade } } — só
+ * usado (e obrigatório) para itens cujo produto tem controlaLote=true;
+ * quem chama (EstoqueService.confirmarNfe) já validou a presença antes de
+ * abrir a transação.
  */
-async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
+async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId, lotesPorItem = {}) {
   return prisma.$transaction(async (tx) => {
     for (const item of itensAplicaveis) {
       const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
@@ -113,9 +118,15 @@ async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
         where: { id: produto.id },
         data: { custoMedio: Math.round(novoCusto * 100) / 100 },
       });
-      // Fase 2a: quantidade entra pelo Depósito Principal, que já
-      // recalcula Produto.estoqueQtd como agregado dos depósitos.
-      await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produto.id, qtd);
+      // Fase 2b: produto com controlaLote entra como um novo Lote (nunca no
+      // agregado direto); produto sem controlaLote preserva o comportamento
+      // da Fase 2a — entra pelo Depósito Principal, que recalcula
+      // Produto.estoqueQtd como agregado dos depósitos.
+      if (produto.controlaLote) {
+        await loteService.registrarEntrada(tx, nfe.tenantId, produto.id, qtd, lotesPorItem[item.id]);
+      } else {
+        await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produto.id, qtd);
+      }
 
       await tx.movimentacaoEstoque.create({
         data: {
@@ -143,8 +154,11 @@ async function confirmarNfeTransacao(nfe, itensAplicaveis, usuarioId) {
  * aplica a entrada de estoque do item na mesma transação. fatorConversao
  * (unidade da nota → unidade do sistema) multiplica a quantidade e divide o
  * custo unitário; quando não informado (fluxo antigo), assume 1.
+ * `loteInfo` ({ numeroLote, dataValidade }) só é usado (e obrigatório) se o
+ * produto tiver controlaLote=true e aplicarEntrada=true — já validado por
+ * quem chama (EstoqueService.vincularItem) antes de abrir a transação.
  */
-async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEntrada, fatorConversao) {
+async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEntrada, fatorConversao, loteInfo) {
   const fator = Number(fatorConversao) > 0 ? Number(fatorConversao) : 1;
   return prisma.$transaction(async (tx) => {
     const atualizado = await tx.nfeItem.update({
@@ -164,7 +178,11 @@ async function vincularItemTransacao(nfe, item, produtoId, usuarioId, aplicarEnt
         where: { id: produtoId },
         data: { custoMedio: Math.round(novoCusto * 100) / 100 },
       });
-      await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produtoId, qtd);
+      if (produto.controlaLote) {
+        await loteService.registrarEntrada(tx, nfe.tenantId, produtoId, qtd, loteInfo);
+      } else {
+        await estoqueDepositoRepo.ajustarEstoquePrincipal(tx, nfe.tenantId, produtoId, qtd);
+      }
       await tx.movimentacaoEstoque.create({
         data: {
           tenantId: nfe.tenantId, produtoId, tipo: 'entrada', quantidade: qtd,

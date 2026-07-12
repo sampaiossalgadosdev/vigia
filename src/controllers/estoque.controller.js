@@ -12,7 +12,7 @@ const uploadNfe = asyncHandler(async (req, res) => {
 });
 
 const confirmarNfe = asyncHandler(async (req, res) => {
-  success(res, await service.confirmarNfe(req.tenantId, req.params.nfeId, req.usuario, req.ip));
+  success(res, await service.confirmarNfe(req.tenantId, req.params.nfeId, req.usuario, req.ip, req.body.lotesPorItem || {}));
 });
 
 const listarNfes = asyncHandler(async (req, res) => {
@@ -25,7 +25,10 @@ const detalharNfe = asyncHandler(async (req, res) => {
 });
 
 const vincularItem = asyncHandler(async (req, res) => {
-  success(res, await service.vincularItem(req.tenantId, req.params.nfeId, req.params.itemId, req.body.produtoId, req.usuario, req.ip));
+  const loteInfo = req.body.numeroLote || req.body.dataValidade
+    ? { numeroLote: req.body.numeroLote, dataValidade: req.body.dataValidade }
+    : undefined;
+  success(res, await service.vincularItem(req.tenantId, req.params.nfeId, req.params.itemId, req.body.produtoId, req.usuario, req.ip, loteInfo));
 });
 
 const movimentacoes = asyncHandler(async (req, res) => {
@@ -38,4 +41,30 @@ const pendentes = asyncHandler(async (req, res) => {
   success(res, await service.listarPendentes(req.tenantId));
 });
 
-module.exports = { uploadNfe, confirmarNfe, listarNfes, detalharNfe, vincularItem, movimentacoes, pendentes };
+const alertasValidade = asyncHandler(async (req, res) => {
+  success(res, await service.alertasValidade(req.tenantId, req.query.dias));
+});
+
+const gerarPromocoesRelampago = asyncHandler(async (req, res) => {
+  success(res, await service.gerarPromocoesRelampago(req.tenantId, req.usuario, req.ip, req.body.dias));
+});
+
+const ajustar = asyncHandler(async (req, res) => {
+  const { produtoId, depositoId, novaQuantidade, motivo, loteId } = req.body;
+  success(res, await service.ajustarEstoque(req.tenantId, req.usuario.id, produtoId, depositoId, novaQuantidade, motivo, loteId), 201);
+});
+
+const transferir = asyncHandler(async (req, res) => {
+  const { produtoId, depositoOrigemId, depositoDestinoId, quantidade, motivo, loteId } = req.body;
+  success(res, await service.transferirEstoque(req.tenantId, req.usuario.id, produtoId, depositoOrigemId, depositoDestinoId, quantidade, motivo, loteId), 201);
+});
+
+const transformar = asyncHandler(async (req, res) => {
+  const { produtoOrigemId, produtoDestinoId, depositoId, quantidadeOrigemConsumida, quantidadeDestinoGerada, motivo, loteOrigemId, dataValidadeDestino } = req.body;
+  success(res, await service.transformarProduto(req.tenantId, req.usuario.id, produtoOrigemId, produtoDestinoId, depositoId, quantidadeOrigemConsumida, quantidadeDestinoGerada, motivo, loteOrigemId, dataValidadeDestino), 201);
+});
+
+module.exports = {
+  uploadNfe, confirmarNfe, listarNfes, detalharNfe, vincularItem, movimentacoes, pendentes,
+  alertasValidade, gerarPromocoesRelampago, ajustar, transferir, transformar,
+};

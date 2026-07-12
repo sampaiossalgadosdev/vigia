@@ -21,5 +21,10 @@ router.get('/nfe/:id', gestao, controller.detalharNfe);
 router.post('/nfe/:nfeId/itens/:itemId/vincular', gestao, controller.vincularItem);
 router.get('/movimentacoes', gestao, controller.movimentacoes);
 router.get('/pendentes', gestao, controller.pendentes);
+router.get('/alertas-validade', gestao, controller.alertasValidade);
+router.post('/promocoes-relampago/gerar', gestao, controller.gerarPromocoesRelampago);
+router.post('/ajuste', gestao, controller.ajustar);
+router.post('/transferencia', gestao, controller.transferir);
+router.post('/transformacao', gestao, controller.transformar);
 
 module.exports = router;

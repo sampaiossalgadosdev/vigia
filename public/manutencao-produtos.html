@@ -79,6 +79,9 @@
             <div class="campo">
               <label><input type="checkbox" id="m_permiteNegativo" style="width:auto"> Permite estoque negativo</label>
             </div>
+            <div class="campo">
+              <label><input type="checkbox" id="m_controlaLote" style="width:auto"> Controla lote/validade</label>
+            </div>
           </div>
         </div>
       </div>
@@ -172,6 +175,7 @@
       $('m_ultFornecedor').value = ultima.fornecedor || '-';
       $('m_ultData').value = dataBr(ultima.data);
       $('m_permiteNegativo').checked = produto.permiteEstoqueNegativo !== false;
+      $('m_controlaLote').checked = !!produto.controlaLote;
       // Preços
       precoMedioNum = Number(produto.custoMedio || 0);
       $('m_precoMedio').value = UI.moeda(produto.custoMedio);
@@ -245,6 +249,7 @@
         ean: $('m_ean').value.trim(),
         codigoReferencia: $('m_codRef').value.trim(),
         permiteEstoqueNegativo: $('m_permiteNegativo').checked,
+        controlaLote: $('m_controlaLote').checked,
       };
 
       const btn = $('btnSalvar');

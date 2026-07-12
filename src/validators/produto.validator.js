@@ -28,6 +28,7 @@ const regrasBase = (opcional = false) => {
     body('categoriaId').optional({ values: 'falsy' }).isUUID().withMessage('categoriaId inválido'),
     body('vendidoPorPeso').optional().isBoolean().withMessage('vendidoPorPeso deve ser booleano'),
     body('permiteEstoqueNegativo').optional().isBoolean().withMessage('permiteEstoqueNegativo deve ser booleano'),
+    body('controlaLote').optional().isBoolean().withMessage('controlaLote deve ser booleano'),
     body('plu')
       .if(body('vendidoPorPeso').equals('true'))
       .matches(/^\d{4,6}$/)

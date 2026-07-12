@@ -20,6 +20,7 @@
         <button class="ativa" data-aba="upload">Upload de XML</button>
         <button data-aba="pendentes">Itens pendentes <span id="badgePendentes" class="badge oculto"></span></button>
         <button data-aba="historico">Histórico de NF-es</button>
+        <button data-aba="validade">Alertas de validade</button>
       </div>
 
       <!-- Aba 1: upload XML -->
@@ -73,6 +74,39 @@
           </table>
         </div>
       </div>
+
+      <!-- Aba 4: alertas de validade (Fase 2b) -->
+      <div class="aba-conteudo" id="aba-validade">
+        <div class="barra-acoes">
+          <label style="display:flex;align-items:center;gap:8px">
+            Janela (dias)
+            <input type="number" id="janelaValidade" value="7" min="1" style="width:80px">
+          </label>
+          <button class="btn secundario" id="btnGerarRelampago">Gerar promoções relâmpago agora</button>
+        </div>
+        <div id="resultadoRelampago" class="msg-erro" style="display:none"></div>
+        <div class="painel">
+          <h2>Vencidos</h2>
+          <table>
+            <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Qtd.</th></tr></thead>
+            <tbody id="tabelaVencido"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="painel">
+          <h2>Crítico (até 3 dias)</h2>
+          <table>
+            <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Qtd.</th></tr></thead>
+            <tbody id="tabelaCritico"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="painel">
+          <h2>Atenção (até 7 dias)</h2>
+          <table>
+            <thead><tr><th>Produto</th><th>Lote</th><th>Validade</th><th>Qtd.</th></tr></thead>
+            <tbody id="tabelaAtencao"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -122,6 +156,7 @@
       document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
       if (aba === 'pendentes') carregarPendentes();
       if (aba === 'historico') carregarHistorico();
+      if (aba === 'validade') carregarValidade();
     }
 
     // ─── Upload de XML ───
@@ -159,18 +194,39 @@
       };
       resumoNfe.textContent =
         'Valor total ' + UI.moeda(nfe.valorTotal) + ' · ' + r.totalItens + ' itens (' + r.itensOk + ' ok, ' + r.itensPendentes + ' pendentes). Itens pendentes serão ignorados na confirmação.';
-      itensNfe.innerHTML = nfe.itens.map((i) =>
-        '<tr><td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
+      const precisaLote = nfe.status !== 'confirmada' && nfe.itens.some((i) => i.produto && i.produto.controlaLote);
+      itensNfe.innerHTML = nfe.itens.map((i) => {
+        const exigeLote = nfe.status !== 'confirmada' && i.produto && i.produto.controlaLote && i.status === 'ok';
+        return '<tr><td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td><td>' + UI.moeda(i.valorTotal) + '</td>' +
-        '<td><span class="tag ' + (i.status === 'ok' ? 'ok' : 'pendente') + '">' + i.status + '</span></td></tr>'
-      ).join('');
+        '<td><span class="tag ' + (i.status === 'ok' ? 'ok' : 'pendente') + '">' + i.status + '</span></td>' +
+        (precisaLote ? '<td>' + (exigeLote
+          ? '<input type="text" placeholder="Nº lote (opcional)" data-lote-item="' + i.id + '" style="width:110px">' +
+            '<input type="date" data-lote-validade="' + i.id + '" style="width:130px">'
+          : '') + '</td>' : '') +
+        '</tr>';
+      }).join('');
+      itensNfe.parentElement.querySelector('thead tr').querySelectorAll('th.col-lote').forEach((th) => th.remove());
+      if (precisaLote) {
+        const th = document.createElement('th');
+        th.textContent = 'Lote / Validade';
+        th.className = 'col-lote';
+        itensNfe.parentElement.querySelector('thead tr').appendChild(th);
+      }
       btnConfirmarNfe.style.display = nfe.status === 'confirmada' ? 'none' : 'inline-block';
     }
 
     async function confirmarNfe() {
       if (!nfeAtual) return;
+      const lotesPorItem = {};
+      itensNfe.querySelectorAll('[data-lote-validade]').forEach((input) => {
+        const itemId = input.dataset.loteValidade;
+        if (!input.value) return;
+        const numeroInput = itensNfe.querySelector('[data-lote-item="' + itemId + '"]');
+        lotesPorItem[itemId] = { numeroLote: numeroInput ? numeroInput.value.trim() || null : null, dataValidade: input.value };
+      });
       try {
-        await API.post('/api/estoque/nfe/confirmar/' + nfeAtual.id, {});
+        await API.post('/api/estoque/nfe/confirmar/' + nfeAtual.id, { lotesPorItem });
         alert('Entrada confirmada. Estoque e custo médio atualizados.');
         painelNfe.style.display = 'none';
         nfeAtual = null;
@@ -266,6 +322,39 @@
         '<td><span class="tag ' + (n.status === 'confirmada' ? 'ok' : n.status === 'pendente' ? 'pendente' : 'erro') + '">' + n.status + '</span></td></tr>'
       ).join('');
     }
+
+    // ─── Alertas de validade (Fase 2b) ───
+    function linhaLote(l) {
+      return '<tr><td>' + UI.escapar(l.produtoNome) + '</td><td>' + (l.numeroLote || '-') + '</td>' +
+        '<td>' + UI.data(l.dataValidade) + '</td><td>' + Number(l.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + ' ' + l.unidade + '</td></tr>';
+    }
+
+    async function carregarValidade() {
+      const dias = $('janelaValidade').value || 7;
+      const grupos = await API.get('/api/estoque/alertas-validade?dias=' + dias);
+      $('tabelaVencido').innerHTML = grupos.vencido.length ? grupos.vencido.map(linhaLote).join('') : '<tr><td colspan="4" class="vazio">Nenhum lote vencido.</td></tr>';
+      $('tabelaCritico').innerHTML = grupos.critico.length ? grupos.critico.map(linhaLote).join('') : '<tr><td colspan="4" class="vazio">Nenhum lote crítico.</td></tr>';
+      $('tabelaAtencao').innerHTML = grupos.atencao.length ? grupos.atencao.map(linhaLote).join('') : '<tr><td colspan="4" class="vazio">Nenhum lote em atenção.</td></tr>';
+    }
+
+    async function gerarRelampago() {
+      const resultado = $('resultadoRelampago');
+      UI.limparErro(resultado);
+      try {
+        const dados = await API.post('/api/estoque/promocoes-relampago/gerar', { dias: 5 });
+        const partes = [];
+        if (dados.criadas.length) partes.push(dados.criadas.length + ' promoção(ões) relâmpago criada(s): ' + dados.criadas.map((p) => UI.escapar(p.produto ? p.produto.nome : p.produtoId)).join(', '));
+        if (dados.jaTemPromocaoAtiva.length) partes.push(dados.jaTemPromocaoAtiva.length + ' produto(s) já têm promoção ativa (revisão manual): ' + dados.jaTemPromocaoAtiva.map((p) => UI.escapar(p.produtoNome)).join(', '));
+        UI.erro(resultado, partes.length ? partes.join(' · ') : 'Nenhum lote vencendo dentro da janela precisa de promoção.');
+        resultado.style.background = '#eaf7ed'; resultado.style.color = '#1e7e34';
+      } catch (e) {
+        UI.erro(resultado, e);
+        resultado.style.background = ''; resultado.style.color = '';
+      }
+    }
+
+    $('btnGerarRelampago').addEventListener('click', gerarRelampago);
+    $('janelaValidade').addEventListener('change', carregarValidade);
 
     async function verNfe(id) {
       const nfe = await API.get('/api/estoque/nfe/' + id);

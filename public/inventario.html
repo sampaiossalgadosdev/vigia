@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIGIA · Inventário</title>
+  <link rel="icon" type="image/png" href="/img/favicon.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/js/navbar.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="conteudo">
+      <div class="topo">
+        <h1>Inventário</h1>
+      </div>
+
+      <div class="abas">
+        <button class="ativa" data-aba="novo">Iniciar inventário</button>
+        <button data-aba="ajustes">Histórico de ajustes</button>
+      </div>
+
+      <!-- Aba 1: iniciar / conduzir inventário -->
+      <div class="aba-conteudo ativa" id="aba-novo">
+        <div class="painel" id="painelIniciar">
+          <h2>Novo inventário</h2>
+          <div id="erroIniciar" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo">
+              <label>Depósito *</label>
+              <select id="f_deposito"></select>
+            </div>
+            <div class="campo">
+              <label>Tipo *</label>
+              <select id="f_tipo">
+                <option value="geral">Geral (todo o depósito)</option>
+                <option value="parcial">Parcial (uma categoria)</option>
+              </select>
+            </div>
+            <div class="campo" id="campoCategoria" style="display:none">
+              <label>Categoria *</label>
+              <select id="f_categoria"></select>
+            </div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnIniciar">Iniciar inventário</button>
+          </div>
+        </div>
+
+        <div class="painel" id="painelContagem" style="display:none">
+          <h2 id="tituloInventario"></h2>
+          <p id="resumoInventario" style="font-size:14px;color:var(--cinza);margin-bottom:12px"></p>
+          <table>
+            <thead><tr><th>Produto</th><th style="width:130px">Qtd. sistema</th><th style="width:160px">Qtd. contada</th><th style="width:110px"></th></tr></thead>
+            <tbody id="itensInventario"></tbody>
+          </table>
+          <div class="rodape" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">
+            <span id="statusInventario" style="font-size:13px;color:var(--cinza)"></span>
+            <button class="btn" id="btnFecharInventario">Fechar inventário</button>
+          </div>
+          <div id="resultadoFechamento" class="msg-erro" style="display:none;margin-top:12px"></div>
+        </div>
+      </div>
+
+      <!-- Aba 2: histórico de ajustes -->
+      <div class="aba-conteudo" id="aba-ajustes">
+        <div class="painel">
+          <table>
+            <thead><tr><th>Data</th><th>Produto</th><th>Antes</th><th>Depois</th><th>Motivo</th><th>Origem</th></tr></thead>
+            <tbody id="tabelaAjustes"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/toast.js"></script>
+  <script>
+  (() => {
+    initNavbar();
+    const $ = (id) => document.getElementById(id);
+    let inventarioAtual = null;
+
+    function trocarAba(aba) {
+      document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+      document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
+      if (aba === 'ajustes') carregarAjustes();
+    }
+
+    // ─── Iniciar inventário ───
+    async function carregarDepositos() {
+      const depositos = await API.get('/api/depositos');
+      $('f_deposito').innerHTML = depositos.map((d) => '<option value="' + d.id + '">' + UI.escapar(d.nome) + (d.principal ? ' (Principal)' : '') + '</option>').join('');
+    }
+
+    async function carregarCategorias() {
+      const categorias = await API.get('/api/produtos/categorias');
+      $('f_categoria').innerHTML = categorias.map((c) => '<option value="' + c.id + '">' + UI.escapar(c.nome) + '</option>').join('');
+    }
+
+    $('f_tipo').addEventListener('change', () => {
+      $('campoCategoria').style.display = $('f_tipo').value === 'parcial' ? 'block' : 'none';
+    });
+
+    async function iniciarInventario() {
+      UI.limparErro($('erroIniciar'));
+      const body = {
+        depositoId: $('f_deposito').value,
+        tipo: $('f_tipo').value,
+        categoriaFiltro: $('f_tipo').value === 'parcial' ? $('f_categoria').value : undefined,
+      };
+      try {
+        const inventario = await API.post('/api/inventario/iniciar', body);
+        inventarioAtual = inventario;
+        mostrarContagem(inventario);
+      } catch (e) {
+        UI.erro($('erroIniciar'), e);
+      }
+    }
+
+    // ─── Contagem ───
+    function linhaItem(item) {
+      const contada = item.quantidadeContada != null ? item.quantidadeContada : '';
+      return '<tr data-produto="' + item.produtoId + '">' +
+        '<td>' + UI.escapar(item.produtoNome || item.produtoId) + '</td>' +
+        '<td>' + Number(item.quantidadeSistema).toLocaleString('pt-BR', { maximumFractionDigits: 3 }) + '</td>' +
+        '<td><input type="number" step="0.001" class="input-contagem" value="' + contada + '" style="width:110px"></td>' +
+        '<td><button class="btn secundario pequeno" data-acao="salvar-contagem">Salvar</button></td></tr>';
+    }
+
+    function mostrarContagem(inventario) {
+      $('painelIniciar').style.display = 'none';
+      $('painelContagem').style.display = 'block';
+      $('tituloInventario').textContent = 'Inventário ' + (inventario.tipo === 'geral' ? 'geral' : 'parcial') + ' · ' + (inventario.deposito ? inventario.deposito.nome : '');
+      $('resumoInventario').textContent = inventario.itens.length + ' produto(s) no escopo.';
+      $('statusInventario').textContent = 'Status: ' + inventario.status;
+      $('itensInventario').innerHTML = inventario.itens.map(linhaItem).join('');
+      $('btnFecharInventario').style.display = inventario.status === 'aberto' ? 'inline-block' : 'none';
+      $('resultadoFechamento').style.display = 'none';
+    }
+
+    async function salvarContagem(produtoId, quantidadeContada) {
+      try {
+        await API.post('/api/inventario/' + inventarioAtual.id + '/contagem', { produtoId, quantidadeContada: Number(quantidadeContada) });
+        mostrarToast('Contagem registrada');
+      } catch (e) { alert(e.message); }
+    }
+
+    async function fecharInventario() {
+      if (!confirm('Fechar o inventário? Itens não contados ficam de fora.')) return;
+      try {
+        const resultado = await API.post('/api/inventario/' + inventarioAtual.id + '/fechar', {});
+        const box = $('resultadoFechamento');
+        box.style.display = 'block';
+        box.style.background = '#eaf7ed'; box.style.color = '#1e7e34';
+        box.textContent = resultado.ajustados.length + ' item(ns) ajustado(s) automaticamente · ' +
+          resultado.pendentesManuais.length + ' item(ns) com lote pendente de ajuste manual · ' +
+          resultado.itensNaoContados + ' item(ns) não contado(s).';
+        $('btnFecharInventario').style.display = 'none';
+        $('statusInventario').textContent = 'Status: fechado';
+      } catch (e) { alert(e.message); }
+    }
+
+    $('itensInventario').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-acao="salvar-contagem"]');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      const input = tr.querySelector('.input-contagem');
+      if (input.value === '') { alert('Informe a quantidade contada'); return; }
+      salvarContagem(tr.dataset.produto, input.value);
+    });
+
+    // ─── Histórico de ajustes ───
+    async function carregarAjustes() {
+      const data = await API.get('/api/estoque/movimentacoes?tipo=ajuste&limit=50');
+      const itens = data.items || [];
+      $('tabelaAjustes').innerHTML = itens.length ? itens.map((m) =>
+        '<tr><td>' + UI.data(m.criadoEm) + '</td><td>' + UI.escapar(m.produto ? m.produto.nome : m.produtoId) + '</td>' +
+        '<td>' + (m.quantidadeAnterior != null ? m.quantidadeAnterior : '-') + '</td>' +
+        '<td>' + (m.quantidadeNova != null ? m.quantidadeNova : '-') + '</td>' +
+        '<td>' + UI.escapar(m.observacao || '-') + '</td><td>' + UI.escapar(m.origem) + '</td></tr>'
+      ).join('') : '<tr><td colspan="6" class="vazio">Nenhum ajuste registrado.</td></tr>';
+    }
+
+    document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
+      btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
+    });
+    $('btnIniciar').addEventListener('click', iniciarInventario);
+    $('btnFecharInventario').addEventListener('click', fecharInventario);
+
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('inventario.html');
+      await Promise.all([carregarDepositos(), carregarCategorias()]);
+    })();
+  })();
+  </script>
+</body>
+</html>

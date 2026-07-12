@@ -118,6 +118,7 @@ model Tenant {
   caixas          Caixa[]
   nfeDistribuicao NfeDistribuicao[]
   depositos       Deposito[]
+  inventarios     Inventario[]
 }
 
 // ─── REFRESH TOKEN ────────────────────────────────────────
@@ -260,6 +261,11 @@ model Produto {
   brstbs           String? // Nomenclatura Brasileira de Serviços — só quando o item for serviço
   estoqueQtd       Decimal  @default(0) @db.Decimal(10, 3)
   estoqueMin       Decimal  @default(0) @db.Decimal(10, 3)
+  // Fase 2b: controle de lote/validade é OPCIONAL por produto — default
+  // false preserva 100% do comportamento atual (só saldo agregado, sem
+  // lote) pra todo produto existente. Mesmo padrão de permiteEstoqueNegativo
+  // (Fase 2a): flag configurável, default não muda nada.
+  controlaLote     Boolean  @default(false)
   imagemUrl        String?
   categoriaId      String?
   ativo            Boolean  @default(true)
@@ -300,6 +306,8 @@ model Deposito {
 
   tenant   Tenant           @relation(fields: [tenantId], references: [id])
   estoques EstoqueProduto[]
+  movimentacoes MovimentacaoEstoque[]
+  inventarios   Inventario[]
 
   @@index([tenantId])
 }
@@ -321,8 +329,33 @@ model EstoqueProduto {
 
   produto  Produto  @relation(fields: [produtoId], references: [id])
   deposito Deposito @relation(fields: [depositoId], references: [id])
+  lotes    Lote[]
 
   @@unique([produtoId, depositoId])
+}
+
+// Lote/validade dentro de um EstoqueProduto (Fase 2b) — só existe pra
+// produtos com controlaLote=true. Cada entrada de estoque (NF-e) de um
+// produto assim vira uma linha de Lote própria (nunca mescla com outro
+// lote, mesmo que a validade seja igual), pra manter o consumo FIFO e o
+// histórico de vencimento precisos.
+model Lote {
+  id               String   @id @default(uuid())
+  estoqueProdutoId String
+  numeroLote       String? // opcional, nem todo fornecedor informa
+  dataValidade     DateTime
+  quantidade       Decimal  @db.Decimal(10, 3)
+  // false quando quantidade chega a zero, pra não sumir do histórico mas
+  // parar de aparecer nas consultas de "lotes disponíveis" (FIFO/alertas).
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+
+  estoqueProduto EstoqueProduto @relation(fields: [estoqueProdutoId], references: [id])
+  consumos       VendaItemLote[]
+  movimentacoes  MovimentacaoEstoque[]
+
+  @@index([estoqueProdutoId])
+  @@index([estoqueProdutoId, ativo, dataValidade])
 }
 
 // ─── FORNECEDOR ───────────────────────────────────────────
@@ -483,16 +516,63 @@ model MovimentacaoEstoque {
   origem     String // nfe | venda | ajuste_manual | inventario | perda_manual | devolucao
   origemId   String?
   usuarioId  String?
-  observacao String?
+  observacao String? // reaproveitado como "motivo" no ajuste manual (Fase 2c) — não duplica campo
   criadoEm   DateTime @default(now())
+  // Fase 2c — só preenchidos para tipo='ajuste' (nulos em entrada/saida/
+  // devolucao, que já tinham seu próprio jeito de calcular a quantidade
+  // sem precisar do antes/depois explícito). Nullable: aditivo, não afeta
+  // nenhuma movimentação já existente.
+  quantidadeAnterior Decimal? @db.Decimal(10, 3)
+  quantidadeNova     Decimal? @db.Decimal(10, 3)
+  depositoId         String? // em qual depósito o ajuste ocorreu
+  loteId             String? // qual lote específico foi corrigido, se o produto controla lote
 
-  tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  produto Produto @relation(fields: [produtoId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  produto  Produto   @relation(fields: [produtoId], references: [id])
+  deposito Deposito? @relation(fields: [depositoId], references: [id])
+  lote     Lote?     @relation(fields: [loteId], references: [id])
 
   @@index([tenantId])
   @@index([tenantId, produtoId])
   @@index([tenantId, tipo])
   @@index([criadoEm])
+}
+
+// ─── INVENTÁRIO (Fase 2c) ─────────────────────────────────
+// Contagem física (geral: todo o depósito; parcial: uma categoria) que
+// reconcilia com o sistema via ajusteEstoque no fechamento.
+model Inventario {
+  id              String    @id @default(uuid())
+  tenantId        String
+  depositoId      String
+  tipo            String // geral | parcial
+  categoriaFiltro String? // usado só quando tipo = parcial
+  status          String    @default("aberto") // aberto | fechado
+  iniciadoPorId   String
+  iniciadoEm      DateTime  @default(now())
+  finalizadoEm    DateTime?
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id])
+  deposito Deposito         @relation(fields: [depositoId], references: [id])
+  itens    InventarioItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model InventarioItem {
+  id                String    @id @default(uuid())
+  inventarioId      String
+  produtoId         String
+  quantidadeSistema Decimal   @db.Decimal(10, 3) // snapshot no início
+  quantidadeContada Decimal?  @db.Decimal(10, 3) // preenchido durante a contagem
+  contadoPorId      String?
+  contadoEm         DateTime?
+
+  inventario Inventario @relation(fields: [inventarioId], references: [id])
+
+  @@index([inventarioId])
+  @@index([produtoId])
 }
 
 // ─── SUGESTÃO (superusuário → tenant) ────────────────────
@@ -610,9 +690,28 @@ model VendaItem {
   venda    Venda     @relation(fields: [vendaId], references: [id])
   produto  Produto   @relation(fields: [produtoId], references: [id])
   promocao Promocao? @relation(fields: [promocaoId], references: [id])
+  lotesConsumidos VendaItemLote[]
 
   @@index([vendaId])
   @@index([produtoId])
+}
+
+// Rastreio de quais Lote(s) cada VendaItem consumiu (Fase 2b complemento) —
+// só existe para produtos com controlaLote=true. Tabela separada (não um
+// loteId único em VendaItem) porque o consumo FIFO pode "espirrar" por mais
+// de um lote numa única venda; precisamos do histórico completo pra
+// devolver certo no cancelamento.
+model VendaItemLote {
+  id          String  @id @default(uuid())
+  vendaItemId String
+  loteId      String
+  quantidade  Decimal @db.Decimal(10, 3) // consumido DESTE lote, para este item
+
+  vendaItem VendaItem @relation(fields: [vendaItemId], references: [id])
+  lote      Lote      @relation(fields: [loteId], references: [id])
+
+  @@index([vendaItemId])
+  @@index([loteId])
 }
 
 model VendaPagamento {

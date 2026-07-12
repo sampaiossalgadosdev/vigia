@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const prisma = require('../config/database');
 const vendaRepo = require('../repositories/venda.repository');
 const produtoRepo = require('../repositories/produto.repository');
@@ -6,6 +7,9 @@ const caixaRepo = require('../repositories/caixa.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
 const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
 const estoqueDepositoService = require('../services/estoqueDeposito.service');
+const loteService = require('../services/lote.service');
+const loteRepo = require('../repositories/lote.repository');
+const logger = require('../logs/logger');
 const { AppError, paginado } = require('../utils/response');
 
 function normalizarPreco(preco, desconto, tipo) {
@@ -61,6 +65,10 @@ async function registrar(tenantId, body, usuario, ip) {
     const qtd = Number(item.quantidade);
     const subtotal = precoFinal * qtd;
     payload.itens.push({
+      // Gerado no client (não deixado pro default do Prisma) porque
+      // createMany não retorna os ids criados, e o rastreio de lote
+      // (VendaItemLote) precisa do vendaItemId antes de continuar.
+      id: crypto.randomUUID(),
       produtoId: produto.id,
       quantidade: qtd,
       precoUnitario: precoFinal,
@@ -88,11 +96,23 @@ async function registrar(tenantId, body, usuario, ip) {
     for (const item of itensData) {
       const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
       const qtd = Number(item.quantidade);
-      // Decrementa no Depósito Principal (Fase 2a) — bloqueia com AppError
-      // (e a transação inteira dá rollback) se permiteEstoqueNegativo=false
-      // e a venda deixaria o estoque negativo; senão, preserva o
-      // comportamento atual (permite e sinaliza pro log de auditoria abaixo).
-      const resultado = await estoqueDepositoService.decrementarComRegra(tx, tenantId, produto.id, produto.nome, qtd);
+      // Fase 2b: produto com controlaLote consome FIFO (lote mais antigo
+      // primeiro) e bloqueia se esbarrar em lote vencido — nunca decrementa
+      // direto o agregado. Produto sem controlaLote: comportamento EXATO da
+      // Fase 2a (decremento direto + permiteEstoqueNegativo).
+      let ficouNegativo = false;
+      let estoqueAnterior = null;
+      if (produto.controlaLote) {
+        // Rastreia de qual(is) lote(s) este item consumiu, pra devolver
+        // certo se a venda for cancelada depois (ver cancelar() abaixo).
+        const consumos = await loteService.consumirVendaFifo(tx, tenantId, produto, qtd);
+        for (const consumo of consumos)
+          await loteRepo.criarConsumo(tx, item.id, consumo.loteId, consumo.quantidade);
+      } else {
+        const resultado = await estoqueDepositoService.decrementarComRegra(tx, tenantId, produto.id, produto.nome, qtd);
+        ficouNegativo = resultado.ficouNegativo;
+        estoqueAnterior = resultado.estoqueAnterior;
+      }
       await tx.movimentacaoEstoque.create({
         data: {
           tenantId,
@@ -105,19 +125,16 @@ async function registrar(tenantId, body, usuario, ip) {
           usuarioId: usuario.id,
         },
       });
-      if (resultado.ficouNegativo) {
-        await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: resultado.estoqueAnterior, solicitado: qtd }, ip });
+      if (ficouNegativo) {
+        await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: estoqueAnterior, solicitado: qtd }, ip });
       }
     }
 
-    await tx.caixa.update({
-      where: { id: caixaAberto.id },
-      data: {
-        totalVendas: Number(caixaAberto.totalVendas) + Number(criada.total),
-        totalDinheiro: Number(caixaAberto.totalDinheiro) + Number(payload.pagamentos.filter((p) => p.forma === 'dinheiro').reduce((s, p) => s + Number(p.valor), 0)),
-        totalCartao: Number(caixaAberto.totalCartao) + Number(payload.pagamentos.filter((p) => p.forma === 'credito' || p.forma === 'debito').reduce((s, p) => s + Number(p.valor), 0)),
-        totalPix: Number(caixaAberto.totalPix) + Number(payload.pagamentos.filter((p) => p.forma === 'pix').reduce((s, p) => s + Number(p.valor), 0)),
-      },
+    await caixaRepo.atualizar(tx, tenantId, caixaAberto.id, {
+      totalVendas: Number(caixaAberto.totalVendas) + Number(criada.total),
+      totalDinheiro: Number(caixaAberto.totalDinheiro) + Number(payload.pagamentos.filter((p) => p.forma === 'dinheiro').reduce((s, p) => s + Number(p.valor), 0)),
+      totalCartao: Number(caixaAberto.totalCartao) + Number(payload.pagamentos.filter((p) => p.forma === 'credito' || p.forma === 'debito').reduce((s, p) => s + Number(p.valor), 0)),
+      totalPix: Number(caixaAberto.totalPix) + Number(payload.pagamentos.filter((p) => p.forma === 'pix').reduce((s, p) => s + Number(p.valor), 0)),
     });
     return criada;
   });
@@ -132,12 +149,27 @@ async function cancelar(tenantId, id, usuario, motivo, ip) {
   if (venda.status === 'cancelada') throw new AppError('Venda já cancelada', 409);
   const caixaAberto = await caixaRepo.buscarAberto(tenantId);
   if (caixaAberto) {
-    await prisma.caixa.update({ where: { id: caixaAberto.id }, data: { totalVendas: Math.max(0, Number(caixaAberto.totalVendas) - Number(venda.total)) } });
+    await caixaRepo.atualizar(prisma, tenantId, caixaAberto.id, { totalVendas: Math.max(0, Number(caixaAberto.totalVendas) - Number(venda.total)) });
   }
   await vendaRepo.atualizarStatus(tenantId, id, { status: 'cancelada', canceladoEm: new Date(), canceladoPor: usuario.id, motivoCancelamento: motivo });
   for (const item of venda.itens) {
     const produto = await produtoRepo.buscarPorId(tenantId, item.produtoId);
-    await estoqueDepositoRepo.ajustarEstoquePrincipal(prisma, tenantId, produto.id, Number(item.quantidade));
+    const consumos = await loteRepo.listarConsumosPorItem(prisma, item.id);
+    if (consumos.length > 0) {
+      // Devolve exatamente pro(s) lote(s) de origem — preserva a
+      // invariante "EstoqueProduto.quantidade = soma dos Lote ativos".
+      const estoqueProdutoIds = new Set();
+      for (const consumo of consumos) {
+        const lote = await loteRepo.devolverAoLote(prisma, consumo.loteId, Number(consumo.quantidade));
+        estoqueProdutoIds.add(lote.estoqueProdutoId);
+      }
+      for (const estoqueProdutoId of estoqueProdutoIds)
+        await loteRepo.recalcularEstoqueProdutoDeLotes(prisma, estoqueProdutoId, produto.id);
+    } else {
+      if (produto.controlaLote)
+        logger.warn('Cancelamento de venda sem rastreio de lote — devolução aplicada só ao agregado', { tenantId, vendaId: id, vendaItemId: item.id, produtoId: produto.id });
+      await estoqueDepositoRepo.ajustarEstoquePrincipal(prisma, tenantId, produto.id, Number(item.quantidade));
+    }
     await prisma.movimentacaoEstoque.create({ data: { tenantId, produtoId: produto.id, tipo: 'devolucao', quantidade: Number(item.quantidade), custoUnit: Number(item.custoUnitario), origem: 'devolucao', origemId: venda.id, usuarioId: usuario.id } });
   }
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'cancelar', entidade: 'Venda', entidadeId: id, depois: { motivo }, ip });

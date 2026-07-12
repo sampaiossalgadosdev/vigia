@@ -77,6 +77,31 @@ async function definirEstoquePrincipal(tx, tenantId, produtoId, quantidade) {
   return atualizado;
 }
 
+/**
+ * Define (set absoluto, não delta) o estoque do produto em QUALQUER
+ * depósito informado — versão genérica de definirEstoquePrincipal (que é
+ * fixa no Depósito Principal), usada pelo ajuste manual (Fase 2c), já que
+ * o ajuste pode ocorrer em qualquer depósito do tenant.
+ */
+async function definirQuantidade(tx, produtoId, depositoId, quantidade) {
+  const estoque = await garantirEstoqueProduto(tx, produtoId, depositoId);
+  const atualizado = await tx.estoqueProduto.update({ where: { id: estoque.id }, data: { quantidade } });
+  await recalcularEstoqueAgregado(tx, produtoId);
+  return atualizado;
+}
+
+/**
+ * Linhas de EstoqueProduto de um depósito (produtos ativos), com o produto
+ * incluído — usada pra povoar o snapshot do Inventário (Fase 2c). Filtro
+ * opcional por categoria (inventário parcial).
+ */
+async function listarEstoquePorDeposito(depositoId, categoriaId) {
+  return prisma.estoqueProduto.findMany({
+    where: { depositoId, produto: { ativo: true, ...(categoriaId ? { categoriaId } : {}) } },
+    include: { produto: { select: { id: true, nome: true, categoriaId: true, controlaLote: true } } },
+  });
+}
+
 /** Liga/desliga a permissão de estoque negativo do produto no Depósito Principal. */
 async function definirPermiteNegativo(tx, tenantId, produtoId, permite) {
   const deposito = await garantirDepositoPrincipal(tx, tenantId);
@@ -114,4 +139,5 @@ module.exports = {
   garantirDepositoPrincipal, buscarEstoqueProduto, garantirEstoqueProduto, buscarEstoquePrincipal,
   recalcularEstoqueAgregado, ajustarEstoquePrincipal, definirEstoquePrincipal, definirPermiteNegativo,
   listarDepositos, buscarPorNome, criarDeposito, buscarPorId, atualizarNome, desativarDeposito,
+  definirQuantidade, listarEstoquePorDeposito,
 };
