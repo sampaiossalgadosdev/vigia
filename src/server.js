@@ -7,10 +7,12 @@
  */
 const express = require('express');
 const cors = require('cors');
+const cron = require('node-cron');
 const path = require('path');
 const appConfig = require('./config/app');
 const logger = require('./logs/logger');
 const { error, AppError } = require('./utils/response');
+const { processarFilaEmissao, INTERVALO_PROCESSAMENTO_MINUTOS } = require('./services/filaEmissaoNfce.service');
 
 const app = express();
 
@@ -55,6 +57,7 @@ app.use('/api/caixa', require('./routes/caixa.routes'));
 app.use('/api/contas-pagar', require('./routes/contaPagar.routes'));
 app.use('/api/contas-receber', require('./routes/contaReceber.routes'));
 app.use('/api/relatorios', require('./routes/relatorio.routes'));
+app.use('/api/fiscal', require('./routes/fiscal.routes'));
 app.use('/api/sync', require('./routes/sync.routes'));
 app.use('/api/ia', require('./routes/ia.routes'));
 
@@ -86,3 +89,16 @@ const server = app.listen(appConfig.port, () => {
 
 // WebSocket dos PDVs (mesmo host/porta da API HTTP)
 require('./ws/pdvGateway').init(server);
+
+// Fila assíncrona de emissão de NFC-e (Fase 1c/3 complemento) — roda a
+// cada INTERVALO_PROCESSAMENTO_MINUTOS, processando em lote todas as
+// vendas pendentes/em retry. Nunca bloqueia o fluxo de venda em si (ver
+// venda.service.registrar, que só marca o status).
+cron.schedule(`*/${INTERVALO_PROCESSAMENTO_MINUTOS} * * * *`, async () => {
+  try {
+    const resumo = await processarFilaEmissao();
+    if (resumo.total > 0) logger.info('Fila de emissão de NFC-e processada', resumo);
+  } catch (erro) {
+    logger.error('Falha ao processar fila de emissão de NFC-e', { erro: erro.message });
+  }
+});

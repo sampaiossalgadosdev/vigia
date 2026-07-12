@@ -5,6 +5,7 @@
  */
 const { Router } = require('express');
 const controller = require('../controllers/superadmin.controller');
+const filaEmissaoController = require('../controllers/filaEmissao.controller');
 const validator = require('../validators/auth.validator');
 const { authAdmin } = require('../middlewares/authAdmin');
 const { uploadPlanilha, uploadPfx } = require('../middlewares/upload');
@@ -25,6 +26,9 @@ router.get('/tenants/:id/configuracao-fiscal/completa', controller.configuracaoF
 router.get('/tenants/:id/produtos/modelo', controller.modeloProdutos);
 router.post('/tenants/:id/produtos/importar/preview', uploadPlanilha.single('arquivo'), controller.importarPreview);
 router.post('/tenants/:id/produtos/importar/confirmar', controller.importarConfirmar);
+
+router.post('/fila-emissao/processar-agora', filaEmissaoController.processarAgora);
+router.get('/fila-emissao/status', filaEmissaoController.status);
 
 router.get('/superusuarios', controller.listarSuperusuarios);
 router.post('/superusuarios', controller.criarSuperusuario);

@@ -666,6 +666,18 @@ model Venda {
   // pro nosso código guardar.
   xmlNfce                String?   @db.Text
   protocoloCancelamento  String?
+  // Fila assíncrona de emissão (complemento Fase 1c/3) — a venda nunca
+  // espera a SEFAZ pra fechar no PDV; um worker separado
+  // (filaEmissaoNfce.service) processa em lote quem está pendente.
+  // nao_aplicavel: tenant sem configuração fiscal completa (não entra na
+  // fila) | pendente: aguardando o worker | emitido: sucesso | rejeitado:
+  // SEFAZ respondeu recusando o conteúdo (não tenta de novo sozinho) |
+  // falha_temporaria: falha de conexão no principal E no SVC (tenta de
+  // novo em proximaTentativaEm).
+  statusEmissaoFiscal String    @default("nao_aplicavel")
+  tentativasEmissao   Int       @default(0)
+  ultimaTentativaEm   DateTime?
+  proximaTentativaEm  DateTime?
   criadoEm           DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

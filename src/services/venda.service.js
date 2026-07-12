@@ -9,6 +9,7 @@ const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository'
 const estoqueDepositoService = require('../services/estoqueDeposito.service');
 const loteService = require('../services/lote.service');
 const loteRepo = require('../repositories/lote.repository');
+const { configuracaoFiscalCompleta } = require('../services/configuracaoFiscal.service');
 const logger = require('../logs/logger');
 const { AppError, paginado } = require('../utils/response');
 
@@ -33,6 +34,13 @@ async function registrar(tenantId, body, usuario, ip) {
   const caixaAberto = await caixaRepo.buscarAberto(tenantId);
   if (!caixaAberto) throw new AppError('Abra um caixa antes de registrar vendas', 422);
 
+  // Fila assíncrona de emissão (complemento Fase 1c/3): só marca o campo
+  // aqui — NENHUMA chamada à SEFAZ acontece no fluxo de venda. Isso é só
+  // um SELECT no Tenant (configuracaoFiscalCompleta), sem rede, então não
+  // atrasa a resposta ao PDV. Quem de fato emite é o worker separado
+  // (filaEmissaoNfce.service.processarFilaEmissao), rodando à parte.
+  const { completa: fiscalCompleta } = await configuracaoFiscalCompleta(tenantId);
+
   const payload = {
     venda: {
       tenantId,
@@ -43,6 +51,7 @@ async function registrar(tenantId, body, usuario, ip) {
       troco: body.troco || 0,
       cpfConsumidor: body.cpfConsumidor || null,
       chaveNfce: body.localId || body.chaveNfce || null,
+      statusEmissaoFiscal: fiscalCompleta ? 'pendente' : 'nao_aplicavel',
     },
     itens: [],
     pagamentos: [],

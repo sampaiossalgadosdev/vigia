@@ -22,6 +22,7 @@
         <button data-aba="margem">Margem</button>
         <button data-aba="dre">DRE</button>
         <button data-aba="estoque">Estoque crítico</button>
+        <button data-aba="fiscal">Fiscal</button>
       </div>
       <div class="aba-conteudo ativa" id="aba-dia"><div class="cards"><div class="card"><div class="rotulo">Receita</div><div class="valor" id="receitaDia">—</div></div><div class="card"><div class="rotulo">Vendas</div><div class="valor" id="qtdDia">—</div></div></div></div>
       <div class="aba-conteudo" id="aba-periodo"><div class="painel"><table><thead><tr><th>Data</th><th>Total</th></tr></thead><tbody id="tabelaPeriodo"><tr><td colspan="2" class="vazio">Carregando...</td></tr></tbody></table></div></div>
@@ -29,6 +30,20 @@
       <div class="aba-conteudo" id="aba-margem"><div class="painel"><table><thead><tr><th>Produto</th><th>Receita</th><th>Custo</th><th>Margem</th></tr></thead><tbody id="tabelaMargem"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody></table></div></div>
       <div class="aba-conteudo" id="aba-dre"><div class="painel"><table><thead><tr><th>Mês</th><th>Receita</th><th>Custo</th><th>Lucro</th></tr></thead><tbody id="tabelaDre"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody></table></div></div>
       <div class="aba-conteudo" id="aba-estoque"><div class="painel"><table><thead><tr><th>Produto</th><th>Estoque</th><th>Mínimo</th></tr></thead><tbody id="tabelaEstoque"><tr><td colspan="3" class="vazio">Carregando...</td></tr></tbody></table></div></div>
+      <div class="aba-conteudo" id="aba-fiscal">
+        <div class="painel">
+          <h2>Exportar XMLs do período (contador externo)</h2>
+          <p style="font-size:14px;color:var(--cinza);margin-bottom:12px">Gera um .zip com todos os XMLs de saída (NFC-e) e entrada (NF-e de fornecedor) do período — pra usar no sistema de SPED do seu contador.</p>
+          <div id="erroFiscal" class="msg-erro"></div>
+          <div class="form-grid">
+            <div class="campo"><label>Início *</label><input type="date" id="fs_inicio"></div>
+            <div class="campo"><label>Fim *</label><input type="date" id="fs_fim"></div>
+          </div>
+          <div class="rodape" style="display:flex;justify-content:flex-end">
+            <button class="btn" id="btnBaixarXmls">Baixar XMLs do período</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
   <script src="/js/api.js"></script>
@@ -61,6 +76,27 @@
       const estoque = await API.get('/api/relatorios/estoque-critico');
       tabelaEstoque.innerHTML = estoque.map((p) => '<tr><td>' + UI.escapar(p.nome) + '</td><td>' + p.estoqueQtd + '</td><td>' + p.estoqueMin + '</td></tr>').join('');
     }
+    // ─── Fiscal: exportação de XMLs em lote ───
+    async function baixarXmls() {
+      UI.limparErro($('erroFiscal'));
+      const inicio = $('fs_inicio').value, fim = $('fs_fim').value;
+      if (!inicio || !fim) { UI.erro($('erroFiscal'), 'Informe o período (início e fim).'); return; }
+      try {
+        const blob = await API.get('/api/fiscal/exportar-xmls?inicio=' + inicio + '&fim=' + fim);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'xmls-' + inicio + '-a-' + fim + '.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        UI.erro($('erroFiscal'), e);
+      }
+    }
+    $('btnBaixarXmls').addEventListener('click', baixarXmls);
+
     document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
       btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
     });
