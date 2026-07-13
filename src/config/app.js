@@ -16,14 +16,36 @@ require('dotenv').config();
 // navegador. Sem a variável configurada, mantém o comportamento permissivo
 // anterior (reflete qualquer origem), pra não quebrar produção em silêncio.
 const valorCorsOrigin = (process.env.CORS_ORIGIN || '').trim();
-const origensPermitidas = valorCorsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+const origensConfiguradas = valorCorsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+const permiteQualquerOrigem = !valorCorsOrigin || origensConfiguradas.includes('*');
+
+// Origens do PDV (Electron, projeto vigia-pdv) sempre liberadas, mesmo
+// quando CORS_ORIGIN em produção está restrito a outro domínio (ex.: o
+// painel web). Em dev o PDV roda em http://localhost:5173 (porta padrão
+// do Vite). Empacotado, ele carrega a UI via file:// e o Chromium do
+// Electron manda o header Origin ausente ou como a string literal "null"
+// — nenhum dos dois casos bate com um domínio comum na allowlist, então
+// precisam ser tratados explicitamente aqui.
+const origensSempreLiberadas = ['http://localhost:5173', 'file://', 'null'];
+
+function origemPermitida(origin) {
+  if (permiteQualquerOrigem) return true;
+  // Sem header Origin (ex.: file:// em algumas versões do Electron, ou
+  // chamada same-origin) não é requisição cross-origin pro navegador —
+  // o cors nem chegaria a bloquear isso, então não há por que negar.
+  if (!origin) return true;
+  if (origensSempreLiberadas.includes(origin)) return true;
+  return origensConfiguradas.includes(origin);
+}
 
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
   env: process.env.NODE_ENV || 'development',
   isProducao: (process.env.NODE_ENV || 'development') === 'production',
   cors: {
-    origin: !valorCorsOrigin || origensPermitidas.includes('*') ? true : origensPermitidas,
-    credentials: false,
+    origin(origin, callback) {
+      callback(null, origemPermitida(origin));
+    },
+    credentials: true,
   },
 };
