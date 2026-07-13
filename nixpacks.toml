@@ -5,5 +5,18 @@
 # schema realmente usado em runtime (validateSchemaJsBased, configurado
 # explicitamente em nfceEmissao.service.js) NÃO usa Java — o JDK aqui é só
 # para o build funcionar, não é usado depois pela aplicação.
+#
+# "..." é OBRIGATÓRIO aqui (confirmado na doc oficial do Nixpacks,
+# nixpacks.com/docs/configuration/file) -- sem ele, nixPkgs desta fase
+# SUBSTITUI (não soma com) os pacotes que o provider de Node já detecta
+# automaticamente (nodejs etc.) pra essa mesma fase "setup". A versão
+# anterior deste arquivo ("jdk21" sem "...") tinha esse bug: o deploy no
+# Railway falhava com "Java SDK required" mesmo com o JDK "declarado",
+# porque a fase de setup que deveria instalar o JDK estava sobrescrevendo
+# o plano do provider em vez de estendê-lo.
+#
+# jdk21_headless (em vez de jdk21): mesma JDK 21, sem dependências
+# gráficas/X11 -- variante recomendada pela própria documentação do
+# nixpkgs para ambientes de servidor (nosso caso: build de CI, sem GUI).
 [phases.setup]
-nixPkgs = ["jdk21"]
+nixPkgs = ["...", "jdk21_headless"]
