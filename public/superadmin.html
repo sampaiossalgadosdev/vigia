@@ -38,6 +38,7 @@
       <div class="abas">
         <button class="ativa" data-aba="tenants" onclick="trocarAba('tenants')">Tenants</button>
         <button data-aba="superusuarios" onclick="trocarAba('superusuarios')">Superusuários</button>
+        <button data-aba="filaEmissao" onclick="trocarAba('filaEmissao')">Fila de emissão</button>
       </div>
 
       <!-- Aba tenants -->
@@ -66,6 +67,24 @@
           <table>
             <thead><tr><th>Nome</th><th>E-mail</th><th>Lojas atreladas</th><th></th></tr></thead>
             <tbody id="tabelaSupers"><tr><td colspan="4" class="vazio">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Aba fila de emissão -->
+      <div class="aba-conteudo" id="aba-filaEmissao">
+        <div class="cards">
+          <div class="card"><div class="rotulo">Urgentes</div><div class="valor" id="filaTotalUrgente">—</div></div>
+          <div class="card"><div class="rotulo">Pendentes</div><div class="valor" id="filaTotalPendente">—</div></div>
+          <div class="card"><div class="rotulo">Falha temporária</div><div class="valor" id="filaTotalFalha">—</div></div>
+        </div>
+        <div class="barra-acoes">
+          <button class="btn" onclick="processarFilaAgora()">Processar fila agora</button>
+        </div>
+        <div class="painel">
+          <table>
+            <thead><tr><th>Venda</th><th>Tenant</th><th>Criada em</th><th>Status</th><th>Tentativas</th><th>Prazo limite</th><th>Urgência</th></tr></thead>
+            <tbody id="tabelaFilaEmissao"><tr><td colspan="7" class="vazio">Carregando...</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -264,7 +283,8 @@
       document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
       document.querySelectorAll('.aba-conteudo').forEach((c) => c.classList.toggle('ativa', c.id === 'aba-' + aba));
       if (aba === 'tenants') carregarTenants();
-      else carregarSupers();
+      else if (aba === 'superusuarios') carregarSupers();
+      else carregarFilaEmissao();
     }
 
     // ─── Tenants ───
@@ -464,6 +484,30 @@
         alert('Importação concluída: ' + r.inseridos + ' inseridos, ' + r.ignorados + ' ignorados.');
         UI.fecharModal('modalImportarTenant');
         carregarTenants();
+      } catch (e) { alert(e.message); }
+    }
+
+    // ─── Fila de emissão ───
+    const URGENCIA_TAG = { tranquilo: 'ok', atencao: 'pendente', urgente: 'erro' };
+
+    async function carregarFilaEmissao() {
+      const data = await AdminApi.get('/api/superadmin/fila-emissao/status');
+      document.getElementById('filaTotalUrgente').textContent = data.totalUrgente;
+      document.getElementById('filaTotalPendente').textContent = data.totalPendente;
+      document.getElementById('filaTotalFalha').textContent = data.totalFalhaTemporaria;
+      document.getElementById('tabelaFilaEmissao').innerHTML = data.itens.map((i) =>
+        '<tr><td>' + i.id.slice(0, 8) + '</td><td>' + i.tenantId.slice(0, 8) + '</td>' +
+        '<td>' + new Date(i.criadoEm).toLocaleString('pt-BR') + '</td><td>' + i.statusEmissaoFiscal + '</td>' +
+        '<td>' + i.tentativasEmissao + '</td><td>' + new Date(i.prazoLimite).toLocaleString('pt-BR') + '</td>' +
+        '<td><span class="tag ' + (URGENCIA_TAG[i.urgencia] || 'neutro') + '">' + i.urgencia + '</span></td></tr>'
+      ).join('') || '<tr><td colspan="7" class="vazio">Nenhuma venda pendente de emissão.</td></tr>';
+    }
+
+    async function processarFilaAgora() {
+      try {
+        const resumo = await AdminApi.post('/api/superadmin/fila-emissao/processar-agora');
+        alert('Processadas: ' + resumo.total + ' · emitidas: ' + resumo.emitidas + ' · rejeitadas: ' + resumo.rejeitadas + ' · falha temporária: ' + resumo.falhaTemporaria);
+        carregarFilaEmissao();
       } catch (e) { alert(e.message); }
     }
 

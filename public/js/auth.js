@@ -67,6 +67,12 @@ const Auth = (() => {
       const clone = main.cloneNode(true);
       parent.replaceChild(clone, container);
 
+      // Atualiza a URL (inclusive âncora, ex.: #transferencia) ANTES de rodar o
+      // script da página nova — páginas que leem location.hash no carregamento
+      // (pra abrir a aba certa) precisam vê-la já correta.
+      const target = pagina === 'index.html' ? '/' : '/' + pagina;
+      history.pushState({ page: pagina }, '', target);
+
       // Remove conteúdo dinâmico da navegação anterior (modais e script da página).
       document.querySelectorAll('[data-dynamic]').forEach((el) => el.remove());
 
@@ -89,9 +95,6 @@ const Auth = (() => {
         novo.textContent = script.textContent;
         document.body.appendChild(novo);
       });
-
-      const target = pagina === 'index.html' ? '/' : '/' + pagina;
-      history.pushState({ page: pagina }, '', target);
     } catch (e) {
       container.innerHTML = '<div class="vazio">Não foi possível carregar esta página.</div>';
     }
@@ -130,15 +133,30 @@ const Auth = (() => {
         ],
       },
       ['fornecedores.html', 'Fornecedores', 'fornecedores'],
-      ['estoque.html', 'Estoque / NF-e', 'estoque'],
       ['nfe-entrada.html', 'NF-e de Entrada', 'estoque'],
-      ['depositos.html', 'Depósitos', 'estoque'],
-      ['inventario.html', 'Inventário', 'estoque'],
+      {
+        rotulo: 'Estoque',
+        modulo: 'estoque',
+        filhos: [
+          ['depositos.html', 'Depósitos'],
+          ['depositos.html#transferencia', 'Transferência'],
+          ['depositos.html#transformacao', 'Transformação'],
+          ['estoque.html', 'Lotes e Validade'],
+          ['inventario.html', 'Inventário e Ajustes'],
+        ],
+      },
       ['vendas.html', 'Vendas', 'vendas'],
       ['promocoes.html', 'Promoções', 'promocoes'],
       ['acougue-tv.html', 'Açougue TV', 'produtos'],
       ['caixa.html', 'Caixa', 'caixa'],
       ['financeiro.html', 'Financeiro', 'financeiro'],
+      {
+        rotulo: 'Notas Fiscais',
+        modulo: 'relatorios',
+        filhos: [
+          ['relatorios.html#fiscal', 'Exportar XMLs'],
+        ],
+      },
       ['relatorios.html', 'Relatórios', 'relatorios'],
       ['ia.html', 'IA', 'ia'],
       ['usuarios.html', 'Usuários', 'usuarios'],

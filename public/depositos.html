@@ -341,7 +341,10 @@
     (async () => {
       const usuario = await Auth.exigirLogin();
       if (!usuario) return;
-      await Auth.montarSidebar('depositos.html');
+      await Auth.montarSidebar('depositos.html' + location.hash);
+      const abaInicial = location.hash === '#transferencia' ? 'transferencia'
+        : location.hash === '#transformacao' ? 'transformacao' : 'lista';
+      trocarAba(abaInicial);
       try {
         await carregar();
       } catch (e) {

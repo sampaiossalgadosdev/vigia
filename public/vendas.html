@@ -52,16 +52,34 @@
       if (statusFiltro.value) params.set('status', statusFiltro.value);
       const data = await API.get('/api/vendas?' + params.toString());
       if (!data.items.length) { tabelaVendas.innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
-      tabelaVendas.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button></td></tr>').join('');
+      tabelaVendas.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button> <button class="btn secundario pequeno" data-acao="xml" data-id="' + v.id + '">Baixar XML</button></td></tr>').join('');
     }
     async function detalhar(id) {
       const venda = await API.get('/api/vendas/' + id);
       alert('Venda ' + venda.id + '\nTotal: ' + UI.moeda(venda.total) + '\nItens: ' + venda.itens.length);
     }
+    async function baixarXml(id) {
+      try {
+        const resultado = await API.get('/api/vendas/' + id + '/xml');
+        const blob = new Blob([resultado.xml], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'nfce-' + id.slice(0, 8) + '.xml';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
     $('btnFiltrar').addEventListener('click', carregar);
     tabelaVendas.addEventListener('click', (ev) => {
-      const btn = ev.target.closest('button[data-acao="detalhar"]');
-      if (btn) detalhar(btn.dataset.id);
+      const btnDetalhar = ev.target.closest('button[data-acao="detalhar"]');
+      if (btnDetalhar) detalhar(btnDetalhar.dataset.id);
+      const btnXml = ev.target.closest('button[data-acao="xml"]');
+      if (btnXml) baixarXml(btnXml.dataset.id);
     });
     (async () => {
       const usuario = await Auth.exigirLogin();

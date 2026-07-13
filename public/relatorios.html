@@ -100,7 +100,13 @@
     document.querySelectorAll('.abas button[data-aba]').forEach((btn) => {
       btn.addEventListener('click', () => trocarAba(btn.dataset.aba));
     });
-    (async () => { const usuario = await Auth.exigirLogin(); if (!usuario) return; await Auth.montarSidebar('relatorios.html'); await carregar(); })();
+    (async () => {
+      const usuario = await Auth.exigirLogin();
+      if (!usuario) return;
+      await Auth.montarSidebar('relatorios.html' + location.hash);
+      if (location.hash === '#fiscal') trocarAba('fiscal');
+      await carregar();
+    })();
   })();
   </script>
 </body>
