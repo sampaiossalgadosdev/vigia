@@ -5,8 +5,13 @@
  * (venda.service.registrar só marca Venda.statusEmissaoFiscal). Este
  * arquivo é o worker separado: processa em LOTE todas as vendas
  * pendentes/em retry de uma vez (não uma por vez, não a cada erro),
- * reaproveitando emitirNfce (nfceEmissao.service, com a contingência
- * principal→SVC já existente da Fase 1c) pra cada uma.
+ * reaproveitando emitirNfce (nfceEmissao.service) pra cada uma.
+ * `emitirNfce` NÃO tenta contingência SVC (decisão de fase posterior à
+ * Fase 1c original — ver nota "SEM CONTINGÊNCIA SVC" em
+ * nfceEmissao.service.js): falha de conexão vira `falha_temporaria` AQUI
+ * mesmo (no catch abaixo), e é esta fila — não uma segunda tentativa
+ * dentro de emitirNfce — quem tenta de novo o MESMO endpoint principal na
+ * próxima passada, até a SEFAZ do estado voltar.
  * Também calcula a urgência de visibilidade do prazo legal de
  * contingência (Ajuste SINIEF 19/2016: final do 1º dia útil subsequente
  * à emissão) — só CÁLCULO, nenhuma ação automática de bloqueio/cancelamento.

@@ -1,0 +1,9 @@
+# JDK necessário apenas para satisfazer o postinstall de uma dependência
+# transitiva de @nfewizard/nfce (xsd-schema-validator, puxada via
+# @nfewizard/shared) — sem JDK no PATH, `npm install` falha (o postinstall
+# aborta o install inteiro, comportamento padrão do npm). O validador de
+# schema realmente usado em runtime (validateSchemaJsBased, configurado
+# explicitamente em nfceEmissao.service.js) NÃO usa Java — o JDK aqui é só
+# para o build funcionar, não é usado depois pela aplicação.
+[phases.setup]
+nixPkgs = ["jdk21"]

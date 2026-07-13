@@ -1,41 +1,60 @@
 /**
  * Arquivo: nfceEmissao.service.js
- * Responsabilidade: Emissão real de NFC-e (autorização), cancelamento e
- * contingência Nível 1 (SVC) — Fase 1c. Em desenvolvimento/teste
- * (SEFAZ_MOCK=true ou NODE_ENV=test), TUDO roda via mock — sem rede real e
- * sem usar o certificado de verdade; só fora disso a chamada de fato
- * acontece (mesmo padrão de SEFAZ_AMBIENTE já usado na Distribuição DF-e).
+ * Responsabilidade: Emissão real de NFC-e (autorização) e cancelamento —
+ * Fase 1c. Em desenvolvimento/teste (SEFAZ_MOCK=true ou NODE_ENV=test),
+ * TUDO roda via mock — sem rede real e sem usar o certificado de verdade;
+ * só fora disso a chamada de fato acontece.
  *
- * ATENÇÃO — LIMITAÇÃO REAL DESCOBERTA NESTA FASE: a lib
- * @vexta-systems/node-mde (já usada pra Distribuição DF-e) só exporta
- * DistribuicaoNFe, RecepcaoEvento e DistribuicaoCTe — NÃO tem nenhuma
- * função de assinatura de XML nem de chamada ao NfeAutorizacao4 (a
- * operação SOAP que autoriza de fato um documento novo). Por isso:
- *   - EMISSÃO (chamarWebserviceReal): em modo NÃO-mock, lança um erro
- *     claro "não implementado" — assinar XML (XML-DSig) e montar a
- *     chamada ao NfeAutorizacao4 é trabalho novo, fora do que a lib atual
- *     cobre, e não deveria ser inventado às pressas numa função que emite
- *     documento fiscal de verdade.
- *   - CANCELAMENTO (enviarEventoCancelamentoReal): em modo não-mock, USA
- *     RecepcaoEvento (mesma classe já comprovada em produção pra
- *     manifestação do destinatário) — mas os campos extras do evento de
- *     cancelamento (nProt, xJust) foram inferidos por analogia ao padrão
- *     já existente (chNFe, tipoEvento), NÃO confirmados contra a
- *     documentação da lib. Testar em homologação real antes de habilitar
- *     em produção.
- *   - A lógica de RETRY pra contingência (Tarefa 4) é 100% real e testável
- *     independente disso — ela só decide "tentar de novo no SVC quando o
- *     principal falhar por conexão", não depende de como a chamada em si
- *     é implementada.
+ * SEM CONTINGÊNCIA SVC (decisão desta fase, revertendo uma tentativa
+ * anterior): declarar contingência formal (tpEmis != 1) exige, desde a NT
+ * 2025.001 (produção obrigatória desde 03/11/2025), QR Code versão 3 com
+ * assinatura digital — mecanismo que não temos especificação técnica
+ * completa pra implementar com segurança (a lib @nfewizard/nfce 1.0.4,
+ * versão mais recente publicada, não suporta: gera QR Code sempre em v2,
+ * sem nenhuma lógica condicional por tpEmis). Duas tentativas anteriores
+ * de contornar isso (forçar UF:'SVRS' pra mirar o SVC; manter a UF real e
+ * tentar mesmo assim) esbarraram nisso e foram revertidas. Em vez de
+ * declarar contingência, `emitirNfce` faz UMA tentativa no webservice
+ * principal; se falhar por conexão/timeout, propaga o erro direto — quem
+ * chama (a fila assíncrona, filaEmissaoNfce.service.js, já implementada)
+ * marca a venda como `falha_temporaria` e tenta de novo, na próxima
+ * passada, o MESMO endpoint principal, até a SEFAZ do estado voltar. A
+ * tabela `contingenciaSvc` em config/webservicesSefaz.js foi mantida
+ * (não removida) como referência, caso isso seja implementado de verdade
+ * no futuro com a especificação certa em mãos — só não é mais usada aqui.
+ *
+ * EMISSÃO/CANCELAMENTO REAIS (via @nfewizard/nfce — confirmado por
+ * investigação estrutural contra a SEFAZ-PR de homologação com certificado
+ * dummy, não só por documentação):
+ *   - O validador de schema PADRÃO usado internamente pelo fluxo de
+ *     autorização é Java-based, ao contrário do que a documentação da lib
+ *     sugere — por isso `lib.useForSchemaValidation: 'validateSchemaJsBased'`
+ *     é configurado EXPLICITAMENTE em NFE_LoadEnvironment (sem isso, toda
+ *     emissão exigiria JDK em runtime, não só na instalação).
+ *   - A lib joga fora o erro original ao relançar (`throw new
+ *     Error('NFCE_Autorizacao: ' + error.message)`) — perde `.code`/
+ *     `.isAxiosError`, então falha de conexão real e rejeição de conteúdo
+ *     da SEFAZ (`verificaRejeicao` da lib lança exceção pros dois casos)
+ *     chegam aqui como o mesmo tipo de erro genérico. `ehFalhaDeRede()`
+ *     classifica por padrão de mensagem (conservador: só reconhece
+ *     assinaturas conhecidas de falha de rede; o resto é tratado como
+ *     rejeição de conteúdo) — usado só pra distinguir os dois casos, já
+ *     que não há mais uma segunda tentativa que dependa dessa distinção.
+ *   - Um novo `NFCEWizard` é criado e carregado a CADA chamada (nunca
+ *     reaproveitado entre chamadas) — o Environment guarda certificado e
+ *     CNPJ do tenant, e este é um serviço multi-tenant: reaproveitar uma
+ *     instância entre chamadas arriscaria vazar certificado/config de um
+ *     tenant para outro em requisições concorrentes.
  *
  * Utilizado por: (controller/rota, fora deste prompt) fluxo de emissão
- * pós-venda e cancelamento de NFC-e.
+ * pós-venda e cancelamento de NFC-e; filaEmissaoNfce.service.js (retry
+ * assíncrono).
  * Depende de: VendaRepository, SuperadminRepository, AuditoriaRepository,
  * configuracaoFiscal.service, nfceXml.service, tributoFiscal.service,
  * config/webservicesSefaz, sefaz.service (CODIGO_UF), utils/certcrypto,
- * @vexta-systems/node-mde (RecepcaoEvento).
+ * @nfewizard/nfce (NFCEWizard).
  */
-const { RecepcaoEvento } = require('@vexta-systems/node-mde');
+const { NFCEWizard } = require('@nfewizard/nfce');
 const vendaRepo = require('../repositories/venda.repository');
 const superadminRepo = require('../repositories/superadmin.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
@@ -48,13 +67,36 @@ const { descriptografar, descriptografarTexto } = require('../utils/certcrypto')
 const { AppError } = require('../utils/response');
 
 const TP_EMIS_NORMAL = '1';
-// SVC-RS — ver pendência de UF x SVC-AN/SVC-RS em config/webservicesSefaz.js.
-const TP_EMIS_SVC_RS = '7';
-const TIPO_EVENTO_CANCELAMENTO = 110111;
+const TIPO_EVENTO_CANCELAMENTO = '110111';
 const JUSTIFICATIVA_MIN_CHARS = 15; // exigência padrão da SEFAZ pro evento de cancelamento
+
+// Assinaturas conhecidas de falha de CONEXÃO (nunca de rejeição de
+// conteúdo) nas mensagens que a lib relança — ver nota no topo do arquivo
+// sobre por que isso é necessário (a lib não preserva o erro original).
+const REGEX_ERRO_REDE = /EPROTO|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNABORTED|Network Error|timeout of \d+ms exceeded|socket hang up/i;
 
 function mockAtivo() {
   return process.env.SEFAZ_MOCK === 'true' || process.env.NODE_ENV === 'test';
+}
+
+function ehFalhaDeRede(erro) {
+  return REGEX_ERRO_REDE.test(erro.message || '');
+}
+
+/** Remove o prefixo que NFCEWizard adiciona ao relançar (ex: "NFCE_Autorizacao: "). */
+function mensagemSemPrefixoDaLib(mensagem) {
+  return String(mensagem || '').replace(/^NFCE_(Autorizacao|Cancelamento):\s*/, '');
+}
+
+/** Busca recursiva por uma chave em um objeto/array de profundidade arbitrária (o retorno bruto de NFCE_Cancelamento não tem formato documentado). */
+function buscarChaveProfunda(obj, chave) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  if (chave in obj) return obj[chave];
+  for (const valor of Object.values(obj)) {
+    const encontrado = buscarChaveProfunda(valor, chave);
+    if (encontrado !== undefined) return encontrado;
+  }
+  return undefined;
 }
 
 /** Recalcula o tributo de cada item no momento da emissão; item que já tem snapshot gravado não é recalculado. */
@@ -81,54 +123,117 @@ async function chamarWebserviceMock() {
   return { cStat: '100', xMotivo: 'Autorizado o uso da NF-e (MOCK)', protocolo: 'MOCK' + String(Date.now()).slice(-12) };
 }
 
-/** REAL — NÃO IMPLEMENTADO ainda (ver comentário no topo do arquivo). */
-async function chamarWebserviceReal() {
-  throw new AppError(
-    'Emissão real de NFC-e ainda não implementada: a lib @vexta-systems/node-mde não expõe assinatura XML (XML-DSig) nem chamada ao NfeAutorizacao4 — só DistribuicaoNFe/RecepcaoEvento (consumo e eventos). Implemente isso antes de rodar com SEFAZ_MOCK=false em produção.',
-    501
-  );
+/**
+ * Carrega um NFCEWizard novo (nunca reaproveitado entre chamadas — ver nota
+ * no topo do arquivo) com o certificado do tenant já descriptografado em
+ * memória. A lib resolve a URL do webservice e a URL do QR Code a partir
+ * de `dfe.UF` — sempre a UF real do tenant (nunca sobrescrita, ver nota
+ * "SEM CONTINGÊNCIA SVC" no topo do arquivo).
+ */
+async function carregarAmbienteNfce(tenant) {
+  const cert = certificadoEmMemoria(tenant);
+  const producao = tenant.ambienteFiscal === 'producao';
+  const wizard = new NFCEWizard();
+  try {
+    await wizard.NFE_LoadEnvironment({
+      config: {
+        dfe: {
+          armazenarXMLAutorizacao: false,
+          armazenarXMLRetorno: false,
+          armazenarXMLConsulta: false,
+          pathCertificado: cert.pfx,
+          senhaCertificado: cert.passphrase,
+          UF: tenant.uf,
+          CPFCNPJ: tenant.cnpj,
+        },
+        nfe: {
+          ambiente: producao ? 1 : 2,
+          versaoDF: '4.00',
+          idCSC: Number(producao ? tenant.cscProducaoId : tenant.cscHomologacaoId),
+          tokenCSC: descriptografarTexto(producao ? tenant.cscProducao : tenant.cscHomologacao),
+        },
+        lib: {
+          connection: { timeout: 30000 },
+          log: { exibirLogNoConsole: false, armazenarLogs: false },
+          // Achado de investigação: o padrão real (sem isto) é Java-based —
+          // ver comentário no topo do arquivo.
+          useForSchemaValidation: 'validateSchemaJsBased',
+        },
+      },
+    });
+  } catch (erro) {
+    // Certificado corrompido/senha errada é um erro JÁ CLASSIFICADO (não é
+    // falha de conexão nem rejeição de conteúdo da SEFAZ) -- vira AppError
+    // com o motivo real, em vez de deixar a lib lançar algo genérico que
+    // se pareceria com falha de conexão.
+    throw new AppError('Certificado digital inválido ou senha incorreta: ' + mensagemSemPrefixoDaLib(erro.message), 422);
+  }
+  return wizard;
 }
 
 /**
- * Tenta autorizar no webservice principal; se a chamada FALHAR (exceção —
- * conexão/timeout, nunca por rejeição de conteúdo, que a SEFAZ devolve
- * como cStat diferente de 100 sem lançar exceção), tenta de novo no SVC
- * (contingência), regenerando o XML/chave com o tpEmis de contingência.
- * Retorna { cStat, xMotivo, protocolo, xml, chaveAcesso, viaContingencia }.
+ * REAL — usa @nfewizard/nfce. Chamada única (sem contingência SVC — ver
+ * nota no topo do arquivo). `url` é recebido por simetria com o
+ * `chamarWebservice` injetável de teste, mas não é usado: a lib resolve o
+ * endpoint sozinha a partir de `dfe.UF` (carregado com a UF real do
+ * tenant em `carregarAmbienteNfce`), não aceita URL literal por chamada.
+ *
+ * Falha de conexão real (`ehFalhaDeRede`) propaga como exceção — quem
+ * chama (`emitirNfce`, e por trás dela `processarFilaEmissao`) decide o
+ * que fazer (hoje: marcar falha_temporaria e deixar a fila tentar de
+ * novo depois). Rejeição de CONTEÚDO da SEFAZ (a lib lança exceção pros
+ * dois casos, joga fora o cStat estruturado — ver nota no topo do
+ * arquivo) NÃO propaga como exceção — vira um retorno normal
+ * `{cStat, xMotivo}`, pra `emitirNfce` gravar o XML e rejeitar com o
+ * motivo real, sem reagendar retry (uma rejeição de conteúdo não se
+ * resolve tentando de novo sem correção manual).
  */
-async function autorizarComContingencia(montarXmlComTpEmis, urls, chamador, tenant) {
-  const normal = montarXmlComTpEmis(TP_EMIS_NORMAL);
-  try {
-    const resp = await chamador(urls.autorizacao, normal.xml, tenant);
-    return { ...resp, ...normal, viaContingencia: false };
-  } catch (erroConexaoPrincipal) {
-    // AppError = erro já classificado (ex: 501 "não implementada", 422 de
-    // validação) -- não é falha de conexão, não faz sentido tentar de novo
-    // no SVC nem mascarar a mensagem com o 503 genérico abaixo.
-    if (erroConexaoPrincipal instanceof AppError) throw erroConexaoPrincipal;
+async function chamarWebserviceReal(url, xml, tenant) {
+  const wizard = await carregarAmbienteNfce(tenant);
 
-    const contingencia = montarXmlComTpEmis(TP_EMIS_SVC_RS);
-    try {
-      const resp = await chamador(urls.contingenciaSvc.autorizacao, contingencia.xml, tenant);
-      return { ...resp, ...contingencia, viaContingencia: true };
-    } catch (erroConexaoSvc) {
-      if (erroConexaoSvc instanceof AppError) throw erroConexaoSvc;
-      throw new AppError(
-        'Não foi possível emitir a NFC-e: a SEFAZ do estado e o ambiente de contingência (SVC) estão indisponíveis. Aguarde a normalização antes de vender com nota fiscal — não é caso de tentar resolver programaticamente aqui (ver Fase 3 para fila local).',
-        503
-      );
-    }
+  let xmls;
+  try {
+    xmls = await wizard.NFCE_Autorizacao(xml);
+  } catch (erro) {
+    if (ehFalhaDeRede(erro)) throw erro;
+
+    // cStat extraído é best-effort (só a mensagem de texto sobrevive à
+    // lib); xMotivo real é preservado.
+    const cStatExtraido = (erro.message.match(/\b(\d{3})\b/) || [])[1] || '999';
+    return { cStat: cStatExtraido, xMotivo: mensagemSemPrefixoDaLib(erro.message), protocolo: '' };
   }
+
+  const infProt = (xmls && xmls[0] && xmls[0].protNFe && xmls[0].protNFe.infProt) || {};
+  return { cStat: String(infProt.cStat || ''), xMotivo: infProt.xMotivo || '', protocolo: infProt.nProt || '' };
+}
+
+/**
+ * Tenta autorizar no webservice principal — UMA VEZ, sem contingência SVC
+ * (ver nota "SEM CONTINGÊNCIA SVC" no topo do arquivo). Qualquer falha
+ * (conexão/timeout, certificado inválido, rejeição de conteúdo já
+ * convertida em retorno normal por `chamador`) segue o comportamento
+ * natural de `chamador`: exceção propaga direto pra quem chamou
+ * `autorizarNfce` decidir (hoje: `emitirNfce` não trata nada especial,
+ * só deixa subir; `processarFilaEmissao` é quem classifica e agenda
+ * retry). Retorna { cStat, xMotivo, protocolo, xml, chaveAcesso }.
+ */
+async function autorizarNfce(montarXmlComTpEmis, urls, chamador, tenant) {
+  const dados = montarXmlComTpEmis(TP_EMIS_NORMAL);
+  const resp = await chamador(urls.autorizacao, dados.xml, tenant);
+  return { ...resp, ...dados };
 }
 
 /**
  * Emite a NFC-e: valida configuração fiscal completa, gera o XML, chama o
- * webservice (mock em dev/teste; real fora disso — ver limitação no topo
- * do arquivo) com contingência automática pro SVC, e grava a chave de
- * acesso REAL + protocolo em Venda.
+ * webservice UMA VEZ (mock em dev/teste; real fora disso — ver notas no
+ * topo do arquivo; sem contingência SVC), e grava a chave de acesso REAL
+ * + protocolo em Venda.
  * `chamarWebservice(url, xml, tenant)` é injetável só pra teste (simular
  * sucesso/rejeição/conexão-fora-do-ar sem rede real); em uso normal nem
- * precisa ser passado — o mock/real padrão é escolhido sozinho.
+ * precisa ser passado — o mock/real padrão é escolhido sozinho. Falha de
+ * conexão propaga direto daqui — quem chama trata (a fila assíncrona,
+ * filaEmissaoNfce.service.js, marca falha_temporaria e tenta de novo
+ * depois).
  */
 async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
   const tenant = await superadminRepo.buscarTenantPorId(tenantId);
@@ -145,7 +250,7 @@ async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
   const urls = resolverUrlsFiscais(tenant.uf, tenant.ambienteFiscal);
   const chamador = chamarWebservice || (mockAtivo() ? chamarWebserviceMock : chamarWebserviceReal);
 
-  const resultado = await autorizarComContingencia(
+  const resultado = await autorizarNfce(
     (tpEmis) => gerarXmlNfce(venda, { tpEmis }),
     urls,
     chamador,
@@ -161,7 +266,6 @@ async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
   if (resultado.cStat === '100') {
     dadosAtualizacao.chaveNfce = resultado.chaveAcesso;
     dadosAtualizacao.emitidoEm = new Date();
-    dadosAtualizacao.emitidoViaContingencia = resultado.viaContingencia;
     dadosAtualizacao.protocoloAutorizacao = resultado.protocolo;
   }
   const atualizada = await vendaRepo.atualizarStatus(tenantId, vendaId, dadosAtualizacao);
@@ -171,7 +275,7 @@ async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
 
   await auditoriaRepo.registrar({
     tenantId, acao: 'emitir_nfce', entidade: 'Venda', entidadeId: vendaId,
-    depois: { chaveNfce: resultado.chaveAcesso, viaContingencia: resultado.viaContingencia },
+    depois: { chaveNfce: resultado.chaveAcesso },
   });
 
   return atualizada;
@@ -182,42 +286,68 @@ async function enviarEventoCancelamentoMock() {
 }
 
 /**
- * PENDENTE DE CONFIRMAÇÃO (ver nota no topo do arquivo): nProt/xJust
- * inferidos por analogia ao padrão já usado em sefaz.service.manifestar()
- * (chNFe, tipoEvento), não confirmados contra a documentação da lib.
+ * REAL — usa @nfewizard/nfce (NFCEWizard.NFCE_Cancelamento). Formato
+ * CONFIRMADO lendo o .d.ts real e testado estruturalmente contra a
+ * SEFAZ-PR de homologação (não mais inferido por analogia): nProt/xJust
+ * ficam aninhados em `evento[].detEvento`, não soltos como se assumia
+ * antes.
+ *
+ * dhEvento usa offset fixo de -03:00 (horário de Brasília, sem horário de
+ * verão desde 2019) — ASSUNÇÃO fica registrada aqui: incorreta para
+ * tenants em UF com fuso diferente (AC, oeste do AM), que hoje não têm
+ * tratamento especial em nenhum lugar do sistema (mesma simplificação já
+ * documentada em outros pontos da Fase 1c, ex: config/webservicesSefaz.js).
  */
 async function enviarEventoCancelamentoReal(tenant, venda, justificativa) {
-  const cert = certificadoEmMemoria(tenant);
-  const recepcao = new RecepcaoEvento({
-    pfx: cert.pfx,
-    passphrase: cert.passphrase,
-    cnpj: tenant.cnpj,
-    cUFAutor: CODIGO_UF[tenant.uf],
-    tpAmb: tenant.ambienteFiscal === 'producao' ? '1' : '2',
-    options: { requestOptions: { timeout: 60000 } },
-  });
-  const envio = await recepcao.enviarEvento({
-    idLote: String(Date.now() % 1e15),
-    lote: [{ chNFe: venda.chaveNfce, tipoEvento: TIPO_EVENTO_CANCELAMENTO, nProt: venda.protocoloAutorizacao, xJust: justificativa }],
-  });
-  if (envio.error)
-    throw new AppError('Falha ao enviar cancelamento à SEFAZ: ' + JSON.stringify(envio.error).slice(0, 200), 502);
+  const wizard = await carregarAmbienteNfce(tenant);
+  const producao = tenant.ambienteFiscal === 'producao';
+  const dhEvento = new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00');
 
-  const retornos = [].concat((envio.data && envio.data.retEvento) || []);
-  const info = (retornos[0] && (retornos[0].infEvento || retornos[0])) || {};
-  const cStat = String(info.cStat || '');
-  // 135/155 = evento registrado (normal/extemporâneo) — mesmo estilo de
-  // aceitar códigos próximos já usado em manifestar(); confirmar antes de produção.
-  return ['135', '155'].includes(cStat)
-    ? { ok: true, protocolo: info.nProt || '' }
-    : { ok: false, motivo: cStat + ' - ' + (info.xMotivo || 'evento rejeitado') };
+  let resposta;
+  try {
+    resposta = await wizard.NFCE_Cancelamento({
+      idLote: Date.now(),
+      modelo: '65',
+      evento: [{
+        tpAmb: producao ? 1 : 2,
+        cOrgao: CODIGO_UF[tenant.uf],
+        CNPJ: tenant.cnpj,
+        chNFe: venda.chaveNfce,
+        dhEvento,
+        tpEvento: TIPO_EVENTO_CANCELAMENTO,
+        nSeqEvento: 1,
+        verEvento: '1.00',
+        detEvento: {
+          descEvento: 'Cancelamento',
+          nProt: venda.protocoloAutorizacao,
+          xJust: justificativa,
+        },
+      }],
+    });
+  } catch (erro) {
+    // Mesma ressalva de chamarWebserviceReal: a lib joga fora o erro
+    // original, então distinguimos falha de conexão (502, igual ao
+    // comportamento anterior) de rejeição de conteúdo (422, com o motivo
+    // real) só pela mensagem.
+    if (ehFalhaDeRede(erro))
+      throw new AppError('Falha ao enviar cancelamento à SEFAZ: ' + mensagemSemPrefixoDaLib(erro.message), 502);
+    return { ok: false, motivo: mensagemSemPrefixoDaLib(erro.message) };
+  }
+
+  // xMotivos[] (confirmado no .cjs) só traz {chNFe, xMotivo, cStat,
+  // tipoEvento} -- sem nProt. O protocolo de fato só existe dentro de
+  // `response` (JSON bruto da SEFAZ, formato/aninhamento não documentado
+  // publicamente), daí a busca profunda em vez de indexar um caminho fixo.
+  const info = (resposta && resposta.xMotivos && resposta.xMotivos[0]) || {};
+  const protocolo = buscarChaveProfunda(resposta && resposta.response, 'nProt');
+  return { ok: true, protocolo: protocolo || '' };
 }
 
 /**
  * Cancela a NFC-e (evento fiscal na SEFAZ) — checa janela de tempo por UF
  * (config/webservicesSefaz) e justificativa mínima antes de tentar
  * qualquer coisa. Em mock, simula sucesso; em real, envia o evento (ver
- * limitação no topo do arquivo).
+ * notas no topo do arquivo).
  *
  * ESCOPO: isso cuida só do lado FISCAL (evento na SEFAZ + status/protocolo
  * da Venda). NÃO reverte estoque nem caixa — isso já é feito por
@@ -268,4 +398,13 @@ async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCanc
   return atualizada;
 }
 
-module.exports = { emitirNfce, cancelarNfce, mockAtivo };
+module.exports = {
+  emitirNfce,
+  cancelarNfce,
+  mockAtivo,
+  // Exportado só para o teste de integração manual (TESTE_INTEGRACAO_SEFAZ=true)
+  // exercitar a chamada real à SEFAZ diretamente, sem depender de
+  // gerarXmlNfce (que ainda não é schema-completo — ver ressalva na
+  // resposta desta fase sobre o XML gerado pela Fase 1b).
+  chamarWebserviceReal,
+};

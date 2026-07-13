@@ -16,6 +16,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@nfewizard/nfce": "^1.0.4",
     "@prisma/client": "^5.22.0",
     "@vexta-systems/node-mde": "^0.15.7",
     "archiver": "^7.0.1",

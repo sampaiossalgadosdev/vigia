@@ -164,17 +164,19 @@ test('processarFilaEmissao: rejeição de conteúdo marca statusEmissaoFiscal=re
   }
 });
 
-test('processarFilaEmissao: falha de conexão (principal E SVC) marca falha_temporaria com proximaTentativaEm correto', async () => {
+test('processarFilaEmissao: falha de conexão marca falha_temporaria com proximaTentativaEm correto, com exatamente 1 chamada de rede (sem contingência SVC)', async () => {
   const tenant = await criarTenantCompleto('05');
   const produto = await criarProduto(tenant.id, '05');
   const venda = await criarVendaPendenteDireto(tenant.id, produto.id);
   try {
-    const chamarSempreFalha = async () => { throw new Error('ECONNREFUSED (simulado)'); };
+    let chamadas = 0;
+    const chamarSempreFalha = async () => { chamadas += 1; throw new Error('ECONNREFUSED (simulado)'); };
     const antes = Date.now();
     const resumo = await filaService.processarFilaEmissao({ chamarWebservice: chamarSempreFalha });
     assert.equal(resumo.falhaTemporaria, 1);
     assert.equal(resumo.emitidas, 0);
     assert.equal(resumo.rejeitadas, 0);
+    assert.equal(chamadas, 1, 'não deve tentar nenhum endpoint alternativo (contingência SVC removida) -- a fila tenta de novo só na próxima passada');
 
     const depois = await prisma.venda.findUnique({ where: { id: venda.id } });
     assert.equal(depois.statusEmissaoFiscal, 'falha_temporaria');
@@ -197,14 +199,12 @@ test('processarFilaEmissao: processa múltiplas vendas na mesma chamada — uma 
   const vendaB = await criarVendaPendenteDireto(tenant.id, produtoB.id, { criadoEm: new Date(base + 1000) });
   const vendaC = await criarVendaPendenteDireto(tenant.id, produtoC.id, { criadoEm: new Date(base + 2000) });
   try {
-    // A venda do meio precisa falhar tanto na URL principal quanto no SVC de
-    // contingência (autorizarComContingencia tenta o SVC automaticamente
-    // quando o principal falha por conexão) — por isso as chamadas 2 E 3
-    // falham (normal + contingência da 2ª venda), não só uma.
+    // Sem contingência SVC, cada venda faz UMA chamada só — a do meio
+    // (chamada 2) falha, as outras (1 e 3) têm sucesso normal.
     let chamada = 0;
     const chamarComFalhaNaSegunda = async () => {
       chamada += 1;
-      if (chamada === 2 || chamada === 3) throw new Error('ECONNREFUSED (simulado) — falha proposital na segunda venda (principal + SVC)');
+      if (chamada === 2) throw new Error('ECONNREFUSED (simulado) — falha proposital na segunda venda');
       return { cStat: '100', xMotivo: 'Autorizado o uso da NF-e (MOCK)', protocolo: 'MOCK' + chamada };
     };
 
