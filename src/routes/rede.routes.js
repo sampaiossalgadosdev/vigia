@@ -7,10 +7,11 @@ const controller = require('../controllers/rede.controller');
 const validator = require('../validators/auth.validator');
 const { auth } = require('../middlewares/auth');
 const { authRede } = require('../middlewares/authRede');
+const { loginLimiter } = require('../middlewares/rateLimiter');
 
 const router = Router();
 
-router.post('/login', validator.login, controller.login);
+router.post('/login', loginLimiter, validator.login, controller.login);
 
 // Ponte de SSO: autenticado como usuário do tenant (Dono, plano pro), não
 // como Superusuário — por isso fica fora do router.use(authRede) abaixo.

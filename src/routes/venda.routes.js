@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const controller = require('../controllers/venda.controller');
+const validator = require('../validators/venda.validator');
 const { auth } = require('../middlewares/auth');
 const { exigePermissao } = require('../middlewares/permissao.middleware');
 
@@ -12,7 +13,7 @@ const gestao = exigePermissao('vendas');
 router.get('/', gestao, controller.listar);
 router.get('/:id', gestao, controller.detalhar);
 router.get('/:id/xml', gestao, controller.buscarXml);
-router.post('/', controller.registrar);
+router.post('/', validator.registrar, controller.registrar);
 router.post('/:id/cancelar', gestao, controller.cancelar);
 router.post('/sync', controller.sync);
 

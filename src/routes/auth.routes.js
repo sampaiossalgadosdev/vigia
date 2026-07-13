@@ -7,10 +7,11 @@ const { Router } = require('express');
 const controller = require('../controllers/auth.controller');
 const validator = require('../validators/auth.validator');
 const { auth } = require('../middlewares/auth');
+const { loginLimiter } = require('../middlewares/rateLimiter');
 
 const router = Router();
 
-router.post('/login', validator.login, controller.login);
+router.post('/login', loginLimiter, validator.login, controller.login);
 router.post('/refresh', validator.refresh, controller.refresh);
 router.post('/logout', validator.refresh, controller.logout);
 router.get('/me', auth, controller.me);

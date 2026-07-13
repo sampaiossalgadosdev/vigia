@@ -25,6 +25,11 @@ model Superusuario {
   email     String   @unique
   senha     String
   ativo     Boolean  @default(true)
+  // true apenas quando esta conta nasceu da ponte de SSO (rede.service.sso)
+  // a partir do login de um Dono — nunca setado em contas criadas pelo
+  // Superadmin. Usado pra impedir que o SSO atrele um Dono a uma conta de
+  // rede "de verdade" só porque o e-mail bate por coincidência.
+  origemSso Boolean  @default(false)
   criadoEm  DateTime @default(now())
   updatedAt DateTime @updatedAt
 

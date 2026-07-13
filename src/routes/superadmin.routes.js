@@ -9,10 +9,11 @@ const filaEmissaoController = require('../controllers/filaEmissao.controller');
 const validator = require('../validators/auth.validator');
 const { authAdmin } = require('../middlewares/authAdmin');
 const { uploadPlanilha, uploadPfx } = require('../middlewares/upload');
+const { loginLimiter } = require('../middlewares/rateLimiter');
 
 const router = Router();
 
-router.post('/login', validator.login, controller.login);
+router.post('/login', loginLimiter, validator.login, controller.login);
 
 router.use(authAdmin);
 

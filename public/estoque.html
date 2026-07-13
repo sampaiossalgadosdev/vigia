@@ -197,7 +197,7 @@
       const precisaLote = nfe.status !== 'confirmada' && nfe.itens.some((i) => i.produto && i.produto.controlaLote);
       itensNfe.innerHTML = nfe.itens.map((i) => {
         const exigeLote = nfe.status !== 'confirmada' && i.produto && i.produto.controlaLote && i.status === 'ok';
-        return '<tr><td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
+        return '<tr><td>' + UI.escapar(i.ean) + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + UI.escapar(i.unidade) + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td><td>' + UI.moeda(i.valorTotal) + '</td>' +
         '<td><span class="tag ' + (i.status === 'ok' ? 'ok' : 'pendente') + '">' + i.status + '</span></td>' +
         (precisaLote ? '<td>' + (exigeLote
@@ -242,7 +242,7 @@
       if (data.itens.length === 0) { tabelaPendentes.innerHTML = '<tr><td colspan="6" class="vazio">Nenhum item pendente.</td></tr>'; return; }
       tabelaPendentes.innerHTML = data.itens.map((i) =>
         '<tr><td>' + i.nfe.numeroNfe + ' <span class="tag ' + (i.nfe.status === 'confirmada' ? 'ok' : 'neutro') + '">' + i.nfe.status + '</span></td>' +
-        '<td>' + i.ean + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + i.unidade + '</td>' +
+        '<td>' + UI.escapar(i.ean) + '</td><td>' + UI.escapar(i.descricao) + '</td><td>' + i.quantidade + ' ' + UI.escapar(i.unidade) + '</td>' +
         '<td>' + UI.moeda(i.valorUnitario) + '</td>' +
         '<td><button class="btn pequeno" data-acao="vincular" data-id="' + i.id + '">Vincular / Cadastrar</button></td></tr>'
       ).join('');

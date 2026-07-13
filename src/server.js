@@ -7,18 +7,26 @@
  */
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cron = require('node-cron');
 const path = require('path');
 const appConfig = require('./config/app');
 const logger = require('./logs/logger');
 const { error, AppError } = require('./utils/response');
 const { processarFilaEmissao, INTERVALO_PROCESSAMENTO_MINUTOS } = require('./services/filaEmissaoNfce.service');
+const { apiLimiter } = require('./middlewares/rateLimiter');
 
 const app = express();
 
+// CSP desligada de propósito: o frontend (public/*.html) usa scripts e
+// atributos onclick inline em todas as páginas — o CSP padrão do helmet
+// bloquearia a aplicação inteira. Os demais headers (X-Frame-Options,
+// HSTS, X-Content-Type-Options etc.) continuam ativos.
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors(appConfig.cors));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/api', apiLimiter);
 
 // Log de toda requisição (e de toda resposta com status >= 400)
 app.use((req, res, next) => {

@@ -58,6 +58,7 @@ async function registrar(tenantId, body, usuario, ip) {
   };
 
   const itens = body.itens || [];
+  if (itens.length === 0) throw new AppError('A venda precisa ter ao menos um item', 422);
   for (const item of itens) {
     const produto = await produtoRepo.buscarPorId(tenantId, item.produtoId);
     if (!produto || !produto.ativo) throw new AppError('Produto não encontrado', 404);
@@ -72,6 +73,7 @@ async function registrar(tenantId, body, usuario, ip) {
     }
 
     const qtd = Number(item.quantidade);
+    if (!(qtd > 0)) throw new AppError(`Quantidade inválida para o produto ${produto.nome}`, 422);
     const subtotal = precoFinal * qtd;
     payload.itens.push({
       // Gerado no client (não deixado pro default do Prisma) porque
@@ -91,6 +93,9 @@ async function registrar(tenantId, body, usuario, ip) {
     payload.venda.total += subtotal;
   }
 
+  if (payload.venda.desconto < 0) throw new AppError('Desconto não pode ser negativo', 422);
+  if (payload.venda.desconto > payload.venda.subtotal) throw new AppError('Desconto não pode ser maior que o subtotal da venda', 422);
+
   const totalPagamentos = (body.pagamentos || []).reduce((sum, p) => sum + Number(p.valor), 0);
   payload.venda.total = Math.max(0, payload.venda.total - Number(payload.venda.desconto));
   payload.pagamentos = (body.pagamentos || []).map((p) => ({ forma: p.forma, valor: Number(p.valor) }));
@@ -103,7 +108,12 @@ async function registrar(tenantId, body, usuario, ip) {
     await tx.vendaPagamento.createMany({ data: payload.pagamentos.map((p) => ({ ...p, vendaId: criada.id })) });
 
     for (const item of itensData) {
-      const produto = await tx.produto.findUnique({ where: { id: item.produtoId } });
+      // Mesmo tenantId já usado pra buscar este produto lá em cima, agora
+      // aplicado nesta query (que já ia acontecer de qualquer forma) — sem
+      // custo extra de round-trip, garante que o decremento de estoque
+      // abaixo nunca mexe no EstoqueProduto de um produto de outro tenant.
+      const produto = await tx.produto.findFirst({ where: { id: item.produtoId, tenantId } });
+      if (!produto) throw new AppError('Produto não encontrado', 404);
       const qtd = Number(item.quantidade);
       // Fase 2b: produto com controlaLote consome FIFO (lote mais antigo
       // primeiro) e bloqueia se esbarrar em lote vencido — nunca decrementa

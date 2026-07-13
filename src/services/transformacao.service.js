@@ -78,7 +78,7 @@ async function transformarProduto(tenantId, usuarioId, produtoOrigemId, produtoD
       if (origemNova < 0 && !estoqueOrigem.permiteEstoqueNegativo)
         throw new AppError(`Estoque insuficiente de ${produtoOrigem.nome} pra essa transformação, produto não permite estoque negativo`, 422);
 
-      await estoqueDepositoRepo.definirQuantidade(tx, produtoOrigemId, depositoId, origemNova);
+      await estoqueDepositoRepo.definirQuantidade(tx, tenantId, produtoOrigemId, depositoId, origemNova);
     }
 
     let destinoAnterior, destinoNova, loteDestinoId = null;
@@ -91,7 +91,7 @@ async function transformarProduto(tenantId, usuarioId, produtoOrigemId, produtoD
     } else {
       destinoAnterior = Number(estoqueDestino.quantidade);
       destinoNova = destinoAnterior + qtdDestino;
-      await estoqueDepositoRepo.definirQuantidade(tx, produtoDestinoId, depositoId, destinoNova);
+      await estoqueDepositoRepo.definirQuantidade(tx, tenantId, produtoDestinoId, depositoId, destinoNova);
     }
 
     const movimentacaoOrigem = await tx.movimentacaoEstoque.create({

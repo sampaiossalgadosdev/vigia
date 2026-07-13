@@ -88,7 +88,7 @@ test('ajusteEstoque bem-sucedido (sem lote): MovimentacaoEstoque, EstoqueProduto
   try {
     const produto = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000004', nome: 'Produto Ajuste OK', preco: 10, estoqueQtd: 0 } });
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
-    await estoqueDepositoRepo.definirQuantidade(prisma, produto.id, deposito.id, 20);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, produto.id, deposito.id, 20);
 
     const movimentacao = await ajusteEstoqueService.ajusteEstoque(tenant.id, 'usuario-teste', produto.id, deposito.id, 15, 'Contagem física mensal');
 
@@ -142,8 +142,8 @@ test('inventário geral: iniciar cria InventarioItem pra todos os produtos do de
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const p1 = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000006', nome: 'Produto A', preco: 10, estoqueQtd: 0 } });
     const p2 = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000007', nome: 'Produto B', preco: 10, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, p1.id, deposito.id, 30);
-    await estoqueDepositoRepo.definirQuantidade(prisma, p2.id, deposito.id, 12);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, p1.id, deposito.id, 30);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, p2.id, deposito.id, 12);
 
     const inventario = await inventarioService.iniciarInventario(tenant.id, 'usuario-teste', deposito.id, 'geral');
 
@@ -166,8 +166,8 @@ test('inventário parcial: só cria InventarioItem pra produtos da categoria fil
     const categoriaB = await prisma.categoria.create({ data: { tenantId: tenant.id, nome: 'Categoria B' } });
     const pA = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000008', nome: 'Produto Categoria A', preco: 10, estoqueQtd: 0, categoriaId: categoriaA.id } });
     const pB = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000009', nome: 'Produto Categoria B', preco: 10, estoqueQtd: 0, categoriaId: categoriaB.id } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, pA.id, deposito.id, 5);
-    await estoqueDepositoRepo.definirQuantidade(prisma, pB.id, deposito.id, 7);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, pA.id, deposito.id, 5);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, pB.id, deposito.id, 7);
 
     const inventario = await inventarioService.iniciarInventario(tenant.id, 'usuario-teste', deposito.id, 'parcial', categoriaA.id);
 
@@ -184,7 +184,7 @@ test('fechar inventário: divergência em produto controlaLote=false gera ajuste
   try {
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const produto = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000010', nome: 'Produto Divergente', preco: 10, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, produto.id, deposito.id, 50);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, produto.id, deposito.id, 50);
 
     const inventario = await inventarioService.iniciarInventario(tenant.id, 'usuario-teste', deposito.id, 'geral');
     await inventarioService.registrarContagem(tenant.id, inventario.id, produto.id, 46, 'usuario-teste');
@@ -248,8 +248,8 @@ test('fechar inventário: item não contado não é ajustado e não bloqueia o f
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const contado = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000012', nome: 'Produto Contado', preco: 10, estoqueQtd: 0 } });
     const naoContado = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9980000000013', nome: 'Produto Não Contado', preco: 10, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, contado.id, deposito.id, 10);
-    await estoqueDepositoRepo.definirQuantidade(prisma, naoContado.id, deposito.id, 25);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, contado.id, deposito.id, 10);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, naoContado.id, deposito.id, 25);
 
     const inventario = await inventarioService.iniciarInventario(tenant.id, 'usuario-teste', deposito.id, 'geral');
     await inventarioService.registrarContagem(tenant.id, inventario.id, contado.id, 9, 'usuario-teste');

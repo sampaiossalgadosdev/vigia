@@ -34,7 +34,11 @@ async function criarPerfisPadrao(tenantId) {
       tenantId, nome: 'Operador de Caixa', descricao: 'Opera pelo PDV; somente leitura na retaguarda.',
       permissoes: {
         create: MODULOS.map((modulo) => ({
-          modulo, nivel: ['usuarios', 'perfis'].includes(modulo) ? 'bloqueado' : 'somente_leitura',
+          modulo,
+          // Caixa é o próprio trabalho do operador (abrir/fechar/sangria
+          // exigem no mínimo somente_insercao) — os demais módulos continuam
+          // somente leitura na retaguarda.
+          nivel: ['usuarios', 'perfis'].includes(modulo) ? 'bloqueado' : modulo === 'caixa' ? 'acesso_completo' : 'somente_leitura',
         })),
       },
     },

@@ -46,7 +46,7 @@ test('transferência sem lote: origem decrementa, destino incrementa, agregados 
     const depositoOrigem = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const depositoDestino = await estoqueDepositoRepo.criarDeposito(tenant.id, 'Depósito Secundário');
     const produto = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000001', nome: 'Produto Transferível', preco: 10, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, produto.id, depositoOrigem.id, 20);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, produto.id, depositoOrigem.id, 20);
 
     const resultado = await transferenciaService.transferirEstoque(tenant.id, 'usuario-teste', produto.id, depositoOrigem.id, depositoDestino.id, 8, 'Rebalanceamento entre depósitos');
 
@@ -134,7 +134,7 @@ test('transferência bloqueada por permiteEstoqueNegativo na origem', async () =
     const depositoOrigem = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const depositoDestino = await estoqueDepositoRepo.criarDeposito(tenant.id, 'Depósito Secundário');
     const produto = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000004', nome: 'Produto Travado', preco: 10, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, produto.id, depositoOrigem.id, 5);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, produto.id, depositoOrigem.id, 5);
     await estoqueDepositoRepo.definirPermiteNegativo(prisma, tenant.id, produto.id, false);
 
     await assert.rejects(
@@ -158,7 +158,7 @@ test('transformação sem lote em nenhum dos dois produtos: consome origem e ger
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const origem = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000005', nome: 'Peixe Inteiro', preco: 20, estoqueQtd: 0 } });
     const destino = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000006', nome: 'Filé de Peixe', preco: 40, estoqueQtd: 0 } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, origem.id, deposito.id, 20);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, origem.id, deposito.id, 20);
 
     const resultado = await transformacaoService.transformarProduto(tenant.id, 'usuario-teste', origem.id, destino.id, deposito.id, 5, 3, 'Processamento de peixe em filé');
 
@@ -210,7 +210,7 @@ test('transformação com lote no destino: exige dataValidadeDestino, rejeita se
     const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(prisma, tenant.id);
     const origem = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000009', nome: 'Peixe Sem Lote', preco: 20, estoqueQtd: 0 } });
     const destino = await prisma.produto.create({ data: { tenantId: tenant.id, ean: '9990000000010', nome: 'Filé Com Lote Destino', preco: 40, estoqueQtd: 0, controlaLote: true } });
-    await estoqueDepositoRepo.definirQuantidade(prisma, origem.id, deposito.id, 20);
+    await estoqueDepositoRepo.definirQuantidade(prisma, tenant.id, origem.id, deposito.id, 20);
 
     await assert.rejects(
       () => transformacaoService.transformarProduto(tenant.id, 'usuario-teste', origem.id, destino.id, deposito.id, 5, 3, 'Sem informar validade do destino'),

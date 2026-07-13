@@ -93,8 +93,8 @@ async function transferirEstoque(tenantId, usuarioId, produtoId, depositoOrigemI
       destinoAnterior = Number(estoqueDestino.quantidade);
       destinoNova = destinoAnterior + qtd;
 
-      await estoqueDepositoRepo.definirQuantidade(tx, produtoId, depositoOrigemId, origemNova);
-      await estoqueDepositoRepo.definirQuantidade(tx, produtoId, depositoDestinoId, destinoNova);
+      await estoqueDepositoRepo.definirQuantidade(tx, tenantId, produtoId, depositoOrigemId, origemNova);
+      await estoqueDepositoRepo.definirQuantidade(tx, tenantId, produtoId, depositoDestinoId, destinoNova);
     }
 
     const movimentacaoSaida = await tx.movimentacaoEstoque.create({

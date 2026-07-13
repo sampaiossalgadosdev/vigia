@@ -9,7 +9,7 @@ const { validar } = require('./auth.validator');
 const criar = [
   body('nome').isString().trim().isLength({ min: 2, max: 120 }).withMessage('Nome é obrigatório (2 a 120 caracteres)'),
   body('email').isEmail().withMessage('E-mail inválido'),
-  body('senha').isString().isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres'),
+  body('senha').isString().isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres'),
   body('perfilId').isString().notEmpty().withMessage('Perfil é obrigatório'),
   validar,
 ];
@@ -17,7 +17,7 @@ const criar = [
 const atualizar = [
   body('nome').optional({ values: 'falsy' }).isString().trim().isLength({ min: 2, max: 120 }),
   body('email').optional({ values: 'falsy' }).isEmail().withMessage('E-mail inválido'),
-  body('senha').optional({ values: 'falsy' }).isString().isLength({ min: 6 }).withMessage('Senha deve ter no mínimo 6 caracteres'),
+  body('senha').optional({ values: 'falsy' }).isString().isLength({ min: 8 }).withMessage('Senha deve ter no mínimo 8 caracteres'),
   body('perfilId').optional({ values: 'falsy' }).isString().notEmpty().withMessage('Perfil inválido'),
   validar,
 ];

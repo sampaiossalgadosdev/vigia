@@ -13,6 +13,20 @@
  * ProdutoService, ImportacaoService, DepositoService.
  */
 const prisma = require('../config/database');
+const { AppError } = require('../utils/response');
+
+/**
+ * Confere que produtoId pertence mesmo ao tenantId informado antes de
+ * mexer no estoque dele — as funções abaixo recebem tenantId justamente
+ * pra isso, então o repository não deve confiar cegamente que quem chamou
+ * já validou (mesma invariante de where:{id,tenantId} usada no resto do
+ * projeto, só que aqui feita como um SELECT à parte porque EstoqueProduto
+ * não tem coluna tenantId própria — só chega lá via Produto/Deposito).
+ */
+async function verificarProdutoDoTenant(tx, tenantId, produtoId) {
+  const produto = await tx.produto.findFirst({ where: { id: produtoId, tenantId }, select: { id: true } });
+  if (!produto) throw new AppError('Produto não encontrado neste supermercado', 404);
+}
 
 /**
  * Depósito Principal do tenant — cria se ainda não existir (idempotente).
@@ -58,6 +72,7 @@ async function recalcularEstoqueAgregado(tx, produtoId) {
 
 /** Soma um delta (positivo ou negativo) ao estoque do produto no Depósito Principal do tenant, e recalcula o agregado. */
 async function ajustarEstoquePrincipal(tx, tenantId, produtoId, delta) {
+  await verificarProdutoDoTenant(tx, tenantId, produtoId);
   const deposito = await garantirDepositoPrincipal(tx, tenantId);
   const estoque = await garantirEstoqueProduto(tx, produtoId, deposito.id);
   const atualizado = await tx.estoqueProduto.update({
@@ -70,6 +85,7 @@ async function ajustarEstoquePrincipal(tx, tenantId, produtoId, delta) {
 
 /** Define (set absoluto, não delta) o estoque do produto no Depósito Principal — usado na edição manual do produto/importação. */
 async function definirEstoquePrincipal(tx, tenantId, produtoId, quantidade) {
+  await verificarProdutoDoTenant(tx, tenantId, produtoId);
   const deposito = await garantirDepositoPrincipal(tx, tenantId);
   const estoque = await garantirEstoqueProduto(tx, produtoId, deposito.id);
   const atualizado = await tx.estoqueProduto.update({ where: { id: estoque.id }, data: { quantidade } });
@@ -83,7 +99,8 @@ async function definirEstoquePrincipal(tx, tenantId, produtoId, quantidade) {
  * fixa no Depósito Principal), usada pelo ajuste manual (Fase 2c), já que
  * o ajuste pode ocorrer em qualquer depósito do tenant.
  */
-async function definirQuantidade(tx, produtoId, depositoId, quantidade) {
+async function definirQuantidade(tx, tenantId, produtoId, depositoId, quantidade) {
+  await verificarProdutoDoTenant(tx, tenantId, produtoId);
   const estoque = await garantirEstoqueProduto(tx, produtoId, depositoId);
   const atualizado = await tx.estoqueProduto.update({ where: { id: estoque.id }, data: { quantidade } });
   await recalcularEstoqueAgregado(tx, produtoId);
@@ -104,6 +121,7 @@ async function listarEstoquePorDeposito(depositoId, categoriaId) {
 
 /** Liga/desliga a permissão de estoque negativo do produto no Depósito Principal. */
 async function definirPermiteNegativo(tx, tenantId, produtoId, permite) {
+  await verificarProdutoDoTenant(tx, tenantId, produtoId);
   const deposito = await garantirDepositoPrincipal(tx, tenantId);
   const estoque = await garantirEstoqueProduto(tx, produtoId, deposito.id);
   return tx.estoqueProduto.update({ where: { id: estoque.id }, data: { permiteEstoqueNegativo: permite } });
@@ -139,5 +157,5 @@ module.exports = {
   garantirDepositoPrincipal, buscarEstoqueProduto, garantirEstoqueProduto, buscarEstoquePrincipal,
   recalcularEstoqueAgregado, ajustarEstoquePrincipal, definirEstoquePrincipal, definirPermiteNegativo,
   listarDepositos, buscarPorNome, criarDeposito, buscarPorId, atualizarNome, desativarDeposito,
-  definirQuantidade, listarEstoquePorDeposito,
+  definirQuantidade, listarEstoquePorDeposito, verificarProdutoDoTenant,
 };

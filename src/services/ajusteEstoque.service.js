@@ -71,7 +71,7 @@ async function ajusteEstoque(tenantId, usuarioId, produtoId, depositoId, novaQua
       if (novaQtd < 0 && !estoqueProduto.permiteEstoqueNegativo)
         throw new AppError(`Ajuste resultaria em quantidade negativa para ${produto.nome}, e o produto não permite estoque negativo`, 422);
 
-      await estoqueDepositoRepo.definirQuantidade(tx, produtoId, depositoId, novaQtd);
+      await estoqueDepositoRepo.definirQuantidade(tx, tenantId, produtoId, depositoId, novaQtd);
     }
 
     return tx.movimentacaoEstoque.create({

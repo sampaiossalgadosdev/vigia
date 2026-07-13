@@ -20,6 +20,10 @@ const { AppError } = require('../utils/response');
  * permite e devolve ficouNegativo=true pra quem chama decidir se registra
  * o log de auditoria de sempre.
  */
+// tenantId aqui não re-verifica produtoId contra o tenant (isso já
+// aconteceu na query que o chamador fez pra obter o produto, ver
+// venda.service.registrar) — só é usado pra achar/criar o Depósito
+// Principal certo.
 async function decrementarComRegra(tx, tenantId, produtoId, nomeProduto, quantidade) {
   const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(tx, tenantId);
   const estoqueAtual = await estoqueDepositoRepo.garantirEstoqueProduto(tx, produtoId, deposito.id);

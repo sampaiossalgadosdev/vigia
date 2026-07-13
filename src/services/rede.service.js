@@ -184,11 +184,19 @@ async function sso(usuarioTenant, tenant) {
   if (tenant.plano !== 'pro') throw new AppError('O plano deste supermercado não inclui o Painel da Rede', 403);
 
   let superusuario = await superadminRepo.buscarSuperusuarioPorEmail(usuarioTenant.email);
+  if (superusuario && !superusuario.origemSso) {
+    // Já existe uma conta de rede "de verdade" (criada pelo Superadmin) com
+    // este e-mail — não é a conta-ponte deste Dono. Atrelar o tenant a ela
+    // silenciosamente daria a este Dono acesso às lojas de outra rede só por
+    // coincidência de e-mail. Ninguém entra pra rede errada por acidente.
+    throw new AppError('Já existe uma conta de rede com este e-mail. Fale com o suporte para vincular seu acesso.', 409);
+  }
   if (!superusuario) {
     superusuario = await superadminRepo.criarSuperusuario({
       nome: usuarioTenant.nome,
       email: usuarioTenant.email,
       senha: await gerarHash(crypto.randomUUID()),
+      origemSso: true,
     });
   }
   if (!superusuario.ativo) throw new AppError('O acesso à rede está inativo. Fale com o suporte.', 403);
