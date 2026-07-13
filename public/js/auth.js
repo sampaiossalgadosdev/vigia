@@ -121,42 +121,45 @@ const Auth = (() => {
     const usuario = usuarioAtual();
     const el = document.getElementById('sidebar');
     if (!el) return;
+    // Grupos expansíveis ficam logo abaixo do Dashboard (Produtos, Estoque,
+    // Notas Fiscais), depois vêm os itens soltos. Cada filho de grupo carrega
+    // seu próprio módulo de permissão (3º elemento) — necessário porque
+    // "Notas Fiscais" mistura filhos de módulos diferentes (NF-e de Entrada é
+    // 'estoque', Exportar XMLs é 'relatorios'): um usuário só vê o filho cujo
+    // módulo ele tem liberado, exatamente como via quando eram itens soltos.
     const links = [
       ['index.html', 'Dashboard', 'dashboard'],
       {
         rotulo: 'Produtos',
-        modulo: 'produtos',
         filhos: [
-          ['produtos.html', 'Listar Produtos'],
-          ['produtos-lote.html', 'Alterar Produtos em Lote'],
-          ['categorias-produtos.html', 'Categorias de Produtos'],
+          ['produtos.html', 'Listar Produtos', 'produtos'],
+          ['produtos-lote.html', 'Alterar Produtos em Lote', 'produtos'],
+          ['categorias-produtos.html', 'Categorias de Produtos', 'produtos'],
+        ],
+      },
+      {
+        rotulo: 'Estoque',
+        filhos: [
+          ['depositos.html', 'Depósitos', 'estoque'],
+          ['depositos.html#transferencia', 'Transferência', 'estoque'],
+          ['depositos.html#transformacao', 'Transformação', 'estoque'],
+          ['estoque.html', 'Lotes e Validade', 'estoque'],
+          ['inventario.html', 'Inventário e Ajustes', 'estoque'],
+        ],
+      },
+      {
+        rotulo: 'Notas Fiscais',
+        filhos: [
+          ['nfe-entrada.html', 'NF-e de Entrada', 'estoque'],
+          ['relatorios.html#fiscal', 'Exportar XMLs', 'relatorios'],
         ],
       },
       ['fornecedores.html', 'Fornecedores', 'fornecedores'],
-      ['nfe-entrada.html', 'NF-e de Entrada', 'estoque'],
-      {
-        rotulo: 'Estoque',
-        modulo: 'estoque',
-        filhos: [
-          ['depositos.html', 'Depósitos'],
-          ['depositos.html#transferencia', 'Transferência'],
-          ['depositos.html#transformacao', 'Transformação'],
-          ['estoque.html', 'Lotes e Validade'],
-          ['inventario.html', 'Inventário e Ajustes'],
-        ],
-      },
       ['vendas.html', 'Vendas', 'vendas'],
       ['promocoes.html', 'Promoções', 'promocoes'],
       ['acougue-tv.html', 'Açougue TV', 'produtos'],
       ['caixa.html', 'Caixa', 'caixa'],
       ['financeiro.html', 'Financeiro', 'financeiro'],
-      {
-        rotulo: 'Notas Fiscais',
-        modulo: 'relatorios',
-        filhos: [
-          ['relatorios.html#fiscal', 'Exportar XMLs'],
-        ],
-      },
       ['relatorios.html', 'Relatórios', 'relatorios'],
       ['ia.html', 'IA', 'ia'],
       ['usuarios.html', 'Usuários', 'usuarios'],
@@ -172,16 +175,19 @@ const Auth = (() => {
       '<div class="logo">VIGIA<small>Varejo Inteligente</small></div>' +
       '<nav>' +
       links
-        .filter((item) => temAcessoAoModulo(usuario, Array.isArray(item) ? item[2] : item.modulo))
         .map((item) => {
-          if (Array.isArray(item)) return renderLink(item[0], item[1], false);
-          const aberto = item.filhos.some(([href]) => href === paginaAtiva);
+          if (Array.isArray(item)) {
+            return temAcessoAoModulo(usuario, item[2]) ? renderLink(item[0], item[1], false) : '';
+          }
+          const filhosVisiveis = item.filhos.filter(([, , modulo]) => temAcessoAoModulo(usuario, modulo));
+          if (!filhosVisiveis.length) return '';
+          const aberto = filhosVisiveis.some(([href]) => href === paginaAtiva);
           return (
             '<div class="grupo-menu' + (aberto ? ' aberto' : '') + '">' +
             '<button type="button" class="grupo-toggle' + (aberto ? ' ativo' : '') + '">' +
             item.rotulo + ' <span class="grupo-seta">▸</span></button>' +
             '<div class="submenu">' +
-            item.filhos.map(([href, rotulo]) => renderLink(href, rotulo, true)).join('') +
+            filhosVisiveis.map(([href, rotulo]) => renderLink(href, rotulo, true)).join('') +
             '</div></div>'
           );
         })
