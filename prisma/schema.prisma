@@ -660,7 +660,7 @@ model Venda {
   canceladoPor       String?
   motivoCancelamento String?
   // Emissão fiscal da NFC-e (Fase 1c) — preenchidos por nfceEmissao.service.
-  emitidoEm              DateTime? // momento da autorização (não confundir com criadoEm, que é o momento da venda)
+  emitidoEm              DateTime? // momento da autorização (não confundir com dataVenda, o momento da venda, nem com criadoEm, o momento do INSERT)
   emitidoViaContingencia Boolean   @default(false) // true quando autorizado via SVC (SEFAZ do estado estava fora do ar)
   protocoloAutorizacao   String?
   // XML gerado na tentativa de emissão (Fase 1c complemento) — salvo mesmo
@@ -684,6 +684,15 @@ model Venda {
   ultimaTentativaEm   DateTime?
   proximaTentativaEm  DateTime?
   criadoEm           DateTime  @default(now())
+  // Momento real em que a venda aconteceu (Fase 3b/backend) — distinto de
+  // criadoEm (momento do INSERT no banco). Para venda online (hoje, 100% do
+  // volume) os dois coincidem: venda.service.registrar usa now() quando
+  // dataVenda não é informado. Só o fluxo de sync em lote (POST
+  // /api/sync/vendas, venda.service.sync) pode informar um valor diferente
+  // — é o único caminho autorizado a isso; POST /api/vendas normal nunca lê
+  // esse campo do body (nem para ignorar com aviso — simplesmente não olha
+  // pra lá), então não há como retroagir uma venda online por payload.
+  dataVenda          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   tenant        Tenant           @relation(fields: [tenantId], references: [id])
@@ -694,6 +703,7 @@ model Venda {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, criadoEm])
+  @@index([tenantId, dataVenda])
   @@index([operadorId])
 }
 
