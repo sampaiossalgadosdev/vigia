@@ -67,6 +67,7 @@ app.use('/api/contas-receber', require('./routes/contaReceber.routes'));
 app.use('/api/relatorios', require('./routes/relatorio.routes'));
 app.use('/api/fiscal', require('./routes/fiscal.routes'));
 app.use('/api/sync', require('./routes/sync.routes'));
+app.use('/api/pdv', require('./routes/pdv.routes'));
 app.use('/api/ia', require('./routes/ia.routes'));
 
 // Healthcheck
