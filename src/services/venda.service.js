@@ -19,6 +19,24 @@ function normalizarPreco(preco, desconto, tipo) {
   return Number(preco);
 }
 
+const TOLERANCIA_RELOGIO_MS = 5 * 60 * 1000;
+
+/**
+ * Valida o dataVenda opcional vindo do fluxo de sync (único caminho
+ * autorizado a informar esse campo — ver registrar()). Sem limite de
+ * quão antigo pode ser (uma queda de internet longa é cenário legítimo;
+ * a fila de emissão já trata urgência crescente pra isso). Tolerância de
+ * alguns minutos no futuro cobre diferença de relógio entre PDV e servidor.
+ */
+function validarDataVenda(dataVenda) {
+  if (dataVenda === undefined || dataVenda === null) return undefined;
+  const data = new Date(dataVenda);
+  if (Number.isNaN(data.getTime())) throw new AppError('dataVenda inválida', 422);
+  if (data.getTime() > Date.now() + TOLERANCIA_RELOGIO_MS)
+    throw new AppError('dataVenda não pode estar no futuro', 422);
+  return data;
+}
+
 async function listar(tenantId, query, pag) {
   const { items, total } = await vendaRepo.listar(tenantId, query, { skip: pag.skip, take: pag.limit });
   return paginado(items, total, pag.page, pag.limit);
@@ -30,7 +48,16 @@ async function detalhar(tenantId, id) {
   return venda;
 }
 
-async function registrar(tenantId, body, usuario, ip) {
+/**
+ * `opcoes.dataVenda`: momento real da venda, só aceito no fluxo de sync em
+ * lote (ver sync() abaixo, único chamador que preenche isso). O caminho
+ * online normal (venda.controller.registrar → aqui) nunca passa essa
+ * opção — e este código NUNCA lê `body.dataVenda`, então mesmo que um
+ * client malicioso mande esse campo no body de POST /api/vendas, ele é
+ * ignorado silenciosamente (nem chega a ser olhado). Isso evita que uma
+ * venda online seja retroagida por manipulação de payload.
+ */
+async function registrar(tenantId, body, usuario, ip, opcoes = {}) {
   const caixaAberto = await caixaRepo.buscarAberto(tenantId);
   if (!caixaAberto) throw new AppError('Abra um caixa antes de registrar vendas', 422);
 
@@ -40,6 +67,8 @@ async function registrar(tenantId, body, usuario, ip) {
   // atrasa a resposta ao PDV. Quem de fato emite é o worker separado
   // (filaEmissaoNfce.service.processarFilaEmissao), rodando à parte.
   const { completa: fiscalCompleta } = await configuracaoFiscalCompleta(tenantId);
+
+  const dataVenda = validarDataVenda(opcoes.dataVenda);
 
   const payload = {
     venda: {
@@ -52,6 +81,9 @@ async function registrar(tenantId, body, usuario, ip) {
       cpfConsumidor: body.cpfConsumidor || null,
       chaveNfce: body.localId || body.chaveNfce || null,
       statusEmissaoFiscal: fiscalCompleta ? 'pendente' : 'nao_aplicavel',
+      // Ausente quando não informado: o @default(now()) do schema assume,
+      // idêntico ao comportamento de antes desta mudança.
+      ...(dataVenda ? { dataVenda } : {}),
     },
     itens: [],
     pagamentos: [],
@@ -209,7 +241,9 @@ async function sync(tenantId, vendas) {
     const existente = await vendaRepo.buscarPorIdLocal(tenantId, venda.localId);
     if (existente) { resultados.push({ localId: venda.localId, status: 'ok', mensagem: 'Ignorada por duplicidade' }); continue; }
     try {
-      await registrar(tenantId, venda, { id: venda.operadorId || 'pdv' }, 'sync');
+      // Único caminho autorizado a informar dataVenda (venda sincronizada
+      // depois do momento real em que aconteceu) — ver registrar().
+      await registrar(tenantId, venda, { id: venda.operadorId || 'pdv' }, 'sync', { dataVenda: venda.dataVenda });
       resultados.push({ localId: venda.localId, status: 'ok', mensagem: 'Sincronizada' });
     } catch (error) {
       resultados.push({ localId: venda.localId, status: 'erro', mensagem: error.message });

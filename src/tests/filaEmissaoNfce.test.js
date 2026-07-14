@@ -51,12 +51,18 @@ async function criarProduto(tenantId, sufixo) {
   });
 }
 
-/** Venda criada direto no banco (não via vendaService.registrar) — pra testes que só precisam de uma Venda 'pendente' já pronta, com criadoEm controlado. */
-async function criarVendaPendenteDireto(tenantId, produtoId, { criadoEm } = {}) {
+/**
+ * Venda criada direto no banco (não via vendaService.registrar) — pra
+ * testes que só precisam de uma Venda 'pendente' já pronta, com criadoEm
+ * e/ou dataVenda controlados. dataVenda default = criadoEm (mesmo valor)
+ * quando não informado separadamente, pra não quebrar os testes que só
+ * controlam a ordem via criadoEm e não se importam com a distinção.
+ */
+async function criarVendaPendenteDireto(tenantId, produtoId, { criadoEm, dataVenda } = {}) {
   return prisma.venda.create({
     data: {
       tenantId, subtotal: 20, total: 20, chaveNfce: 'localid-' + Date.now() + Math.random(),
-      statusEmissaoFiscal: 'pendente', criadoEm,
+      statusEmissaoFiscal: 'pendente', criadoEm, dataVenda: dataVenda ?? criadoEm,
       itens: { create: [{ produtoId, quantidade: 1, precoUnitario: 20, custoUnitario: 10, subtotal: 20, total: 20 }] },
       pagamentos: { create: [{ forma: 'pix', valor: 20 }] },
     },
@@ -218,11 +224,48 @@ test('processarFilaEmissao: processa múltiplas vendas na mesma chamada — uma 
       prisma.venda.findUnique({ where: { id: vendaB.id } }),
       prisma.venda.findUnique({ where: { id: vendaC.id } }),
     ]);
-    assert.equal(depoisA.statusEmissaoFiscal, 'emitido', 'primeira venda (ordem por criadoEm) deve ter sido processada com sucesso');
+    assert.equal(depoisA.statusEmissaoFiscal, 'emitido', 'primeira venda (ordem por dataVenda, que aqui coincide com criadoEm) deve ter sido processada com sucesso');
     assert.equal(depoisB.statusEmissaoFiscal, 'falha_temporaria', 'segunda venda é a que falha, propositalmente');
     assert.equal(depoisC.statusEmissaoFiscal, 'emitido', 'terceira venda deve ser processada normalmente, sem ser afetada pela falha da segunda');
   } finally {
     await limpar(tenant.id, [vendaA.id, vendaB.id, vendaC.id], [produtoA.id, produtoB.id, produtoC.id]);
+  }
+});
+
+test('buscarPendentes (via processarFilaEmissao): ordena por dataVenda, não criadoEm — venda com dataVenda mais antigo é processada primeiro mesmo com criadoEm mais recente', async () => {
+  const tenant = await criarTenantCompleto('09');
+  const produtoAntiga = await criarProduto(tenant.id, '09a');
+  const produtoRecente = await criarProduto(tenant.id, '09b');
+
+  const antigo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  const recente = new Date();
+  // vendaAntiga: dataVenda de 5 dias atrás mas criadoEm de agora (simula
+  // sync tardio) — deve furar a fila e ser processada 1º.
+  const vendaAntiga = await criarVendaPendenteDireto(tenant.id, produtoAntiga.id, { criadoEm: recente, dataVenda: antigo });
+  // vendaRecente: dataVenda de agora mas criadoEm de 5 dias atrás (cenário
+  // artificial só para provar que a ordenação ignora criadoEm) — deve ser
+  // processada 2º.
+  const vendaRecente = await criarVendaPendenteDireto(tenant.id, produtoRecente.id, { criadoEm: antigo, dataVenda: recente });
+
+  try {
+    let chamada = 0;
+    const falharNaPrimeira = async () => {
+      chamada += 1;
+      if (chamada === 1) throw new Error('ECONNREFUSED (simulado) — falha proposital na 1ª chamada');
+      return { cStat: '100', xMotivo: 'Autorizado o uso da NF-e (MOCK)', protocolo: 'MOCK' + chamada };
+    };
+
+    const resumo = await filaService.processarFilaEmissao({ chamarWebservice: falharNaPrimeira });
+    assert.equal(resumo.total, 2);
+
+    const [depoisAntiga, depoisRecente] = await Promise.all([
+      prisma.venda.findUnique({ where: { id: vendaAntiga.id } }),
+      prisma.venda.findUnique({ where: { id: vendaRecente.id } }),
+    ]);
+    assert.equal(depoisAntiga.statusEmissaoFiscal, 'falha_temporaria', 'venda com dataVenda mais antigo deve ser a 1ª processada (a que falha propositalmente)');
+    assert.equal(depoisRecente.statusEmissaoFiscal, 'emitido', 'venda com dataVenda mais recente deve ser processada depois, com sucesso');
+  } finally {
+    await limpar(tenant.id, [vendaAntiga.id, vendaRecente.id], [produtoAntiga.id, produtoRecente.id]);
   }
 });
 
@@ -292,6 +335,30 @@ test('statusFila: contagem correta, urgência de cada pendência, e contador de 
     assert.ok(status.totalFalhaTemporaria >= 1);
   } finally {
     await limpar(tenant.id, [vendaTranquila.id, vendaUrgente.id], [produtoTranquilo.id, produtoUrgente.id]);
+  }
+});
+
+test('statusFila: urgência usa dataVenda (momento real), não criadoEm (momento do INSERT) — venda sincronizada tarde', async () => {
+  const tenant = await criarTenantCompleto('08');
+  const produto = await criarProduto(tenant.id, '08a');
+
+  // Simula uma venda offline sincronizada bem depois: criadoEm é agora
+  // (acabou de ser inserida no banco), mas dataVenda é de 2 dias atrás
+  // (quando o operador realmente vendeu, sem conexão). Se o cálculo ainda
+  // lesse criadoEm, isso apareceria como "tranquilo" — o bug original.
+  const vendaSincronizadaTarde = await criarVendaPendenteDireto(tenant.id, produto.id, {
+    criadoEm: new Date(),
+    dataVenda: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+  });
+
+  try {
+    const status = await filaService.statusFila();
+    const item = status.itens.find((i) => i.id === vendaSincronizadaTarde.id);
+    assert.ok(item, 'venda sincronizada tarde deve aparecer no status');
+    assert.notEqual(item.urgencia, 'tranquilo', 'com 2 dias reais decorridos desde a venda, não pode ser "tranquilo" mesmo com criadoEm=agora');
+    assert.equal(item.urgencia, 'urgente', 'prazo de contingência (1 dia útil) já vencido há muito — deve ser urgente');
+  } finally {
+    await limpar(tenant.id, [vendaSincronizadaTarde.id], [produto.id]);
   }
 });
 

@@ -11,7 +11,7 @@ async function vendasDia(tenantId, query) {
   const vendas = await relatorioRepo.vendasDia(tenantId, inicio, fim);
   const porHora = Array.from({ length: 24 }, (_, hora) => ({ hora, total: 0, qtd: 0 }));
   vendas.forEach((venda) => {
-    const h = new Date(venda.criadoEm).getHours();
+    const h = new Date(venda.dataVenda).getHours();
     porHora[h].total += Number(venda.total);
     porHora[h].qtd += 1;
   });

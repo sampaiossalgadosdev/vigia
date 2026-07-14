@@ -5,16 +5,16 @@ async function listar(tenantId, filtros, { skip, take }) {
   if (filtros.status) where.status = filtros.status;
   if (filtros.operadorId) where.operadorId = filtros.operadorId;
   if (filtros.inicio || filtros.fim) {
-    where.criadoEm = {};
-    if (filtros.inicio) where.criadoEm.gte = new Date(filtros.inicio);
-    if (filtros.fim) where.criadoEm.lte = new Date(filtros.fim);
+    where.dataVenda = {};
+    if (filtros.inicio) where.dataVenda.gte = new Date(filtros.inicio);
+    if (filtros.fim) where.dataVenda.lte = new Date(filtros.fim);
   }
   const [items, total] = await Promise.all([
     prisma.venda.findMany({
       where,
       skip,
       take,
-      orderBy: { criadoEm: 'desc' },
+      orderBy: { dataVenda: 'desc' },
       include: { pagamentos: true, itens: { include: { produto: { select: { id: true, nome: true, ean: true } } } } },
     }),
     prisma.venda.count({ where }),
@@ -71,8 +71,8 @@ async function buscarPorIdLocal(tenantId, idLocal) {
 }
 
 async function listarResumoDiario(tenantId, inicio, fim) {
-  const where = { tenantId, criadoEm: { gte: inicio, lte: fim }, status: 'concluida' };
-  return prisma.venda.findMany({ where, orderBy: { criadoEm: 'asc' }, include: { pagamentos: true } });
+  const where = { tenantId, dataVenda: { gte: inicio, lte: fim }, status: 'concluida' };
+  return prisma.venda.findMany({ where, orderBy: { dataVenda: 'asc' }, include: { pagamentos: true } });
 }
 
 module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao, buscarXml };

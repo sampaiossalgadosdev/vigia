@@ -2,15 +2,15 @@ const prisma = require('../config/database');
 
 async function vendasDia(tenantId, inicio, fim) {
   return prisma.venda.findMany({
-    where: { tenantId, criadoEm: { gte: inicio, lte: fim }, status: 'concluida' },
+    where: { tenantId, dataVenda: { gte: inicio, lte: fim }, status: 'concluida' },
     include: { pagamentos: true },
-    orderBy: { criadoEm: 'asc' },
+    orderBy: { dataVenda: 'asc' },
   });
 }
 
 async function produtosMaisVendidos(tenantId, inicio, fim) {
   const vendas = await prisma.venda.findMany({
-    where: { tenantId, criadoEm: { gte: inicio, lte: fim }, status: 'concluida' },
+    where: { tenantId, dataVenda: { gte: inicio, lte: fim }, status: 'concluida' },
     include: { itens: true },
   });
   const agregados = new Map();
@@ -29,7 +29,7 @@ async function produtosMaisVendidos(tenantId, inicio, fim) {
 
 async function margem(tenantId, inicio, fim) {
   const vendas = await prisma.venda.findMany({
-    where: { tenantId, criadoEm: { gte: inicio, lte: fim }, status: 'concluida' },
+    where: { tenantId, dataVenda: { gte: inicio, lte: fim }, status: 'concluida' },
     include: { itens: true },
   });
   const agregados = new Map();

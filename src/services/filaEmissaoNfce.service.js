@@ -29,7 +29,14 @@ const UMA_HORA_MS = 60 * 60 * 1000;
 const INTERVALO_RETRY_MINUTOS = Number(process.env.NFCE_RETRY_MINUTOS || 5);
 const INTERVALO_PROCESSAMENTO_MINUTOS = Number(process.env.NFCE_PROCESSAMENTO_MINUTOS || 2);
 
-/** Vendas que o worker precisa tentar emitir agora: pendentes novas, ou em retry cujo prazo já chegou. */
+/**
+ * Vendas que o worker precisa tentar emitir agora: pendentes novas, ou em
+ * retry cujo prazo já chegou. Ordenado por dataVenda (momento real da
+ * venda), não criadoEm (momento do INSERT) — uma venda offline sincronizada
+ * tarde deve furar a fila e ser processada antes de vendas mais recentes,
+ * porque o prazo legal de contingência conta a partir da venda real, não
+ * de quando ela chegou no banco.
+ */
 async function buscarPendentes() {
   const agora = new Date();
   return prisma.venda.findMany({
@@ -39,7 +46,7 @@ async function buscarPendentes() {
         { statusEmissaoFiscal: 'falha_temporaria', proximaTentativaEm: { lte: agora } },
       ],
     },
-    orderBy: { criadoEm: 'asc' },
+    orderBy: { dataVenda: 'asc' },
   });
 }
 
@@ -104,8 +111,8 @@ function ehFimDeSemana(data) {
  * considera feriados nacionais/estaduais/municipais nesta versão, só
  * sábado/domingo.
  */
-function calcularPrazoLimiteContingencia(dataEmissaoVenda) {
-  const prazo = new Date(dataEmissaoVenda);
+function calcularPrazoLimiteContingencia(dataVenda) {
+  const prazo = new Date(dataVenda);
   prazo.setDate(prazo.getDate() + 1);
   while (ehFimDeSemana(prazo)) prazo.setDate(prazo.getDate() + 1);
   prazo.setHours(23, 59, 59, 999);
@@ -115,11 +122,14 @@ function calcularPrazoLimiteContingencia(dataEmissaoVenda) {
 /**
  * Horas restantes até o prazo-limite de contingência e a categoria de
  * urgência — só visibilidade, nenhuma ação automática de bloqueio/cancelamento.
+ * Recebe Venda.dataVenda (momento real da venda), não criadoEm (momento do
+ * INSERT) — numa venda sincronizada depois via fluxo offline, os dois
+ * divergem, e é o prazo real desde a venda que importa pra contingência.
  * `agora` é injetável (default = momento real) só pra permitir teste
  * determinístico da categorização por hora — em uso normal nunca é passado.
  */
-function calcularUrgenciaEmissao(dataEmissaoVenda, agora = new Date()) {
-  const prazoLimite = calcularPrazoLimiteContingencia(dataEmissaoVenda);
+function calcularUrgenciaEmissao(dataVenda, agora = new Date()) {
+  const prazoLimite = calcularPrazoLimiteContingencia(dataVenda);
   const horasRestantes = (prazoLimite.getTime() - agora.getTime()) / UMA_HORA_MS;
 
   let urgencia;
@@ -139,12 +149,12 @@ function calcularUrgenciaEmissao(dataEmissaoVenda, agora = new Date()) {
 async function statusFila() {
   const vendas = await prisma.venda.findMany({
     where: { statusEmissaoFiscal: { in: ['pendente', 'falha_temporaria'] } },
-    select: { id: true, tenantId: true, criadoEm: true, statusEmissaoFiscal: true, tentativasEmissao: true, proximaTentativaEm: true },
-    orderBy: { criadoEm: 'asc' },
+    select: { id: true, tenantId: true, criadoEm: true, dataVenda: true, statusEmissaoFiscal: true, tentativasEmissao: true, proximaTentativaEm: true },
+    orderBy: { dataVenda: 'asc' },
   });
 
   const itens = vendas.map((venda) => {
-    const { prazoLimite, horasRestantes, urgencia } = calcularUrgenciaEmissao(venda.criadoEm);
+    const { prazoLimite, horasRestantes, urgencia } = calcularUrgenciaEmissao(venda.dataVenda);
     return { ...venda, prazoLimite, horasRestantes, urgencia };
   });
 
