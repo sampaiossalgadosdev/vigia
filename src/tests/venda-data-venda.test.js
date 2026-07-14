@@ -124,7 +124,7 @@ test('sync(): dataVenda explícito no body é usado; criadoEm continua sendo o m
     ]);
 
     assert.equal(resultados[0].status, 'ok');
-    const venda = await prisma.venda.findFirst({ where: { tenantId: tenant.id, chaveNfce: localId } });
+    const venda = await prisma.venda.findFirst({ where: { tenantId: tenant.id, localId } });
     assert.ok(venda, 'venda deve ter sido persistida');
     assert.equal(venda.dataVenda.toISOString(), dataVendaAntiga.toISOString(), 'dataVenda deve ser exatamente o valor enviado no sync');
     assert.ok(venda.criadoEm.getTime() >= antesInsert - 1000, 'criadoEm deve ser o momento real do INSERT (agora), não o dataVenda antigo');
@@ -148,7 +148,7 @@ test('sync(): dataVenda no futuro (além da tolerância de relógio) é rejeitad
 
     assert.equal(resultados[0].status, 'erro');
     assert.match(resultados[0].mensagem, /dataVenda não pode estar no futuro/);
-    const venda = await prisma.venda.findFirst({ where: { tenantId: tenant.id, chaveNfce: localId } });
+    const venda = await prisma.venda.findFirst({ where: { tenantId: tenant.id, localId } });
     assert.equal(venda, null, 'nenhuma venda deve ser persistida quando dataVenda é rejeitada');
   } finally {
     await limparTenant(tenant.id);

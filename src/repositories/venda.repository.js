@@ -67,7 +67,7 @@ async function buscarXml(tenantId, id) {
 }
 
 async function buscarPorIdLocal(tenantId, idLocal) {
-  return prisma.venda.findFirst({ where: { tenantId, chaveNfce: idLocal } });
+  return prisma.venda.findFirst({ where: { tenantId, localId: idLocal } });
 }
 
 async function listarResumoDiario(tenantId, inicio, fim) {

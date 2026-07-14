@@ -654,7 +654,17 @@ model Venda {
   desconto           Decimal   @default(0) @db.Decimal(10, 2)
   troco              Decimal   @default(0) @db.Decimal(10, 2)
   cpfConsumidor      String?
-  chaveNfce          String? // chave de acesso REAL de 44 dígitos após autorização da SEFAZ (Fase 1c) — antes disso, só o localId do PDV
+  chaveNfce          String? // chave de acesso REAL de 44 dígitos após autorização da SEFAZ (Fase 1c) — nunca recebe localId (ver campo localId abaixo)
+  // Identificador gerado no client (Fase 3b — fila offline do PDV), imutável,
+  // nunca sobrescrito por nada (diferente de chaveNfce, que é substituído
+  // pela chave fiscal real após a emissão). @unique é constraint de banco,
+  // não só índice — dá proteção real de idempotência no sync em lote mesmo
+  // sob sincronizações concorrentes, sem depender só de SELECT-antes-INSERT
+  // em nível de aplicação. Antes desta correção, localId era gravado dentro
+  // de chaveNfce, o que quebrava o dedup assim que a NFC-e era emitida de
+  // verdade (chaveNfce virava a chave real, sync.buscarPorIdLocal parava de
+  // achar a venda, e um reenvio duplicava a venda inteira).
+  localId            String?   @unique
   status             String    @default("concluida") // concluida | cancelada | pendente_sync
   canceladoEm        DateTime?
   canceladoPor       String?

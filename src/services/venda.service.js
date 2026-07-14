@@ -79,7 +79,11 @@ async function registrar(tenantId, body, usuario, ip, opcoes = {}) {
       desconto: Number(body.desconto || 0),
       troco: body.troco || 0,
       cpfConsumidor: body.cpfConsumidor || null,
-      chaveNfce: body.localId || body.chaveNfce || null,
+      // localId (Fase 3b) nunca vai para chaveNfce — são campos distintos
+      // desde a correção do bug de dedup (ver comentário em schema.prisma).
+      // body.chaveNfce só existiria num caso legado/raro; hoje nada envia isso.
+      localId: body.localId || null,
+      chaveNfce: body.chaveNfce || null,
       statusEmissaoFiscal: fiscalCompleta ? 'pendente' : 'nao_aplicavel',
       // Ausente quando não informado: o @default(now()) do schema assume,
       // idêntico ao comportamento de antes desta mudança.
