@@ -168,6 +168,12 @@ function gerarXmlNfce(venda, { tpEmis = '1' } = {}) {
   // (mesmos dígitos, mas por coincidência, não por garantia).
   const cNF = Math.floor(Math.random() * 99999999);
   const numero = venda.numeroNfce || Math.floor(Math.random() * 999999999) + 1; // TNF exige >=1, sem zero à esquerda
+  // TODO(dataVenda): usa venda.criadoEm (momento do INSERT), não
+  // venda.dataVenda (momento real da venda) — numa venda offline
+  // sincronizada tarde, a chave de acesso nasce com a data errada. A
+  // urgência da fila de emissão (filaEmissaoNfce.service) já foi corrigida
+  // pra usar dataVenda; isto aqui ficou de fora por decisão explícita (fora
+  // de escopo da tarefa que introduziu dataVenda) e continua pendente.
   const chaveAcesso = montarChaveAcessoPlaceholder(tenant, {
     numero, cNF, dataEmissao: venda.criadoEm, tpEmis,
   });
@@ -214,6 +220,9 @@ function gerarXmlNfce(venda, { tpEmis = '1' } = {}) {
           mod: MODELO_NFCE,
           serie: SERIE_PADRAO,
           nNF: String(numero),
+          // TODO(dataVenda): mesma pendência do dataEmissao acima — dhEmi
+          // deveria refletir venda.dataVenda (momento real da venda) numa
+          // sincronização tardia, não venda.criadoEm (momento do INSERT).
           dhEmi: formatarDataHoraComOffset(venda.criadoEm),
           tpNF: '1', // 1 = Saída
           idDest: '1', // 1 = Operação interna
