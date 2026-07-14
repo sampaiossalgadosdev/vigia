@@ -36,6 +36,16 @@ const INTERVALO_PROCESSAMENTO_MINUTOS = Number(process.env.NFCE_PROCESSAMENTO_MI
  * tarde deve furar a fila e ser processada antes de vendas mais recentes,
  * porque o prazo legal de contingência conta a partir da venda real, não
  * de quando ela chegou no banco.
+ *
+ * PROPOSITALMENTE SEM FILTRO DE tenantId — isto é global por design, não
+ * um esquecimento. Únicos consumidores hoje: o cron de server.js (worker
+ * de background, processa o sistema inteiro) e a rota de superadmin
+ * GET/POST /api/superadmin/fila-emissao/* (protegida por authAdmin, uma
+ * visão administrativa de TODOS os tenants, não de um tenant específico —
+ * ver filaEmissao.controller.js). Se algum dia existir uma rota exposta a
+ * um tenant específico (Dono, operador do PDV) que precise da fila/status
+ * fiscal, ela DEVE usar uma função nova, filtrada por tenantId — nunca
+ * reaproveitar esta função achando que já é segura.
  */
 async function buscarPendentes() {
   const agora = new Date();
@@ -145,6 +155,11 @@ function calcularUrgenciaEmissao(dataVenda, agora = new Date()) {
  * pendentes/em falha temporária, cada uma com sua urgência calculada, e
  * um contador de "urgente" no topo (dado pronto pra um alerta visual
  * futuro — o alerta em si não é escopo desta função).
+ *
+ * PROPOSITALMENTE SEM FILTRO DE tenantId, mesma razão de buscarPendentes()
+ * acima: único consumidor hoje é GET /api/superadmin/fila-emissao/status
+ * (authAdmin, visão global de superadmin). Não reaproveitar para uma rota
+ * de tenant sem adicionar o filtro.
  */
 async function statusFila() {
   const vendas = await prisma.venda.findMany({
