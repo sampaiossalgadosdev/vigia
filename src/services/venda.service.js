@@ -21,6 +21,35 @@ function normalizarPreco(preco, desconto, tipo) {
 
 const TOLERANCIA_RELOGIO_MS = 5 * 60 * 1000;
 
+// Concorrência real no consumo de lote (múltiplos caixas vendendo do mesmo
+// lote — escala confirmada: até 6 caixas por loja). TETO DE SEGURANÇA, não
+// expectativa de espera normal: a seção travada (FOR UPDATE em
+// lote.repository.listarAtivosParaConsumo) é só leitura+cálculo+escrita
+// local, sem chamada de rede (confirmado por leitura de código) — em
+// operação normal a trava deve resolver bem mais rápido que isto.
+const LOCK_TIMEOUT_SQL = "SET LOCAL lock_timeout = '3s'";
+// 1 tentativa original + 2 retries. Intervalo com jitter pra não
+// sincronizar retries entre transações que colidiram ao mesmo tempo.
+const MAX_TENTATIVAS_TRANSACAO = 3;
+const RETRY_MIN_MS = 150;
+const RETRY_MAX_MS = 300;
+// Acima do lock_timeout (3s) com margem: uma venda pode ter mais de um
+// produto com controlaLote, cada um fazendo sua própria espera de trava —
+// sem essa margem, o timeout PADRÃO do Prisma (5s) poderia abortar a
+// transação inteira antes do lock_timeout do Postgres, mascarando o erro
+// específico de trava com o genérico "Transaction already closed".
+const TRANSACTION_TIMEOUT_MS = 10000;
+
+/** Erro de lock_timeout do Postgres (55P03) via FOR UPDATE — distinto de estoque insuficiente (AppError de negócio, sem .code). Confirmado empiricamente (não presumido) contra o banco real antes desta implementação. */
+function ehErroDeLockTimeout(erro) {
+  return Boolean(erro && erro.code === 'P2010' && erro.meta && erro.meta.code === '55P03');
+}
+
+function aguardarComJitter() {
+  const ms = RETRY_MIN_MS + Math.random() * (RETRY_MAX_MS - RETRY_MIN_MS);
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Valida o dataVenda opcional vindo do fluxo de sync (único caminho
  * autorizado a informar esse campo — ver registrar()). Sem limite de
@@ -137,65 +166,92 @@ async function registrar(tenantId, body, usuario, ip, opcoes = {}) {
   payload.pagamentos = (body.pagamentos || []).map((p) => ({ forma: p.forma, valor: Number(p.valor) }));
   payload.venda.troco = Math.max(0, totalPagamentos - payload.venda.total);
 
-  const venda = await prisma.$transaction(async (tx) => {
-    const criada = await tx.venda.create({ data: payload.venda });
-    const itensData = payload.itens.map((item) => ({ ...item, vendaId: criada.id }));
-    await tx.vendaItem.createMany({ data: itensData });
-    await tx.vendaPagamento.createMany({ data: payload.pagamentos.map((p) => ({ ...p, vendaId: criada.id })) });
-
-    for (const item of itensData) {
-      // Mesmo tenantId já usado pra buscar este produto lá em cima, agora
-      // aplicado nesta query (que já ia acontecer de qualquer forma) — sem
-      // custo extra de round-trip, garante que o decremento de estoque
-      // abaixo nunca mexe no EstoqueProduto de um produto de outro tenant.
-      const produto = await tx.produto.findFirst({ where: { id: item.produtoId, tenantId } });
-      if (!produto) throw new AppError('Produto não encontrado', 404);
-      const qtd = Number(item.quantidade);
-      // Fase 2b: produto com controlaLote consome FIFO (lote mais antigo
-      // primeiro) e bloqueia se esbarrar em lote vencido — nunca decrementa
-      // direto o agregado. Produto sem controlaLote: comportamento EXATO da
-      // Fase 2a (decremento direto + permiteEstoqueNegativo).
-      let ficouNegativo = false;
-      let estoqueAnterior = null;
-      if (produto.controlaLote) {
-        // Rastreia de qual(is) lote(s) este item consumiu, pra devolver
-        // certo se a venda for cancelada depois (ver cancelar() abaixo).
-        const consumos = await loteService.consumirVendaFifo(tx, tenantId, produto, qtd);
-        for (const consumo of consumos)
-          await loteRepo.criarConsumo(tx, item.id, consumo.loteId, consumo.quantidade);
-      } else {
-        const resultado = await estoqueDepositoService.decrementarComRegra(tx, tenantId, produto.id, produto.nome, qtd);
-        ficouNegativo = resultado.ficouNegativo;
-        estoqueAnterior = resultado.estoqueAnterior;
+  let venda;
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS_TRANSACAO; tentativa++) {
+    try {
+      venda = await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(LOCK_TIMEOUT_SQL);
+        return registrarDentroDaTransacao(tx, tenantId, usuario, ip, payload, caixaAberto);
+      }, { timeout: TRANSACTION_TIMEOUT_MS });
+      break;
+    } catch (erro) {
+      if (ehErroDeLockTimeout(erro) && tentativa < MAX_TENTATIVAS_TRANSACAO) {
+        await aguardarComJitter();
+        continue;
       }
-      await tx.movimentacaoEstoque.create({
-        data: {
-          tenantId,
-          produtoId: produto.id,
-          tipo: 'saida',
-          quantidade: qtd,
-          custoUnit: Number(item.custoUnitario || 0),
-          origem: 'venda',
-          origemId: criada.id,
-          usuarioId: usuario.id,
-        },
-      });
-      if (ficouNegativo) {
-        await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: estoqueAnterior, solicitado: qtd }, ip });
-      }
+      if (ehErroDeLockTimeout(erro))
+        throw new AppError('Sistema ocupado, tente novamente', 503);
+      throw erro;
     }
-
-    await caixaRepo.atualizar(tx, tenantId, caixaAberto.id, {
-      totalVendas: Number(caixaAberto.totalVendas) + Number(criada.total),
-      totalDinheiro: Number(caixaAberto.totalDinheiro) + Number(payload.pagamentos.filter((p) => p.forma === 'dinheiro').reduce((s, p) => s + Number(p.valor), 0)),
-      totalCartao: Number(caixaAberto.totalCartao) + Number(payload.pagamentos.filter((p) => p.forma === 'credito' || p.forma === 'debito').reduce((s, p) => s + Number(p.valor), 0)),
-      totalPix: Number(caixaAberto.totalPix) + Number(payload.pagamentos.filter((p) => p.forma === 'pix').reduce((s, p) => s + Number(p.valor), 0)),
-    });
-    return criada;
-  });
+  }
 
   await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'criar', entidade: 'Venda', entidadeId: venda.id, depois: { total: String(venda.total) }, ip });
   return venda;
+}
+
+/**
+ * Corpo original da transação de registrar() (extraído pra função própria
+ * só pra poder ser reexecutado pelo retry acima sem duplicar código) —
+ * nenhuma mudança de lógica de negócio aqui, só o SET LOCAL lock_timeout
+ * (feito por quem chama, logo antes desta função) e o uso de
+ * loteRepo.listarAtivosParaConsumo (com FOR UPDATE) dentro de
+ * loteService.consumirVendaFifo.
+ */
+async function registrarDentroDaTransacao(tx, tenantId, usuario, ip, payload, caixaAberto) {
+  const criada = await tx.venda.create({ data: payload.venda });
+  const itensData = payload.itens.map((item) => ({ ...item, vendaId: criada.id }));
+  await tx.vendaItem.createMany({ data: itensData });
+  await tx.vendaPagamento.createMany({ data: payload.pagamentos.map((p) => ({ ...p, vendaId: criada.id })) });
+
+  for (const item of itensData) {
+    // Mesmo tenantId já usado pra buscar este produto lá em cima, agora
+    // aplicado nesta query (que já ia acontecer de qualquer forma) — sem
+    // custo extra de round-trip, garante que o decremento de estoque
+    // abaixo nunca mexe no EstoqueProduto de um produto de outro tenant.
+    const produto = await tx.produto.findFirst({ where: { id: item.produtoId, tenantId } });
+    if (!produto) throw new AppError('Produto não encontrado', 404);
+    const qtd = Number(item.quantidade);
+    // Fase 2b: produto com controlaLote consome FIFO (lote mais antigo
+    // primeiro) e bloqueia se esbarrar em lote vencido — nunca decrementa
+    // direto o agregado. Produto sem controlaLote: comportamento EXATO da
+    // Fase 2a (decremento direto + permiteEstoqueNegativo).
+    let ficouNegativo = false;
+    let estoqueAnterior = null;
+    if (produto.controlaLote) {
+      // Rastreia de qual(is) lote(s) este item consumiu, pra devolver
+      // certo se a venda for cancelada depois (ver cancelar() abaixo).
+      const consumos = await loteService.consumirVendaFifo(tx, tenantId, produto, qtd);
+      for (const consumo of consumos)
+        await loteRepo.criarConsumo(tx, item.id, consumo.loteId, consumo.quantidade);
+    } else {
+      const resultado = await estoqueDepositoService.decrementarComRegra(tx, tenantId, produto.id, produto.nome, qtd);
+      ficouNegativo = resultado.ficouNegativo;
+      estoqueAnterior = resultado.estoqueAnterior;
+    }
+    await tx.movimentacaoEstoque.create({
+      data: {
+        tenantId,
+        produtoId: produto.id,
+        tipo: 'saida',
+        quantidade: qtd,
+        custoUnit: Number(item.custoUnitario || 0),
+        origem: 'venda',
+        origemId: criada.id,
+        usuarioId: usuario.id,
+      },
+    });
+    if (ficouNegativo) {
+      await auditoriaRepo.registrar({ tenantId, usuarioId: usuario.id, acao: 'estoque_negativo', entidade: 'Produto', entidadeId: produto.id, depois: { estoque: estoqueAnterior, solicitado: qtd }, ip });
+    }
+  }
+
+  await caixaRepo.atualizar(tx, tenantId, caixaAberto.id, {
+    totalVendas: Number(caixaAberto.totalVendas) + Number(criada.total),
+    totalDinheiro: Number(caixaAberto.totalDinheiro) + Number(payload.pagamentos.filter((p) => p.forma === 'dinheiro').reduce((s, p) => s + Number(p.valor), 0)),
+    totalCartao: Number(caixaAberto.totalCartao) + Number(payload.pagamentos.filter((p) => p.forma === 'credito' || p.forma === 'debito').reduce((s, p) => s + Number(p.valor), 0)),
+    totalPix: Number(caixaAberto.totalPix) + Number(payload.pagamentos.filter((p) => p.forma === 'pix').reduce((s, p) => s + Number(p.valor), 0)),
+  });
+  return criada;
 }
 
 async function cancelar(tenantId, id, usuario, motivo, ip) {

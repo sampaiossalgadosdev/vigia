@@ -34,6 +34,11 @@ function dataBr(data) {
  * durante o consumo já estiver vencido — nunca pula pro próximo lote mais
  * novo automaticamente, pois isso esconderia o lote vencido em vez de
  * forçar giro/descarte dele.
+ * Concorrência (múltiplos caixas vendendo do mesmo lote ao mesmo tempo):
+ * listarAtivosParaConsumo já adquire FOR UPDATE em todos os lotes ativos
+ * ANTES de qualquer leitura de quantidade abaixo — a leitura/cálculo/escrita
+ * deste laço só acontece com a trava já garantida (ver comentário da
+ * função e o SET LOCAL lock_timeout em venda.service.registrar).
  * Retorna [{ loteId, quantidade }] com o que foi de fato consumido de cada
  * lote — quem chama usa isso pra gravar o rastreio em VendaItemLote (só
  * assim o cancelamento sabe pra qual lote devolver depois).
@@ -41,7 +46,7 @@ function dataBr(data) {
 async function consumirVendaFifo(tx, tenantId, produto, quantidadeVendida) {
   const deposito = await estoqueDepositoRepo.garantirDepositoPrincipal(tx, tenantId);
   const estoqueProduto = await estoqueDepositoRepo.garantirEstoqueProduto(tx, produto.id, deposito.id);
-  const lotes = await loteRepo.listarAtivosOrdenados(tx, estoqueProduto.id);
+  const lotes = await loteRepo.listarAtivosParaConsumo(tx, estoqueProduto.id);
 
   const agora = new Date();
   let restante = Number(quantidadeVendida);

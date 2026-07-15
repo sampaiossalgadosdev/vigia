@@ -20,6 +20,33 @@ async function listarAtivosOrdenados(tx, estoqueProdutoId) {
   });
 }
 
+/**
+ * Lotes ativos do EstoqueProduto, com FOR UPDATE adquirido em ordem de id
+ * ASCENDENTE — não de dataValidade. É essa ordem (sempre a mesma,
+ * independente de qual produto/carrinho chegou primeiro) que evita
+ * deadlock entre transações concorrentes que tocam os mesmos lotes em
+ * sequências diferentes (ex: dois carrinhos que consomem os mesmos 2
+ * lotes, mas com os itens em ordem diferente no carrinho — a trava sempre
+ * é pedida na mesma sequência por id, nunca há espera circular).
+ * A leitura de quantidade (Number(lote.quantidade), feita por quem chama
+ * em lote.service.consumirVendaFifo) só acontece DEPOIS que esta função
+ * retorna — ou seja, depois da trava já adquirida em todos os lotes.
+ * Devolve reordenado por dataValidade ASC (ordem de CONSUMO FIFO, que é
+ * diferente da ordem de TRAVA acima) — a regra de negócio de FIFO não
+ * muda, só a ordem de aquisição da trava.
+ * Só faz sentido dentro de uma transação (`tx`) — FOR UPDATE fora de uma
+ * transação libera a trava no fim do próprio SELECT, sem propósito aqui.
+ */
+async function listarAtivosParaConsumo(tx, estoqueProdutoId) {
+  const lotes = await tx.$queryRaw`
+    SELECT * FROM "Lote"
+    WHERE "estoqueProdutoId" = ${estoqueProdutoId} AND ativo = true
+    ORDER BY id ASC
+    FOR UPDATE
+  `;
+  return lotes.slice().sort((a, b) => new Date(a.dataValidade) - new Date(b.dataValidade));
+}
+
 /** Cria uma linha de Lote nova para uma entrada de estoque (NF-e). Nunca mescla com lote existente. */
 async function criar(tx, estoqueProdutoId, { numeroLote, dataValidade, quantidade }) {
   return tx.lote.create({
@@ -98,7 +125,7 @@ async function listarAteData(tenantId, limite) {
 }
 
 module.exports = {
-  listarAtivosOrdenados, criar, atualizarQuantidade, somarAtivos,
+  listarAtivosOrdenados, listarAtivosParaConsumo, criar, atualizarQuantidade, somarAtivos,
   recalcularEstoqueProdutoDeLotes, listarAteData,
   criarConsumo, listarConsumosPorItem, devolverAoLote, buscarPorId, buscarPorNumeroEValidade,
 };
