@@ -1,7 +1,22 @@
 const promocaoRepo = require('../repositories/promocao.repository');
+const produtoRepo = require('../repositories/produto.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
 const pdvGateway = require('../ws/pdvGateway');
 const { AppError, paginado } = require('../utils/response');
+
+/**
+ * Autocomplete de produto pro campo "Produto" do formulário de promoção
+ * (nome, EAN, marca, PLU ou código de referência — mesmo filtro "search" da
+ * listagem geral). Endpoint próprio (não /api/produtos direto) porque quem
+ * gerencia promoções pode não ter a permissão "produtos" — mesmo padrão já
+ * usado por nfeEntrada.service.buscarProdutos (permissão do módulo dono da
+ * tela, não da entidade Produto em si).
+ */
+async function buscarProdutos(tenantId, termo) {
+  if (!termo || termo.trim().length < 2) return [];
+  const { items } = await produtoRepo.listar(tenantId, { search: termo.trim() }, { skip: 0, take: 8, order: 'asc' });
+  return items.map((p) => ({ id: p.id, nome: p.nome, ean: p.ean }));
+}
 
 async function listar(tenantId, query) {
   const itens = await promocaoRepo.listar(tenantId, query);
@@ -43,4 +58,4 @@ async function vigentes(tenantId) {
   return promocaoRepo.vigentes(tenantId);
 }
 
-module.exports = { listar, detalhar, criar, atualizar, remover, vigentes };
+module.exports = { listar, detalhar, criar, atualizar, remover, vigentes, buscarProdutos };

@@ -25,4 +25,8 @@ const vigentes = asyncHandler(async (req, res) => {
   success(res, await service.vigentes(req.tenantId));
 });
 
-module.exports = { listar, detalhar, criar, atualizar, remover, vigentes };
+const buscarProdutos = asyncHandler(async (req, res) => {
+  success(res, await service.buscarProdutos(req.tenantId, req.query.termo));
+});
+
+module.exports = { listar, detalhar, criar, atualizar, remover, vigentes, buscarProdutos };
