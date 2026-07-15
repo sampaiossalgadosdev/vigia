@@ -36,7 +36,7 @@ test('snapshot: retorna produto, preço, estoque e permiteEstoqueNegativo do Dep
   const tenant = await criarTenant('01');
   try {
     const produto = await prisma.produto.create({
-      data: { tenantId: tenant.id, ean: '9700000000001', nome: 'Produto Snapshot', preco: 12.5, estoqueQtd: 20 },
+      data: { tenantId: tenant.id, ean: '9700000000001', codigoReferencia: 'REF-001', unidade: 'CX', nome: 'Produto Snapshot', preco: 12.5, estoqueQtd: 20 },
     });
     await backfillTenant(tenant.id);
     const deposito = await prisma.deposito.findFirst({ where: { tenantId: tenant.id, principal: true } });
@@ -52,6 +52,9 @@ test('snapshot: retorna produto, preço, estoque e permiteEstoqueNegativo do Dep
     const [p] = snapshot.produtos;
     assert.equal(p.id, produto.id);
     assert.equal(p.precoVenda, 12.5);
+    assert.equal(p.codigoReferencia, 'REF-001', 'snapshot deve trazer codigoReferencia (Fase 3b: busca local por código de referência)');
+    assert.equal(p.unidade, 'CX', 'snapshot deve trazer unidade');
+    assert.equal(p.ativo, true, 'snapshot deve trazer ativo (Fase 3b: busca local não pode sugerir produto inativo)');
     assert.equal(p.permiteEstoqueNegativo, false, 'permiteEstoqueNegativo deve vir do EstoqueProduto do Depósito Principal');
     assert.ok(p.origemVersao, 'produto deve trazer campo de versão (origemVersao)');
 
