@@ -321,13 +321,22 @@
       if (new Date(fDestaqueFim.value) <= new Date(fDestaqueInicio.value)) return UI.erro(erroDestaque, 'O fim do destaque deve ser depois do início');
 
       // O destaque é uma promoção de valor fixo: desconto = preço atual − novo preço.
+      // <input type="datetime-local"> devolve uma string SEM fuso (ex:
+      // "2026-07-15T22:00") — mandar isso direto pro backend é o bug: o
+      // servidor roda em UTC e interpretaria "22:00" como 22:00 UTC, não
+      // 22:00 de Brasília (que é 01:00 UTC do dia seguinte). Um destaque
+      // "válido até as 22h de hoje" nascia com dataFim já no passado e
+      // nunca aparecia como vigente (nem aqui, nem no preço do PDV).
+      // new Date(valor) — executado AQUI, no navegador — interpreta a
+      // string no fuso local de quem está cadastrando, então .toISOString()
+      // já sai com o instante UTC correto.
       const body = {
         produtoId: itemAtual.id,
         nome: 'Destaque TV — ' + itemAtual.nome,
         tipo: 'valor_fixo',
         desconto: +(itemAtual.preco - novoPreco).toFixed(2),
-        dataInicio: fDestaqueInicio.value,
-        dataFim: fDestaqueFim.value,
+        dataInicio: new Date(fDestaqueInicio.value).toISOString(),
+        dataFim: new Date(fDestaqueFim.value).toISOString(),
       };
       try {
         if (itemAtual.promocao) await API.put('/api/promocoes/' + itemAtual.promocao.id, body);
