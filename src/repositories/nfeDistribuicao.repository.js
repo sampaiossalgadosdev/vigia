@@ -2,7 +2,8 @@
  * Arquivo: nfeDistribuicao.repository.js
  * Responsabilidade: Único ponto de acesso ao Prisma para NfeDistribuicao
  * (resumos de NF-e recebidos da SEFAZ) e pro cursor Tenant.ultimoNsu.
- * Utilizado por: SefazService, NfeEntradaService.
+ * Utilizado por: SefazService, NfeEntradaService, FiscalService (busca do
+ * certificado pro app ASSINATURA).
  * Não contém regra de negócio.
  */
 const prisma = require('../config/database');

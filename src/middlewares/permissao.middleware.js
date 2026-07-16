@@ -1,11 +1,15 @@
 /**
  * Arquivo: permissao.middleware.js
  * Responsabilidade: Bloquear requisições de usuários sem permissão suficiente
- * no módulo da rota, de acordo com o método HTTP. O Dono (isDono) sempre
- * passa. Para os demais, usa o mapa de permissões já carregado em
- * req.usuario.permissoes pelo middleware auth (sem consulta extra ao banco).
+ * no módulo da rota. O Dono (isDono) sempre passa. Para os demais, usa o mapa
+ * de permissões já carregado em req.usuario.permissoes pelo middleware auth
+ * (sem consulta extra ao banco).
+ * exigePermissao: nível suficiente de acordo com o método HTTP da rota.
+ * exigeAcessoCompleto: nível OBRIGATORIAMENTE acesso_completo, independente
+ * do método — para rotas onde qualquer nível de leitura já seria sensível
+ * demais (ex: exportar o certificado digital do tenant).
  * Utilizado por: rotas do tenant (produtos, fornecedores, estoque, vendas,
- * promoções, relatórios, ia, usuários, perfis).
+ * promoções, relatórios, ia, usuários, perfis, fiscal).
  * Depende de: req.usuario (setado pelo middleware auth).
  */
 const { error } = require('../utils/response');
@@ -32,4 +36,16 @@ function exigePermissao(modulo) {
   };
 }
 
-module.exports = { exigePermissao };
+function exigeAcessoCompleto(modulo) {
+  return (req, res, next) => {
+    if (!req.usuario) return error(res, 'Não autenticado', [], 401);
+    if (req.usuario.isDono) return next();
+
+    const nivel = (req.usuario.permissoes || {})[modulo];
+    if (nivel !== 'acesso_completo')
+      return error(res, 'Você não tem permissão para esta ação', [], 403);
+    return next();
+  };
+}
+
+module.exports = { exigePermissao, exigeAcessoCompleto };

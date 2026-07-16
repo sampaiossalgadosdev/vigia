@@ -8,7 +8,12 @@
  */
 const archiver = require('archiver');
 const service = require('../services/fiscal.service');
-const { asyncHandler } = require('../utils/response');
+const { asyncHandler, success } = require('../utils/response');
+
+const buscarCertificado = asyncHandler(async (req, res) => {
+  const certificado = await service.buscarCertificadoParaAssinatura(req.tenantId);
+  success(res, certificado);
+});
 
 const exportarXmls = asyncHandler(async (req, res) => {
   const { inicio, fim } = req.query;
@@ -32,4 +37,4 @@ const exportarXmls = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { exportarXmls };
+module.exports = { buscarCertificado, exportarXmls };

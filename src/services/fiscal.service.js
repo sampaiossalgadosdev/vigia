@@ -11,10 +11,15 @@
  * import da Distribuição DF-e). NfeDistribuicao.xmlCompleto (a
  * distribuição bruta, antes de "importada") fica de fora de propósito:
  * exportar de lá arriscaria entregar documento ainda não conciliado.
+ * Também expõe o certificado digital do tenant (já descriptografado) pro
+ * app ASSINATURA buscar via /api/fiscal/certificado — rota protegida por
+ * exigeAcessoCompleto('assinatura_fiscal'), nunca gravado em disco aqui.
  * Utilizado por: FiscalController.
  * Não realiza acesso HTTP.
  */
 const prisma = require('../config/database');
+const nfeDistRepo = require('../repositories/nfeDistribuicao.repository');
+const { descriptografar, descriptografarTexto } = require('../utils/certcrypto');
 const { AppError } = require('../utils/response');
 
 function parseData(valor, fimDoDia) {
@@ -51,4 +56,21 @@ async function buscarXmlsDoPeriodo(tenantId, inicio, fim) {
   return { vendas, notasEntrada };
 }
 
-module.exports = { buscarXmlsDoPeriodo };
+/**
+ * Certificado digital do tenant, já descriptografado em memória (nunca
+ * gravado em disco nem em log). pfx em base64 porque a resposta HTTP é
+ * JSON — o app ASSINATURA re-criptografa isso com safeStorage antes de
+ * persistir localmente.
+ */
+async function buscarCertificadoParaAssinatura(tenantId) {
+  const tenant = await nfeDistRepo.buscarTenantComCertificado(tenantId);
+  if (!tenant || !tenant.certificadoPfx)
+    throw new AppError('Este supermercado não tem certificado digital cadastrado', 422);
+
+  return {
+    pfxBase64: descriptografar(Buffer.from(tenant.certificadoPfx)).toString('base64'),
+    senha: tenant.certificadoSenha ? descriptografarTexto(tenant.certificadoSenha) : '',
+  };
+}
+
+module.exports = { buscarXmlsDoPeriodo, buscarCertificadoParaAssinatura };

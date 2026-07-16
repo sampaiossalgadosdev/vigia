@@ -176,6 +176,7 @@ enum ModuloSistema {
   relatorios
   ia
   financeiro
+  assinatura_fiscal
 }
 
 enum NivelPermissao {
