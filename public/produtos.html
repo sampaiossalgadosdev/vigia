@@ -79,7 +79,26 @@
         <div class="campo"><label>EAN *</label><input id="f_ean" maxlength="14"></div>
         <div class="campo"><label>Nome *</label><input id="f_nome" maxlength="200"></div>
         <div class="campo"><label>Marca</label><input id="f_marca"></div>
-        <div class="campo"><label>NCM (8 dígitos)</label><input id="f_ncm" maxlength="8"></div>
+        <div class="campo" style="position:relative">
+          <label>NCM *</label>
+          <input id="f_ncm" placeholder="Digite o código ou a descrição..." autocomplete="off">
+          <div class="sugestoes" id="sugestoesNcm" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+        </div>
+        <div class="campo" style="position:relative">
+          <label>CFOP *</label>
+          <input id="f_cfop" placeholder="Digite o código ou a descrição..." autocomplete="off">
+          <div class="sugestoes" id="sugestoesCfop" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+        </div>
+        <div class="campo" style="position:relative">
+          <label>CST-IBS/CBS (Reforma Tributária) *</label>
+          <input id="f_cstIbsCbs" placeholder="Digite o código ou a descrição..." autocomplete="off">
+          <div class="sugestoes" id="sugestoesCstIbsCbs" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+        </div>
+        <div class="campo" style="position:relative">
+          <label>cClassTrib (Reforma Tributária) *</label>
+          <input id="f_classTrib" placeholder="Digite o código ou a descrição..." autocomplete="off">
+          <div class="sugestoes" id="sugestoesClassTrib" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:200px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+        </div>
         <div class="campo"><label>Unidade</label>
           <select id="f_unidade"><option>UN</option><option>KG</option><option>CX</option><option>L</option><option>PC</option><option>FD</option></select>
         </div>
@@ -165,6 +184,54 @@
       return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
     }
 
+    /**
+     * Busca+seleção num catálogo fiscal de referência (NCM/CFOP/CST-IBS-CBS/
+     * cClassTrib) — nunca texto livre. `obter()` só devolve um código real
+     * quando o usuário CLICOU numa sugestão (ou quando `definir()` foi
+     * chamado ao carregar o produto); digitar sem selecionar limpa a
+     * seleção de propósito, pra nunca submeter texto livre digitado por
+     * engano. Mesma fábrica de manutencao-produtos.html, duplicada aqui
+     * porque cada página tem seu próprio escopo de script isolado.
+     */
+    function criarSeletorCatalogo({ inputId, sugestoesId, endpoint, formatarSugestao }) {
+      const input = $(inputId), caixa = $(sugestoesId);
+      let codigoSelecionado = null;
+
+      const buscar = debounce(async () => {
+        const termo = input.value.trim();
+        if (!termo) { caixa.style.display = 'none'; return; }
+        try {
+          const itens = await API.get(endpoint + '?termo=' + encodeURIComponent(termo));
+          caixa.innerHTML = itens.length
+            ? itens.map((it) => '<div class="sugestao" data-codigo="' + UI.escapar(it.codigo) + '" data-texto="' + UI.escapar(formatarSugestao(it)) + '" style="padding:8px 12px;cursor:pointer">' + UI.escapar(formatarSugestao(it)) + '</div>').join('')
+            : '<div style="padding:8px 12px;color:var(--cinza)">Nenhum código encontrado no catálogo</div>';
+          caixa.style.display = 'block';
+        } catch (e) { caixa.style.display = 'none'; }
+      }, 300);
+
+      input.addEventListener('input', () => { codigoSelecionado = null; buscar(); });
+      caixa.addEventListener('click', (ev) => {
+        const sug = ev.target.closest('.sugestao[data-codigo]');
+        if (!sug) return;
+        codigoSelecionado = sug.dataset.codigo;
+        input.value = sug.dataset.texto;
+        caixa.style.display = 'none';
+      });
+
+      return {
+        obter: () => codigoSelecionado,
+        definir(codigo, textoExibicao) {
+          codigoSelecionado = codigo || null;
+          input.value = textoExibicao || codigo || '';
+        },
+      };
+    }
+
+    const seletorNcm = criarSeletorCatalogo({ inputId: 'f_ncm', sugestoesId: 'sugestoesNcm', endpoint: '/api/produtos/catalogos/ncm', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorCfop = criarSeletorCatalogo({ inputId: 'f_cfop', sugestoesId: 'sugestoesCfop', endpoint: '/api/produtos/catalogos/cfop', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorCstIbsCbs = criarSeletorCatalogo({ inputId: 'f_cstIbsCbs', sugestoesId: 'sugestoesCstIbsCbs', endpoint: '/api/produtos/catalogos/cst-ibs-cbs', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorClassTrib = criarSeletorCatalogo({ inputId: 'f_classTrib', sugestoesId: 'sugestoesClassTrib', endpoint: '/api/produtos/catalogos/class-trib', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+
     function construirQuery() {
       const params = new URLSearchParams({ page: pagina, limit: 20 });
       if (orderBy) { params.set('orderBy', orderBy); params.set('order', order); }
@@ -222,7 +289,10 @@
       fEan.value = p.ean || '';
       fNome.value = p.nome || '';
       fMarca.value = p.marca || '';
-      fNcm.value = p.ncm || '';
+      seletorNcm.definir(p.ncm, p.ncm || '');
+      seletorCfop.definir(p.cfop, p.cfop || '');
+      seletorCstIbsCbs.definir(p.cstIbsCbs, p.cstIbsCbs || '');
+      seletorClassTrib.definir(p.cClassTrib, p.cClassTrib || '');
       fUnidade.value = p.unidade || 'UN';
       fPreco.value = p.preco || '';
       fCusto.value = p.custoMedio || '';
@@ -264,11 +334,23 @@
     }
 
     async function salvar() {
+      UI.limparErro(erroModal);
+      // NCM/CFOP/CST-IBS-CBS/cClassTrib são obrigatórios (exigência nova de
+      // classificação fiscal completa — ver produto.validator.js) e só são
+      // aceitos se vieram de uma sugestão clicada (nunca texto livre
+      // digitado sem selecionar — ver seletorNcm/criarSeletorCatalogo).
+      if (!seletorNcm.obter()) { UI.erro(erroModal, 'NCM é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa).'); return; }
+      if (!seletorCfop.obter()) { UI.erro(erroModal, 'CFOP é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa).'); return; }
+      if (!seletorCstIbsCbs.obter()) { UI.erro(erroModal, 'CST-IBS/CBS é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa).'); return; }
+      if (!seletorClassTrib.obter()) { UI.erro(erroModal, 'cClassTrib é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa).'); return; }
       const body = {
         ean: fEan.value.trim(),
         nome: fNome.value.trim(),
         marca: fMarca.value.trim(),
-        ncm: fNcm.value.trim(),
+        ncm: seletorNcm.obter() || '',
+        cfop: seletorCfop.obter() || '',
+        cstIbsCbs: seletorCstIbsCbs.obter() || '',
+        cClassTrib: seletorClassTrib.obter() || '',
         unidade: fUnidade.value,
         preco: fPreco.value,
         custoMedio: fCusto.value || 0,

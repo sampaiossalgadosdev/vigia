@@ -887,3 +887,94 @@ model ContaReceber {
   @@index([tenantId, status])
   @@index([tenantId, dataVencimento])
 }
+
+// ─── CATÁLOGOS FISCAIS DE REFERÊNCIA ───────────────────────
+// Dados reais de fontes oficiais (NCM: API pública Siscomex; CFOP: Ajuste
+// SINIEF 03/24 CONFAZ + Informe Técnico IT 2023.002; CST/CSOSN: enumeração
+// do XSD oficial do layout NF-e 4.00) — nunca inventados, populados só por
+// scripts de import em scripts/, nunca editados manualmente pela aplicação.
+// SEM foreign key de Produto pra cá de propósito: produtos existentes hoje
+// têm placeholders fictícios em ncm/cfop/cstIbsCbs/cClassTrib (migração
+// deles é tarefa futura separada — ver CLAUDE.md desta tarefa) — uma FK
+// rígida quebraria a migration na criação, validando todo produto já
+// existente contra a tabela nova. A validação de existência acontece na
+// camada de aplicação (validator), não no banco.
+// dataFimVigencia nula = código ainda vigente. Nunca DELETE: um código
+// descontinuado só ganha dataFimVigencia — histórico preservado, e um
+// produto que já referencia o código antigo continua íntegro (só some da
+// lista de opções pra escolha NOVA no seletor).
+model CatalogoNcm {
+  codigo             String    @id // 8 dígitos
+  descricao          String    @db.Text
+  dataInicioVigencia DateTime?
+  dataFimVigencia    DateTime?
+  tipoAto            String? // ato normativo de origem (ex: Resolução Gecex) — só referência, não usado em lógica
+  numeroAto          String?
+  anoAto             String?
+  atualizadoEm       DateTime  @updatedAt
+
+  @@index([dataFimVigencia])
+}
+
+model CatalogoCfop {
+  codigo             String    @id // 4 dígitos, ex: 5102
+  descricao          String    @db.Text
+  tipoOperacao       String // entrada | saida — primeiro dígito do código (1-3 entrada, 5-7 saída)
+  dataInicioVigencia DateTime?
+  dataFimVigencia    DateTime?
+  atualizadoEm       DateTime  @updatedAt
+
+  @@index([dataFimVigencia])
+}
+
+// CST do ICMS regime normal (CRT 2/3 — Lucro Presumido/Real) — distinto de
+// CSOSN (Simples Nacional). Populado a partir do XSD oficial; sem
+// consumidor na emissão fiscal hoje (nfceXml.service.js usa só o grupo
+// IBS/CBS da Reforma) — tabela de referência pronta pra quando/se precisar.
+model CatalogoCst {
+  codigo       String   @id // ex: "00", "10", "20"...
+  descricao    String   @db.Text
+  atualizadoEm DateTime @updatedAt
+}
+
+// CSOSN — Simples Nacional (CRT 1). Mesma ressalva de CatalogoCst: sem
+// consumidor na emissão hoje, só tabela de referência.
+model CatalogoCsosn {
+  codigo       String   @id // ex: "101", "102", "500"...
+  descricao    String   @db.Text
+  atualizadoEm DateTime @updatedAt
+}
+
+// Código Situação Tributária do IBS/CBS (TCST da Reforma — 3 dígitos,
+// campo Produto.cstIbsCbs) — DIFERENTE do CatalogoCst legado (ICMS,
+// pré-Reforma) acima e do CatalogoClassTrib abaixo (6 dígitos): os três
+// são tabelas distintas mesmo com nomes parecidos. Mesma fonte oficial de
+// CatalogoClassTrib (Informe Técnico RT 2025.002, publicado como par
+// CST-IBS/CBS + cClassTrib, DOCS/cClassTrib 2026-06-22.xlsx). A aba de
+// origem não traz colunas de vigência para este código — dataFimVigencia
+// fica sempre nula (ver scripts/importarCatalogoClassTrib.js).
+model CatalogoCstIbsCbs {
+  codigo             String    @id // 3 dígitos
+  descricao          String    @db.Text
+  dataInicioVigencia DateTime?
+  dataFimVigencia    DateTime?
+  atualizadoEm       DateTime  @updatedAt
+
+  @@index([dataFimVigencia])
+}
+
+// Código de Classificação Tributária do IBS/CBS (Reforma Tributária, LC
+// 214/2025) — Informe Técnico RT 2025.002 (Portal Nacional da NF-e),
+// DOCS/cClassTrib 2026-06-22.xlsx. Consumido de fato hoje em
+// nfceXml.service.js (cClassTribAplicado).
+model CatalogoClassTrib {
+  codigo             String    @id // 6 dígitos
+  descricao          String    @db.Text
+  dispositivoLegal   String?   @db.Text // artigo da LC 214/2025 correspondente
+  versaoInforme      String? // versão do Informe Técnico 2025.002 de onde veio (ex: "1.60")
+  dataInicioVigencia DateTime?
+  dataFimVigencia    DateTime?
+  atualizadoEm       DateTime  @updatedAt
+
+  @@index([dataFimVigencia])
+}

@@ -11,6 +11,7 @@ const prisma = require('../config/database');
 const produtoRepo = require('../repositories/produto.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
 const estoqueDepositoRepo = require('../repositories/estoqueDeposito.repository');
+const catalogoFiscalRepo = require('../repositories/catalogoFiscal.repository');
 const { AppError, paginado } = require('../utils/response');
 
 /**
@@ -20,7 +21,7 @@ function normalizar(body) {
   const dados = {};
   // codigoReferencia fica fora daqui de propósito: é gerado sozinho na criação
   // (ver criar()) e só pode ser alterado manualmente na edição (ver atualizar()).
-  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'imagemUrl', 'categoriaId', 'cfop', 'origem', 'configTributaria'];
+  const campos = ['ean', 'nome', 'marca', 'ncm', 'unidade', 'plu', 'imagemUrl', 'categoriaId', 'cfop', 'origem', 'configTributaria', 'cstIbsCbs', 'cClassTrib'];
   for (const campo of campos) if (body[campo] !== undefined) dados[campo] = body[campo] || null;
   if (dados.nome === null) delete dados.nome;
   if (dados.ean === null) delete dados.ean;
@@ -230,4 +231,26 @@ async function alertas(tenantId) {
   };
 }
 
-module.exports = { listar, detalhar, criar, atualizar, atualizarEmLote, remover, sync, alertas, ultimaCompra, listarCategorias };
+/**
+ * Autocomplete dos catálogos fiscais de referência (NCM, CFOP, CST-IBS/CBS,
+ * cClassTrib) pro seletor do cadastro de produto — nunca texto livre.
+ * Só devolve código+descrição já vigentes na fonte oficial (ver
+ * catalogoFiscal.repository.vigente).
+ */
+async function buscarCatalogoNcm(termo) {
+  return catalogoFiscalRepo.buscarNcm(termo);
+}
+async function buscarCatalogoCfop(termo) {
+  return catalogoFiscalRepo.buscarCfop(termo);
+}
+async function buscarCatalogoCstIbsCbs(termo) {
+  return catalogoFiscalRepo.buscarCstIbsCbs(termo);
+}
+async function buscarCatalogoClassTrib(termo) {
+  return catalogoFiscalRepo.buscarClassTrib(termo);
+}
+
+module.exports = {
+  listar, detalhar, criar, atualizar, atualizarEmLote, remover, sync, alertas, ultimaCompra, listarCategorias,
+  buscarCatalogoNcm, buscarCatalogoCfop, buscarCatalogoCstIbsCbs, buscarCatalogoClassTrib,
+};

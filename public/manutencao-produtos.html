@@ -45,10 +45,17 @@
           </div>
         </div>
 
-        <!-- Aba 2: Informações Tributárias -->
+        <!-- Aba 2: Informações Tributárias — NCM/CFOP/CST-IBS-CBS/cClassTrib são
+             busca+seleção nos catálogos de referência (nunca texto livre: um
+             código que não existe na tabela de referência é rejeitado ao
+             salvar, ver produto.validator.js). -->
         <div class="aba-conteudo" id="aba-tributarias">
           <div class="form-grid">
-            <div class="campo"><label>NCM (8 dígitos)</label><input id="m_ncm" maxlength="8" placeholder="Ex: 21069090"></div>
+            <div class="campo" style="position:relative">
+              <label>NCM *</label>
+              <input id="m_ncm" placeholder="Digite o código ou a descrição..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesNcm" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+            </div>
             <div class="campo"><label>Configuração tributária</label>
               <select id="m_configTrib">
                 <option value="">Não informada</option>
@@ -58,13 +65,27 @@
                 <option value="nao_tributado">Não tributado</option>
               </select>
             </div>
-            <div class="campo"><label>CFOP (4 dígitos)</label><input id="m_cfop" maxlength="4" placeholder="Ex: 5102"></div>
+            <div class="campo" style="position:relative">
+              <label>CFOP *</label>
+              <input id="m_cfop" placeholder="Digite o código ou a descrição..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesCfop" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+            </div>
             <div class="campo"><label>Origem</label>
               <select id="m_origem">
                 <option value="">Não informada</option>
                 <option value="nacional">Nacional</option>
                 <option value="importado">Importado</option>
               </select>
+            </div>
+            <div class="campo" style="position:relative">
+              <label>CST-IBS/CBS (Reforma Tributária) *</label>
+              <input id="m_cstIbsCbs" placeholder="Digite o código ou a descrição..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesCstIbsCbs" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
+            </div>
+            <div class="campo" style="position:relative">
+              <label>cClassTrib (Reforma Tributária) *</label>
+              <input id="m_classTrib" placeholder="Digite o código ou a descrição..." autocomplete="off">
+              <div class="sugestoes" id="sugestoesClassTrib" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--linha);border-radius:6px;z-index:50;display:none;max-height:220px;overflow-y:auto;box-shadow:0 4px 10px rgba(0,0,0,.12)"></div>
             </div>
           </div>
         </div>
@@ -138,6 +159,57 @@
     }
     document.querySelectorAll('.abas button').forEach((b) => b.addEventListener('click', () => trocarAba(b.dataset.aba)));
 
+    function debounce(fn, ms) {
+      let temporizador;
+      return (...args) => { clearTimeout(temporizador); temporizador = setTimeout(() => fn(...args), ms); };
+    }
+
+    /**
+     * Busca+seleção num catálogo fiscal de referência (NCM/CFOP/CST-IBS-CBS/
+     * cClassTrib) — nunca texto livre. `obter()` só devolve um código real
+     * quando o usuário CLICOU numa sugestão (ou quando `definir()` foi
+     * chamado ao carregar o produto); digitar sem selecionar limpa a seleção
+     * de propósito, pra nunca submeter texto livre digitado por engano.
+     */
+    function criarSeletorCatalogo({ inputId, sugestoesId, endpoint, formatarSugestao }) {
+      const input = $(inputId), caixa = $(sugestoesId);
+      let codigoSelecionado = null;
+
+      const buscar = debounce(async () => {
+        const termo = input.value.trim();
+        if (!termo) { caixa.style.display = 'none'; return; }
+        try {
+          const itens = await API.get(endpoint + '?termo=' + encodeURIComponent(termo));
+          caixa.innerHTML = itens.length
+            ? itens.map((it) => '<div class="sugestao" data-codigo="' + UI.escapar(it.codigo) + '" data-texto="' + UI.escapar(formatarSugestao(it)) + '" style="padding:8px 12px;cursor:pointer">' + UI.escapar(formatarSugestao(it)) + '</div>').join('')
+            : '<div style="padding:8px 12px;color:var(--cinza)">Nenhum código encontrado no catálogo</div>';
+          caixa.style.display = 'block';
+        } catch (e) { caixa.style.display = 'none'; }
+      }, 300);
+
+      input.addEventListener('input', () => { codigoSelecionado = null; buscar(); });
+      caixa.addEventListener('click', (ev) => {
+        const sug = ev.target.closest('.sugestao[data-codigo]');
+        if (!sug) return;
+        codigoSelecionado = sug.dataset.codigo;
+        input.value = sug.dataset.texto;
+        caixa.style.display = 'none';
+      });
+
+      return {
+        obter: () => codigoSelecionado,
+        definir(codigo, textoExibicao) {
+          codigoSelecionado = codigo || null;
+          input.value = textoExibicao || codigo || '';
+        },
+      };
+    }
+
+    const seletorNcm = criarSeletorCatalogo({ inputId: 'm_ncm', sugestoesId: 'sugestoesNcm', endpoint: '/api/produtos/catalogos/ncm', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorCfop = criarSeletorCatalogo({ inputId: 'm_cfop', sugestoesId: 'sugestoesCfop', endpoint: '/api/produtos/catalogos/cfop', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorCstIbsCbs = criarSeletorCatalogo({ inputId: 'm_cstIbsCbs', sugestoesId: 'sugestoesCstIbsCbs', endpoint: '/api/produtos/catalogos/cst-ibs-cbs', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+    const seletorClassTrib = criarSeletorCatalogo({ inputId: 'm_classTrib', sugestoesId: 'sugestoesClassTrib', endpoint: '/api/produtos/catalogos/class-trib', formatarSugestao: (it) => it.codigo + ' - ' + it.descricao });
+
     async function carregarCategorias(selecionadaId) {
       const categorias = await API.get('/api/produtos/categorias');
       $('m_categoria').innerHTML = '<option value="">Selecione...</option>' +
@@ -164,11 +236,15 @@
       $('m_nome').value = produto.nome || '';
       $('m_unidade').value = produto.unidade || 'UN';
       $('m_marca').value = produto.marca || '';
-      // Aba 2
-      $('m_ncm').value = produto.ncm || '';
+      // Aba 2 — mostra o código já salvo como texto inicial (sem a
+      // descrição, que exigiria uma busca extra); re-buscar/reselecionar só
+      // é necessário se o usuário quiser trocar o código.
+      seletorNcm.definir(produto.ncm, produto.ncm || '');
       $('m_configTrib').value = produto.configTributaria || '';
-      $('m_cfop').value = produto.cfop || '';
+      seletorCfop.definir(produto.cfop, produto.cfop || '');
       $('m_origem').value = produto.origem || '';
+      seletorCstIbsCbs.definir(produto.cstIbsCbs, produto.cstIbsCbs || '');
+      seletorClassTrib.definir(produto.cClassTrib, produto.cClassTrib || '');
       // Aba 3 (somente leitura)
       $('m_estoqueTotal').value = produto.estoqueQtd + ' ' + (produto.unidade || '');
       $('m_ultPreco').value = ultima.preco != null ? UI.moeda(ultima.preco) : 'Sem compras registradas';
@@ -207,10 +283,16 @@
       if (!$('m_categoria').value) invalido('m_categoria', 'cadastrais', 'Grupo é obrigatório');
       if (!$('m_unidade').value) invalido('m_unidade', 'cadastrais', 'Unidade é obrigatória');
 
-      const ncm = $('m_ncm').value.trim();
-      if (ncm && !/^\d{8}$/.test(ncm)) invalido('m_ncm', 'tributarias', 'NCM deve ter exatamente 8 dígitos numéricos');
-      const cfop = $('m_cfop').value.trim();
-      if (cfop && !/^\d{4}$/.test(cfop)) invalido('m_cfop', 'tributarias', 'CFOP deve ter exatamente 4 dígitos');
+      // NCM/CFOP/CST-IBS-CBS/cClassTrib são obrigatórios (exigência nova —
+      // ver produto.validator.js): só chegam aqui com um código real do
+      // catálogo (seletorX.obter()), nunca texto livre digitado sem
+      // selecionar (ver criarSeletorCatalogo). obter() null cobre os dois
+      // casos de erro (campo vazio ou texto digitado sem clicar numa
+      // sugestão) — a mensagem já deixa claro que precisa ser preenchido.
+      if (!seletorNcm.obter()) invalido('m_ncm', 'tributarias', 'NCM é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa)');
+      if (!seletorCfop.obter()) invalido('m_cfop', 'tributarias', 'CFOP é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa)');
+      if (!seletorCstIbsCbs.obter()) invalido('m_cstIbsCbs', 'tributarias', 'CST-IBS/CBS é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa)');
+      if (!seletorClassTrib.obter()) invalido('m_classTrib', 'tributarias', 'cClassTrib é obrigatório: selecione um código do catálogo (exigência nova de classificação fiscal completa)');
 
       const precoVenda = Number($('m_precoVenda').value);
       if (!$('m_precoVenda').value || !(precoVenda > 0)) invalido('m_precoVenda', 'precos', 'Preço atual (venda) é obrigatório e deve ser maior que zero');
@@ -241,10 +323,12 @@
         categoriaId: $('m_categoria').value,
         unidade: $('m_unidade').value,
         marca: $('m_marca').value.trim(),
-        ncm: $('m_ncm').value.trim(),
+        ncm: seletorNcm.obter() || '',
         configTributaria: $('m_configTrib').value,
-        cfop: $('m_cfop').value.trim(),
+        cfop: seletorCfop.obter() || '',
         origem: $('m_origem').value,
+        cstIbsCbs: seletorCstIbsCbs.obter() || '',
+        cClassTrib: seletorClassTrib.obter() || '',
         preco: $('m_precoVenda').value, // preço de venda vigente (o PDV usa este)
         ean: $('m_ean').value.trim(),
         codigoReferencia: $('m_codRef').value.trim(),

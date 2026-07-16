@@ -23,6 +23,10 @@ router.get('/sync', gestao, controller.sync);
 router.get('/estoque/alertas', gestao, controller.alertas);
 router.get('/categorias', gestao, controller.listarCategorias);
 router.patch('/em-lote', gestao, validator.emLote, controller.atualizarEmLote);
+router.get('/catalogos/ncm', gestao, controller.buscarCatalogoNcm);
+router.get('/catalogos/cfop', gestao, controller.buscarCatalogoCfop);
+router.get('/catalogos/cst-ibs-cbs', gestao, controller.buscarCatalogoCstIbsCbs);
+router.get('/catalogos/class-trib', gestao, controller.buscarCatalogoClassTrib);
 
 router.get('/', gestao, controller.listar);
 router.get('/:id', gestao, controller.detalhar);

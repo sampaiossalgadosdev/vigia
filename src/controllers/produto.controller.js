@@ -65,8 +65,22 @@ const listarCategorias = asyncHandler(async (req, res) => {
   success(res, await service.listarCategorias(req.tenantId));
 });
 
+const buscarCatalogoNcm = asyncHandler(async (req, res) => {
+  success(res, await service.buscarCatalogoNcm(req.query.termo));
+});
+const buscarCatalogoCfop = asyncHandler(async (req, res) => {
+  success(res, await service.buscarCatalogoCfop(req.query.termo));
+});
+const buscarCatalogoCstIbsCbs = asyncHandler(async (req, res) => {
+  success(res, await service.buscarCatalogoCstIbsCbs(req.query.termo));
+});
+const buscarCatalogoClassTrib = asyncHandler(async (req, res) => {
+  success(res, await service.buscarCatalogoClassTrib(req.query.termo));
+});
+
 module.exports = {
   listar, detalhar, criar, atualizar, atualizarEmLote, remover,
   baixarModelo, importarPreview, importarConfirmar, sync, alertas,
   ultimaCompra, listarCategorias,
+  buscarCatalogoNcm, buscarCatalogoCfop, buscarCatalogoCstIbsCbs, buscarCatalogoClassTrib,
 };
