@@ -55,12 +55,14 @@
  * @nfewizard/nfce (NFCEWizard).
  */
 const { NFCEWizard } = require('@nfewizard/nfce');
+const prisma = require('../config/database');
 const vendaRepo = require('../repositories/venda.repository');
 const superadminRepo = require('../repositories/superadmin.repository');
 const auditoriaRepo = require('../repositories/auditoria.repository');
 const { configuracaoFiscalCompleta } = require('./configuracaoFiscal.service');
-const { gerarXmlNfce } = require('./nfceXml.service');
+const { gerarXmlNfce, montarChaveAcessoPlaceholder } = require('./nfceXml.service');
 const { calcularTributoItem } = require('./tributoFiscal.service');
+const { listarIndicadoresCst, listarIndicadoresClassTrib, montarClassificacaoFiscal } = require('../repositories/catalogoFiscal.repository');
 const { resolverUrlsFiscais } = require('../config/webservicesSefaz');
 const { CODIGO_UF } = require('./sefaz.service');
 const { descriptografar, descriptografarTexto } = require('../utils/certcrypto');
@@ -99,11 +101,91 @@ function buscarChaveProfunda(obj, chave) {
   return undefined;
 }
 
-/** Recalcula o tributo de cada item no momento da emissão; item que já tem snapshot gravado não é recalculado. */
-function itensComTributo(venda, tenant) {
+/**
+ * Reserva o número sequencial REAL da NFC-e (série 1, emissão normal) —
+ * mesmo padrão de produto.repository.criarComCodigoSequencial
+ * (Tenant.ultimoCodigoReferencia): incrementa Tenant.ultimoNumeroNfce
+ * atomicamente dentro de uma transação e grava o valor em Venda.numeroNfce,
+ * pra nunca reservar dois números pra mesma venda.
+ * `numeroExistente` (Venda.numeroNfce já lido) faz a reserva ser IDEMPOTENTE
+ * por venda: se a venda já tentou emitir antes (retry por falha de conexão,
+ * ver filaEmissaoNfce.service), o MESMO número é reaproveitado — reservar
+ * de novo a cada tentativa "gastaria" um número por tentativa falha,
+ * criando buracos na sequência que exigiriam inutilização formal na SEFAZ.
+ */
+async function reservarNumeroNfce(tenantId, vendaId, numeroExistente) {
+  if (numeroExistente) return numeroExistente;
+  return prisma.$transaction(async (tx) => {
+    const tenant = await tx.tenant.update({
+      where: { id: tenantId },
+      data: { ultimoNumeroNfce: { increment: 1 } },
+    });
+    await tx.venda.update({ where: { id: vendaId }, data: { numeroNfce: tenant.ultimoNumeroNfce } });
+    return tenant.ultimoNumeroNfce;
+  });
+}
+
+/**
+ * Reserva número + CHAVE DE ACESSO de uma vez, de forma SÍNCRONA, DENTRO de
+ * uma transação já aberta por quem chama (`tx` — venda.service.
+ * registrarDentroDaTransacao). Existe pra resolver um problema real: o
+ * DANFE precisa ser impresso NO MOMENTO da venda (o cliente está no caixa
+ * esperando), mas a emissão de verdade (chamada à SEFAZ) roda depois, num
+ * worker assíncrono (filaEmissaoNfce.service, até
+ * INTERVALO_PROCESSAMENTO_MINUTOS de atraso) — sem isto, a chave de acesso
+ * (e o QR Code que vai no DANFE) simplesmente não existiriam ainda no
+ * instante em que o cupom precisa sair impresso.
+ * NÃO usa reservarNumeroNfce acima (que abre sua PRÓPRIA transação) —
+ * precisa rodar dentro da MESMA transação que cria a Venda: se essa
+ * transação de fora reverter (ex: retry por lock timeout, já existe em
+ * venda.service.registrar), o incremento do contador reverte junto, sem
+ * deixar buraco na sequência.
+ * A chave calculada aqui é DEFINITIVA — gerarXmlNfce (nfceXml.service),
+ * quando o worker assíncrono chamar depois, REAPROVEITA ela tal como está
+ * (ver nota lá) em vez de recalcular, pra nunca divergir do que já foi
+ * impresso e entregue ao cliente.
+ * Só chamada quando a venda tem configuração fiscal completa e NÃO é uma
+ * contingência já assinada (ver venda.service.registrar) — nesses dois
+ * outros casos não faz sentido reservar aqui.
+ */
+async function reservarNumeroEChaveNfceNaTransacao(tx, tenantId, tenant, dataVenda) {
+  const tenantAtualizado = await tx.tenant.update({
+    where: { id: tenantId },
+    data: { ultimoNumeroNfce: { increment: 1 } },
+  });
+  const numero = tenantAtualizado.ultimoNumeroNfce;
+  const cNF = Math.floor(Math.random() * 99999999);
+  const chaveAcesso = montarChaveAcessoPlaceholder(tenant, { numero, cNF, dataEmissao: dataVenda, tpEmis: TP_EMIS_NORMAL });
+  return { numero, chaveAcesso };
+}
+
+/**
+ * Recalcula o tributo de cada item no momento da emissão; item que já tem
+ * snapshot gravado não é recalculado. Busca os indicadores fiscais
+ * (CatalogoCstIbsCbs/CatalogoClassTrib) EM LOTE — 2 queries fixas pra
+ * venda inteira, não 2 por item — e monta um mapa em memória pra resolver
+ * cada produto (mesmo padrão de pdvSnapshot.service.js; os catálogos são
+ * pequenos e globais, 18/164 códigos ao todo, cabem inteiros em memória).
+ * Achado de revisão (2026-07-18): a versão anterior buscava por item
+ * (buscarClassificacaoFiscal, 2 queries cada), gerando até 2×N consultas
+ * numa venda com N itens — desnecessário e inconsistente com o padrão já
+ * usado em pdvSnapshot.service.js no mesmo diff.
+ * Só busca no catálogo se pelo menos um item ainda precisar de
+ * classificação (evita a query em lote à toa quando tudo já veio com
+ * snapshot gravado).
+ */
+async function itensComTributo(venda, tenant) {
+  const precisaResolver = venda.itens.some((item) => !item.cstIbsCbsAplicado);
+  const [indicadoresCst, indicadoresClassTrib] = precisaResolver
+    ? await Promise.all([listarIndicadoresCst(), listarIndicadoresClassTrib()])
+    : [[], []];
+  const mapaCst = new Map(indicadoresCst.map((c) => [c.codigo, c]));
+  const mapaClassTrib = new Map(indicadoresClassTrib.map((c) => [c.codigo, c]));
+
   return venda.itens.map((item) => {
     if (item.cstIbsCbsAplicado) return item;
-    const tributo = calcularTributoItem(tenant, item.produto, Number(item.total));
+    const classificacaoFiscal = montarClassificacaoFiscal(mapaCst.get(item.produto.cstIbsCbs), mapaClassTrib.get(item.produto.cClassTrib));
+    const tributo = calcularTributoItem(tenant, item.produto, Number(item.total), classificacaoFiscal);
     return { ...item, ...tributo };
   });
 }
@@ -245,7 +327,8 @@ async function emitirNfce(tenantId, vendaId, { chamarWebservice } = {}) {
 
   const vendaCarregada = await vendaRepo.buscarParaEmissao(tenantId, vendaId);
   if (!vendaCarregada) throw new AppError('Venda não encontrada', 404);
-  const venda = { ...vendaCarregada, tenant, itens: itensComTributo(vendaCarregada, tenant) };
+  const numeroNfce = await reservarNumeroNfce(tenantId, vendaId, vendaCarregada.numeroNfce);
+  const venda = { ...vendaCarregada, numeroNfce, tenant, itens: await itensComTributo(vendaCarregada, tenant) };
 
   const urls = resolverUrlsFiscais(tenant.uf, tenant.ambienteFiscal);
   const chamador = chamarWebservice || (mockAtivo() ? chamarWebserviceMock : chamarWebserviceReal);
@@ -402,6 +485,8 @@ module.exports = {
   emitirNfce,
   cancelarNfce,
   mockAtivo,
+  reservarNumeroNfce,
+  reservarNumeroEChaveNfceNaTransacao,
   // Exportado só para o teste de integração manual (TESTE_INTEGRACAO_SEFAZ=true)
   // exercitar a chamada real à SEFAZ diretamente, sem depender de
   // gerarXmlNfce (que ainda não é schema-completo — ver ressalva na
