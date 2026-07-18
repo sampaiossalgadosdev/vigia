@@ -69,6 +69,15 @@ model Tenant {
   regimeTributario       String      @default("simples")
   ativo                  Boolean     @default(true)
   ultimoCodigoReferencia Int         @default(0)
+  // Contador sequencial real de NFC-e (série 1, emissão normal) — mesmo
+  // padrão de ultimoCodigoReferencia acima: incrementado atomicamente
+  // dentro de uma $transaction (nfceEmissao.service.reservarNumeroNfce),
+  // usado no <nNF> e na chave de acesso. Substitui o placeholder aleatório
+  // que existia desde a Fase 1b. Só cobre a série 1 (emissão online) — a
+  // numeração de contingência off-line (série dedicada, decisão confirmada
+  // com o usuário) tem seu próprio contador local no app ASSINATURA da
+  // loja, sem relação com este campo.
+  ultimoNumeroNfce       Int         @default(0)
   // Certificado digital A1 do tenant, criptografado com AES-256-GCM
   // (chave em CERT_ENCRYPTION_KEY). Gerido só pelo Super Admin. É o MESMO
   // certificado usado tanto pra Distribuição DF-e/manifestação (NF-e de
@@ -656,6 +665,14 @@ model Venda {
   troco              Decimal   @default(0) @db.Decimal(10, 2)
   cpfConsumidor      String?
   chaveNfce          String? // chave de acesso REAL de 44 dígitos após autorização da SEFAZ (Fase 1c) — nunca recebe localId (ver campo localId abaixo)
+  // Número sequencial REAL da NFC-e (série 1, emissão normal) — reservado
+  // atomicamente em Tenant.ultimoNumeroNfce (nfceEmissao.service.
+  // reservarNumeroNfce) na PRIMEIRA tentativa de emissão desta venda, e
+  // reaproveitado em qualquer retry (nunca reservado de novo — isso criaria
+  // um número "gasto" a cada falha de conexão). null enquanto a venda ainda
+  // não tentou emitir (nao_aplicavel, ou pendente que ainda não rodou no
+  // worker). Substituiu o placeholder aleatório de nfceXml.service.js.
+  numeroNfce         Int?
   // Identificador gerado no client (Fase 3b — fila offline do PDV), imutável,
   // nunca sobrescrito por nada (diferente de chaveNfce, que é substituído
   // pela chave fiscal real após a emissão). @unique é constraint de banco,
@@ -672,7 +689,13 @@ model Venda {
   motivoCancelamento String?
   // Emissão fiscal da NFC-e (Fase 1c) — preenchidos por nfceEmissao.service.
   emitidoEm              DateTime? // momento da autorização (não confundir com dataVenda, o momento da venda, nem com criadoEm, o momento do INSERT)
-  emitidoViaContingencia Boolean   @default(false) // true quando autorizado via SVC (SEFAZ do estado estava fora do ar)
+  // true quando autorizada a partir de um XML de contingência off-line
+  // (tpEmis=9) assinado fora do backend pelo app ASSINATURA da loja e só
+  // transmitido aqui — ver nfceContingenciaTransmissao.service.js. NÃO é
+  // sobre contingência SVC (SEFAZ do estado fora do ar): essa foi
+  // decisão explicitamente abandonada, ver nota "SEM CONTINGÊNCIA SVC"
+  // em nfceEmissao.service.js — o nome do campo ficou, o significado mudou.
+  emitidoViaContingencia Boolean   @default(false)
   protocoloAutorizacao   String?
   // XML gerado na tentativa de emissão (Fase 1c complemento) — salvo mesmo
   // quando a SEFAZ rejeita (cStat != 100): é o registro do que foi de fato
@@ -689,7 +712,11 @@ model Venda {
   // fila) | pendente: aguardando o worker | emitido: sucesso | rejeitado:
   // SEFAZ respondeu recusando o conteúdo (não tenta de novo sozinho) |
   // falha_temporaria: falha de conexão no principal E no SVC (tenta de
-  // novo em proximaTentativaEm).
+  // novo em proximaTentativaEm) | contingencia_pendente_transmissao: XML
+  // já assinado em contingência off-line pelo app ASSINATURA da loja,
+  // aguardando SÓ a transmissão à SEFAZ (worker separado,
+  // filaTransmissaoContingencia.service.js — NUNCA processado pelo worker
+  // de 'pendente', que geraria uma segunda NFC-e do zero).
   statusEmissaoFiscal String    @default("nao_aplicavel")
   tentativasEmissao   Int       @default(0)
   ultimaTentativaEm   DateTime?
@@ -957,6 +984,14 @@ model CatalogoCsosn {
 model CatalogoCstIbsCbs {
   codigo             String    @id // 3 dígitos
   descricao          String    @db.Text
+  // Indicadores da aba "CST 2026-06-01 Pub" (colunas ind_gIBSCBS/ind_gRed) —
+  // usados por nfceXml.service.js/montarGrupoIbsCbs pra decidir se o grupo
+  // de valor (gIBSCBS) é omitido (indGIbsCbs=false, ex.: CST 410 — imunidade)
+  // e se o subgrupo de redução de alíquota (gRed) é obrigatório (indGRed=true,
+  // ex.: CST 200 — alíquota reduzida, NT 2025.002 regras UB64-10/UB64-20).
+  // Nulo = catálogo ainda não reimportado com estas colunas.
+  indGIbsCbs         Boolean?
+  indGRed            Boolean?
   dataInicioVigencia DateTime?
   dataFimVigencia    DateTime?
   atualizadoEm       DateTime  @updatedAt
@@ -973,6 +1008,12 @@ model CatalogoClassTrib {
   descricao          String    @db.Text
   dispositivoLegal   String?   @db.Text // artigo da LC 214/2025 correspondente
   versaoInforme      String? // versão do Informe Técnico 2025.002 de onde veio (ex: "1.60")
+  // Percentual oficial de redução de alíquota (aba "cClass 2026-06-01 Pub",
+  // colunas pRedIBS/pRedCBS, 0-100) — só têm sentido quando o CST vinculado
+  // tem indGRed=true (CatalogoCstIbsCbs). Usado pra montar gIBSUF/gRed e
+  // gCBS/gRed (NT 2025.002 regras UB65-10/UB66-10).
+  pRedIbs            Decimal?  @db.Decimal(5, 2)
+  pRedCbs            Decimal?  @db.Decimal(5, 2)
   dataInicioVigencia DateTime?
   dataFimVigencia    DateTime?
   atualizadoEm       DateTime  @updatedAt
