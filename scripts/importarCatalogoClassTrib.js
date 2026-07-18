@@ -4,12 +4,20 @@
  * reais do Informe Técnico RT 2025.002 (Portal Nacional da NF-e) — fonte:
  * DOCS/cClassTrib 2026-06-22.xlsx, publicado em duas abas:
  *   - "CST 2026-06-01 Pub": Código Situação Tributária do IBS/CBS (TCST, 3
- *     dígitos) + descrição. Sem colunas de vigência nesta aba — fica
- *     dataInicioVigencia/dataFimVigencia nulas (não há data-fonte pra
+ *     dígitos) + descrição + indicadores ind_gIBSCBS (col. 2) e ind_gRed
+ *     (col. 4), usados por nfceXml.service.js pra decidir se o grupo de
+ *     valor é omitido (CST 410 — imunidade) e se o subgrupo gRed é exigido
+ *     (CST 200 — alíquota reduzida). Sem colunas de vigência nesta aba —
+ *     fica dataInicioVigencia/dataFimVigencia nulas (não há data-fonte pra
  *     inventar).
  *   - "cClass 2026-06-01 Pub": Código de Classificação Tributária (6
  *     dígitos) + descrição completa + dispositivo legal (coluna "LC
- *     Redação") + vigência (dIniVig/dFimVig, serial Excel).
+ *     Redação") + vigência (dIniVig/dFimVig, serial Excel) + percentuais
+ *     oficiais de redução pRedIBS (col. 10) e pRedCBS (col. 11).
+ * Índices de coluna conferidos manualmente contra o cabeçalho real da
+ * planilha (2026-07-18) — a aba não muda de estrutura entre publicações do
+ * mesmo Informe Técnico, mas confirme os índices se um novo arquivo-fonte
+ * for usado no futuro.
  * Upsert idempotente — pode rodar de novo sem duplicar.
  * Uso: node scripts/importarCatalogoClassTrib.js
  */
@@ -36,16 +44,30 @@ function linhasDaAba(wb, nomeAba) {
   return dados.filter((l) => l[0] !== '' && l[0] !== undefined);
 }
 
+/** Célula 0/1 da planilha → Boolean, ou null se a célula vier vazia. */
+function paraBooleano(valor) {
+  if (valor === '' || valor === undefined || valor === null) return null;
+  return Number(valor) === 1;
+}
+
+/** Célula percentual (0-100) da planilha → Number, ou null se vazia. */
+function paraPercentual(valor) {
+  if (valor === '' || valor === undefined || valor === null) return null;
+  return Number(valor);
+}
+
 async function importarCstIbsCbs(wb) {
   const linhas = linhasDaAba(wb, 'CST 2026-06-01 Pub');
   let importados = 0;
   for (const linha of linhas) {
     const codigo = String(linha[0]);
     const descricao = String(linha[1]);
+    const indGIbsCbs = paraBooleano(linha[2]); // coluna "ind_gIBSCBS"
+    const indGRed = paraBooleano(linha[4]); // coluna "ind_gRed"
     await prisma.catalogoCstIbsCbs.upsert({
       where: { codigo },
-      create: { codigo, descricao },
-      update: { descricao },
+      create: { codigo, descricao, indGIbsCbs, indGRed },
+      update: { descricao, indGIbsCbs, indGRed },
     });
     importados++;
   }
@@ -59,12 +81,14 @@ async function importarClassTrib(wb) {
     const codigo = String(linha[2]); // coluna "cClassTrib"
     const descricao = String(linha[4]); // coluna "Descrição cClassTrib"
     const dispositivoLegal = linha[5] ? String(linha[5]) : null; // coluna "LC Redação"
+    const pRedIbs = paraPercentual(linha[10]); // coluna "pRedIBS"
+    const pRedCbs = paraPercentual(linha[11]); // coluna "pRedCBS"
     const dataInicioVigencia = dataDeSerialExcel(linha[21]); // coluna "dIniVig"
     const dataFimVigencia = dataDeSerialExcel(linha[22]); // coluna "dFimVig"
     await prisma.catalogoClassTrib.upsert({
       where: { codigo },
-      create: { codigo, descricao, dispositivoLegal, versaoInforme: VERSAO_INFORME, dataInicioVigencia, dataFimVigencia },
-      update: { descricao, dispositivoLegal, versaoInforme: VERSAO_INFORME, dataInicioVigencia, dataFimVigencia },
+      create: { codigo, descricao, dispositivoLegal, versaoInforme: VERSAO_INFORME, pRedIbs, pRedCbs, dataInicioVigencia, dataFimVigencia },
+      update: { descricao, dispositivoLegal, versaoInforme: VERSAO_INFORME, pRedIbs, pRedCbs, dataInicioVigencia, dataFimVigencia },
     });
     importados++;
   }

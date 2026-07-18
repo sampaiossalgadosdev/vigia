@@ -133,6 +133,39 @@ test('CatalogoClassTrib: 3 códigos de incorporação imobiliária (220001/22000
   assert.equal(await repo.existeClassTrib('220003'), false);
 });
 
+/**
+ * buscarClassificacaoFiscal: usado por nfceEmissao.service.itensComTributo
+ * pra alimentar tributoFiscal.service.calcularTributoItem com os
+ * indicadores oficiais (NT 2025.002-RTC v1.50 — pesquisa de 2026-07-18).
+ * '000'/'000001' (tributação integral, sem redução), '200'/'200003'
+ * (alíquota reduzida — cesta básica, pRedIBS=pRedCBS=100, Art. 125 LC
+ * 214/2025) e '410'/'410008' (imunidade, indGIbsCbs=false — livros/jornais)
+ * são códigos REAIS já usados nos outros testes deste arquivo e em
+ * tributoFiscal.test.js/nfceXml.test.js.
+ */
+test('buscarClassificacaoFiscal: CST 000 + cClassTrib 000001 (tributação integral) — indGIbsCbs=true, indGRed=false', async () => {
+  const resultado = await repo.buscarClassificacaoFiscal('000', '000001');
+  assert.deepEqual(resultado, { indGIbsCbs: true, indGRed: false, pRedIbs: 0, pRedCbs: 0 });
+});
+
+test('buscarClassificacaoFiscal: CST 200 + cClassTrib 200003 (cesta básica) — indGRed=true, pRedIbs=pRedCbs=100', async () => {
+  const resultado = await repo.buscarClassificacaoFiscal('200', '200003');
+  assert.equal(resultado.indGIbsCbs, true);
+  assert.equal(resultado.indGRed, true);
+  assert.equal(resultado.pRedIbs, 100);
+  assert.equal(resultado.pRedCbs, 100);
+});
+
+test('buscarClassificacaoFiscal: CST 410 (imunidade) + cClassTrib 410008 (livros/jornais) — indGIbsCbs=false', async () => {
+  const resultado = await repo.buscarClassificacaoFiscal('410', '410008');
+  assert.equal(resultado.indGIbsCbs, false);
+});
+
+test('buscarClassificacaoFiscal: código inexistente retorna null (nunca inventa um indicador default)', async () => {
+  assert.equal(await repo.buscarClassificacaoFiscal('999', '000001'), null);
+  assert.equal(await repo.buscarClassificacaoFiscal('000', '999999'), null);
+});
+
 after(async () => {
   await prisma.$disconnect();
 });
