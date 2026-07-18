@@ -22,6 +22,10 @@ async function listarProdutos(tenantId) {
       controlaLote: true,
       categoriaId: true,
       updatedAt: true,
+      ncm: true,
+      cfop: true,
+      cstIbsCbs: true,
+      cClassTrib: true,
     },
   });
 }
@@ -43,4 +47,22 @@ async function listarEstoqueComLotes(depositoId) {
   });
 }
 
-module.exports = { listarProdutos, listarEstoqueComLotes };
+/**
+ * Dados fiscais do tenant pro PDV cachear localmente (pré-requisito pra
+ * montar XML de NFC-e em contingência quando o backend estiver fora do ar).
+ * Select EXPLÍCITO de propósito — nunca inclui certificadoPfx/
+ * certificadoSenha/csc* (nada disso vai pro PDV; a chave privada só existe
+ * no app ASSINATURA, protegida por safeStorage).
+ */
+async function buscarDadosFiscais(tenantId) {
+  return prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: {
+      cnpj: true, nome: true, uf: true, regimeTributario: true, ambienteFiscal: true,
+      inscricaoEstadual: true, logradouro: true, numero: true, complemento: true,
+      bairro: true, municipio: true, codigoMunicipioIbge: true, cep: true,
+    },
+  });
+}
+
+module.exports = { listarProdutos, listarEstoqueComLotes, buscarDadosFiscais };
