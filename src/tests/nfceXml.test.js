@@ -23,15 +23,20 @@ function montarVendaDeTeste(regimeTributario = 'real') {
     logradouro: 'Rua das Flores', numero: '123', complemento: 'Loja 2', bairro: 'Centro',
     municipio: 'Curitiba', codigoMunicipioIbge: '4106902', cep: '80000-000',
   };
-  const produto = { id: 'prod-1', codigoReferencia: '1', nome: 'Arroz 5kg', ncm: '10063011', cfop: '5102', unidade: 'UN' };
-  const tributo = calcularTributoItem(tenant, produto, 27.9);
+  // cstIbsCbs '000'/cClassTrib '000001': códigos REAIS confirmados contra
+  // DOCS/cClassTrib 2026-06-22.xlsx (RT 2025.002) — ver tributoFiscal.test.js.
+  // indGIbsCbs=true/indGRed=false: indicadores REAIS de '000' (Tributação
+  // integral, sem redução) no catálogo — ver CLASSIFICACAO_FISCAL_INTEGRAL
+  // em tributoFiscal.test.js.
+  const produto = { id: 'prod-1', codigoReferencia: '1', nome: 'Arroz 5kg', ncm: '10063011', cfop: '5102', unidade: 'UN', cstIbsCbs: '000', cClassTrib: '000001' };
+  const classificacaoFiscal = { indGIbsCbs: true, indGRed: false, pRedIbs: null, pRedCbs: null };
+  const tributo = calcularTributoItem(tenant, produto, 27.9, classificacaoFiscal);
   const item = {
     produto, quantidade: 1, precoUnitario: 27.9, total: 27.9,
-    valorIbs: tributo.valorIbs, valorCbs: tributo.valorCbs,
-    cstIbsCbsAplicado: tributo.cstIbsCbsAplicado, cClassTribAplicado: tributo.cClassTribAplicado,
+    ...tributo,
   };
   const venda = {
-    id: 'venda-1', criadoEm: new Date('2026-07-15T12:00:00Z'),
+    id: 'venda-1', criadoEm: new Date('2026-07-15T12:00:00Z'), numeroNfce: 1,
     subtotal: 27.9, total: 27.9, desconto: 0,
     tenant, itens: [item], pagamentos: [{ forma: 'pix', valor: 27.9 }],
   };
@@ -39,7 +44,7 @@ function montarVendaDeTeste(regimeTributario = 'real') {
 }
 
 test('gerarXmlNfce produz XML parseável com IBS/CBS, NCM, CFOP e valores batendo com o calculado', () => {
-  const { venda, tributo } = montarVendaDeTeste();
+  const { venda, tributo, item } = montarVendaDeTeste();
   const { xml, chaveAcesso } = gerarXmlNfce(venda);
 
   assert.equal(typeof xml, 'string');
@@ -57,13 +62,12 @@ test('gerarXmlNfce produz XML parseável com IBS/CBS, NCM, CFOP e valores batend
   assert.equal(det.prod.CFOP, '5102');
   assert.equal(Number(det.prod.vProd), 27.9);
 
-  // CST/cClassTrib no XML são o placeholder NUMÉRICO (formato exigido pelo
-  // schema, \d{3}/\d{6}) -- não o marcador de texto de tributoFiscal.service
-  // (cstIbsCbsAplicado/cClassTribAplicado), que continua sendo usado
-  // internamente/no banco. Ver nfceXml.service.js pra detalhes.
+  // CST/cClassTrib no XML são o código REAL cadastrado no produto (ver
+  // montarVendaDeTeste acima) — repassado tal como está por
+  // tributoFiscal.service.calcularTributoItem, sem tradução/placeholder.
   const ibscbs = det.imposto.IBSCBS;
-  assert.match(ibscbs.CST, /^\d{3}$/);
-  assert.match(ibscbs.cClassTrib, /^\d{6}$/);
+  assert.equal(ibscbs.CST, item.produto.cstIbsCbs);
+  assert.equal(ibscbs.cClassTrib, item.produto.cClassTrib);
   assert.equal(Number(ibscbs.gIBSCBS.gCBS.vCBS), tributo.valorCbs);
   assert.equal(Number(ibscbs.gIBSCBS.gIBSUF.vIBSUF), tributo.valorIbs);
   assert.equal(Number(ibscbs.gIBSCBS.vIBS), tributo.valorIbs);
@@ -174,4 +178,116 @@ test('gerarXmlNfce: passa limpo na validação de schema padrão da lib (JS-base
 
     await assert.doesNotReject(() => NFE_SchemaValidate(comIdESignatureFicticios(xml, chaveAcesso), 'NFEAutorizacao'), `regime ${regime} deveria passar na validação de schema`);
   }
+});
+
+test('gerarXmlNfce: número usado no <nNF> e na chave de acesso é exatamente venda.numeroNfce (sequencial real, não mais aleatório)', () => {
+  const { venda } = montarVendaDeTeste();
+  venda.numeroNfce = 42;
+  const { xml, chaveAcesso } = gerarXmlNfce(venda);
+
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const nNF = parser.parse(xml).NFe.infNFe.ide.nNF;
+  assert.equal(nNF, '42');
+  // Chave de acesso: posições 25-33 (34-42 em base-1) são o número, 9 dígitos com zero à esquerda.
+  assert.equal(chaveAcesso.slice(25, 34), '000000042');
+});
+
+test('gerarXmlNfce: lança erro claro se numeroNfce não foi reservado antes (nunca cai num placeholder aleatório silencioso)', () => {
+  const { venda } = montarVendaDeTeste();
+  delete venda.numeroNfce;
+  assert.throws(
+    () => gerarXmlNfce(venda),
+    (err) => err.status === 500 && /numeroNfce não foi reservado/.test(err.message)
+  );
+});
+
+test('gerarXmlNfce: lança erro claro se a data de emissão é 2027 ou depois — rateio IBS estadual/municipal (Art. 344, LC 214/2025) ainda não foi implementado', () => {
+  const { venda } = montarVendaDeTeste('real');
+  venda.criadoEm = new Date('2027-01-01T03:00:00Z'); // 2027-01-01 00:00 no fuso BR (-03:00) — exatamente o corte
+  assert.throws(
+    () => gerarXmlNfce(venda),
+    (err) => err.status === 500 && /Rateio de IBS entre estado e município desatualizado/.test(err.message)
+  );
+});
+
+test('gerarXmlNfce: 2026 (ano corrente da alíquota-teste) continua emitindo normalmente — guard de 2027 não dispara antes da hora', () => {
+  const { venda } = montarVendaDeTeste('real');
+  venda.criadoEm = new Date('2026-12-31T23:59:59Z');
+  assert.doesNotThrow(() => gerarXmlNfce(venda));
+});
+
+/**
+ * CST 200 + cClassTrib 200003 (cesta básica) — códigos REAIS confirmados
+ * no catálogo (DOCS/cClassTrib 2026-06-22.xlsx, Art. 125 LC 214/2025:
+ * "Ficam reduzidas a zero as alíquotas do IBS e da CBS" — pRedIBS=
+ * pRedCBS=100). NT 2025.002-RTC v1.50, regras UB65-10/UB66-10: pIBSUF/pCBS
+ * SEMPRE mostram a alíquota estatutária cheia (0,1%/0,9%); é gRed/pAliqEfet
+ * que reflete o percentual líquido, e vIBSUF/vCBS o valor já reduzido.
+ */
+test('gerarXmlNfce: CST 200 com redução de alíquota (cesta básica, pRedIBS=pRedCBS=100) — monta gIBSUF/gRed e gCBS/gRed corretamente, pIBSUF/pCBS continuam com a alíquota estatutária cheia', () => {
+  const { venda, tenant } = montarVendaDeTeste('real');
+  const produto = { id: 'prod-2', codigoReferencia: '2', nome: 'Feijão 1kg', ncm: '07133399', cfop: '5102', unidade: 'UN' };
+  const classificacaoFiscal = { indGIbsCbs: true, indGRed: true, pRedIbs: 100, pRedCbs: 100 };
+  const tributo = calcularTributoItem(tenant, { ...produto, cstIbsCbs: '200', cClassTrib: '200003' }, 10, classificacaoFiscal);
+  venda.itens = [{ produto, quantidade: 1, precoUnitario: 10, total: 10, ...tributo }];
+
+  const { xml, chaveAcesso } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const ibscbs = parser.parse(xml).NFe.infNFe.det.imposto.IBSCBS;
+
+  assert.equal(ibscbs.CST, '200');
+  assert.equal(ibscbs.cClassTrib, '200003');
+  assert.equal(ibscbs.gIBSCBS.gIBSUF.pIBSUF, '0.10', 'pIBSUF continua sendo a alíquota estatutária, não a reduzida (UB65-10/UB66-10)');
+  assert.equal(ibscbs.gIBSCBS.gCBS.pCBS, '0.90');
+  assert.equal(ibscbs.gIBSCBS.gIBSUF.gRed.pRedAliq, '100.00');
+  assert.equal(ibscbs.gIBSCBS.gCBS.gRed.pRedAliq, '100.00');
+  assert.equal(Number(ibscbs.gIBSCBS.gIBSUF.gRed.pAliqEfet), 0, 'redução de 100% zera a alíquota efetiva');
+  assert.equal(Number(ibscbs.gIBSCBS.gCBS.gRed.pAliqEfet), 0);
+  assert.equal(Number(ibscbs.gIBSCBS.gIBSUF.vIBSUF), 0);
+  assert.equal(Number(ibscbs.gIBSCBS.gCBS.vCBS), 0);
+});
+
+test('gerarXmlNfce: CST 200 com redução parcial (60%) — pAliqEfet e vIBSUF/vCBS refletem o percentual líquido, passa na validação de schema real', async () => {
+  const { venda, tenant } = montarVendaDeTeste('real');
+  const produto = { id: 'prod-3', codigoReferencia: '3', nome: 'Biscoito', ncm: '19053100', cfop: '5102', unidade: 'UN' };
+  const classificacaoFiscal = { indGIbsCbs: true, indGRed: true, pRedIbs: 60, pRedCbs: 60 };
+  const tributo = calcularTributoItem(tenant, { ...produto, cstIbsCbs: '200', cClassTrib: '200034' }, 100, classificacaoFiscal);
+  venda.itens = [{ produto, quantidade: 1, precoUnitario: 100, total: 100, ...tributo }];
+
+  const { xml, chaveAcesso } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const ibscbs = parser.parse(xml).NFe.infNFe.det.imposto.IBSCBS;
+
+  // pAliqEfet = 0.1 * (1 - 0.6) = 0.04 ; 0.9 * (1 - 0.6) = 0.36
+  assert.equal(ibscbs.gIBSCBS.gIBSUF.gRed.pAliqEfet, '0.0400');
+  assert.equal(ibscbs.gIBSCBS.gCBS.gRed.pAliqEfet, '0.3600');
+  assert.equal(Number(ibscbs.gIBSCBS.gIBSUF.vIBSUF), 0.04);
+  assert.equal(Number(ibscbs.gIBSCBS.gCBS.vCBS), 0.36);
+
+  await assert.doesNotReject(() => NFE_SchemaValidate(comIdESignatureFicticios(xml, chaveAcesso), 'NFEAutorizacao'), 'XML com gRed parcial deveria passar na validação de schema padrão');
+});
+
+/**
+ * CST 410 (imunidade/não incidência) — código REAL confirmado no catálogo.
+ * NT 2025.002-RTC v1.50: "Se CST do IBS/CBS informado possui indicador que
+ * não permite a informação do IBS/CBS (ind_gIBSCBS = 0): Grupo gIBSCBS
+ * informado" é rejeição — o grupo de valor precisa vir OMITIDO, não com
+ * zeros.
+ */
+test('gerarXmlNfce: CST 410 (imunidade — livros/jornais) — omite o grupo gIBSCBS inteiro, mantém CST/cClassTrib, passa na validação de schema real', async () => {
+  const { venda, tenant } = montarVendaDeTeste('real');
+  const produto = { id: 'prod-4', codigoReferencia: '4', nome: 'Livro Infantil', ncm: '49019900', cfop: '5102', unidade: 'UN' };
+  const classificacaoFiscal = { indGIbsCbs: false, indGRed: false, pRedIbs: null, pRedCbs: null };
+  const tributo = calcularTributoItem(tenant, { ...produto, cstIbsCbs: '410', cClassTrib: '410008' }, 30, classificacaoFiscal);
+  venda.itens = [{ produto, quantidade: 1, precoUnitario: 30, total: 30, ...tributo }];
+
+  const { xml, chaveAcesso } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const ibscbs = parser.parse(xml).NFe.infNFe.det.imposto.IBSCBS;
+
+  assert.equal(ibscbs.CST, '410');
+  assert.equal(ibscbs.cClassTrib, '410008');
+  assert.equal(ibscbs.gIBSCBS, undefined, 'CST com ind_gIBSCBS=0 não deve emitir o grupo de valor');
+
+  await assert.doesNotReject(() => NFE_SchemaValidate(comIdESignatureFicticios(xml, chaveAcesso), 'NFEAutorizacao'), 'XML com CST 410 (sem gIBSCBS) deveria passar na validação de schema');
 });
