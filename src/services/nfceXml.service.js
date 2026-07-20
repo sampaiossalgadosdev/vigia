@@ -63,6 +63,38 @@ function mapearFormaPagamentoParaTPag(forma) {
 }
 
 /**
+ * Grupo `pag` (detPag[] + vTroco opcional) — campo YA09 (vTroco), regra de
+ * validação YA09-10, confirmados via NT 2016.002 (pesquisa de 2026-07-19,
+ * fonte: nfe.fazenda.gov.br) e o código de rejeição real documentado por um
+ * ERP de mercado (Sankhya) pra "ausência de troco quando o valor dos
+ * pagamentos informados for maior que o total da nota". Fórmula oficial:
+ * vTroco = Σ(vPag) - vNF.
+ * `venda.pagamentos[].valor`/`VendaPagamento.valor` guardam o valor LÍQUIDO
+ * de cada pagamento (nunca inflado pelo troco — ver venda.service.registrar,
+ * que existe justamente pra não distorcer Caixa.totalDinheiro e o dashboard
+ * de vendas por forma de pagamento). O valor TENDERIZADO que o schema da
+ * NFC-e espera em vPag (pra Σ(vPag) > vNF disparar a regra) só é
+ * reconstruído aqui, na hora de montar o XML — nunca no dado persistido.
+ * Exige que exista uma entrada 'dinheiro' em pagamentos quando venda.troco
+ * > 0 — nunca deveria acontecer (Pagamento.jsx só produz troco em dinheiro,
+ * venda.service.registrar valida o mesmo antes de persistir), mas lançar
+ * aqui é mais seguro que inflar a entrada errada (ou a primeira) em
+ * silêncio se essa invariante um dia quebrar.
+ */
+function montarGrupoPagamento(venda) {
+  const detPag = (venda.pagamentos || []).map((p) => ({ tPag: mapearFormaPagamentoParaTPag(p.forma), vPag: arredondar2(p.valor) }));
+  const troco = Number(venda.troco || 0);
+  if (troco <= 0) return { detPag };
+
+  const idxDinheiro = (venda.pagamentos || []).findIndex((p) => p.forma === 'dinheiro');
+  if (idxDinheiro === -1)
+    throw new AppError('Venda com troco > 0 mas sem pagamento em dinheiro — inconsistência de dados', 500);
+  detPag[idxDinheiro] = { ...detPag[idxDinheiro], vPag: arredondar2(Number(venda.pagamentos[idxDinheiro].valor) + troco) };
+
+  return { detPag, vTroco: arredondar2(troco) };
+}
+
+/**
  * Formata data/hora no padrão exigido pelo schema (TDateTimeUTC: offset
  * explícito, não "Z"). Offset fixo em -03:00 (horário de Brasília, sem
  * horário de verão desde 2019) — mesma simplificação já assumida em
@@ -365,9 +397,7 @@ function gerarXmlNfce(venda, { tpEmis = '1' } = {}) {
         // NFC-e de balcão: sem transportador. modFrete=9 ("Sem transporte")
         // é o único campo exigido pelo schema neste grupo pra esse caso.
         transp: { modFrete: '9' },
-        pag: {
-          detPag: (venda.pagamentos || []).map((p) => ({ tPag: mapearFormaPagamentoParaTPag(p.forma), vPag: arredondar2(p.valor) })),
-        },
+        pag: montarGrupoPagamento(venda),
       },
     },
   };

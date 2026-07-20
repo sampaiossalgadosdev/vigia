@@ -42,8 +42,9 @@ async function criarVendaTransacao(payload) {
   });
 }
 
-async function atualizarStatus(tenantId, id, dados) {
-  return prisma.venda.update({ where: { id, tenantId }, data: dados });
+/** `tx` opcional (default o client singleton) — achado de revisão 2026-07-20: venda.service.cancelar() precisa gravar o status dentro da MESMA transação que reverte estoque/caixa (atomicidade completa). Chamadores existentes (nfceEmissao.service.emitirNfce/cancelarNfce, nfceContingenciaTransmissao.service) continuam iguais, sem passar o 4º argumento. */
+async function atualizarStatus(tenantId, id, dados, tx = prisma) {
+  return tx.venda.update({ where: { id, tenantId }, data: dados });
 }
 
 /**
@@ -55,7 +56,7 @@ async function buscarParaEmissao(tenantId, id) {
   return prisma.venda.findFirst({
     where: { id, tenantId },
     include: {
-      itens: { include: { produto: { select: { id: true, nome: true, codigoReferencia: true, ncm: true, cfop: true, unidade: true } } } },
+      itens: { include: { produto: { select: { id: true, nome: true, codigoReferencia: true, ncm: true, cfop: true, unidade: true, cstIbsCbs: true, cClassTrib: true } } } },
       pagamentos: true,
     },
   });
@@ -64,6 +65,21 @@ async function buscarParaEmissao(tenantId, id) {
 /** Só o essencial pra consulta do XML salvo (Fase 1c complemento) — evita trazer itens/pagamentos à toa. */
 async function buscarXml(tenantId, id) {
   return prisma.venda.findFirst({ where: { id, tenantId }, select: { id: true, xmlNfce: true, chaveNfce: true } });
+}
+
+/**
+ * Só o essencial pra montar a URL do QR Code (fatia DANFE) — chaveNfce da
+ * venda + os campos do tenant que montarUrlQrCode precisa (uf, ambiente,
+ * CSC ainda criptografado). Nunca traz certificadoPfx/certificadoSenha.
+ */
+async function buscarParaQrCode(tenantId, id) {
+  return prisma.venda.findFirst({
+    where: { id, tenantId },
+    select: {
+      id: true, chaveNfce: true,
+      tenant: { select: { uf: true, ambienteFiscal: true, cscProducao: true, cscProducaoId: true, cscHomologacao: true, cscHomologacaoId: true } },
+    },
+  });
 }
 
 async function buscarPorIdLocal(tenantId, idLocal) {
@@ -75,4 +91,4 @@ async function listarResumoDiario(tenantId, inicio, fim) {
   return prisma.venda.findMany({ where, orderBy: { dataVenda: 'asc' }, include: { pagamentos: true } });
 }
 
-module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao, buscarXml };
+module.exports = { listar, buscarPorId, criarVendaTransacao, atualizarStatus, buscarPorIdLocal, listarResumoDiario, buscarParaEmissao, buscarXml, buscarParaQrCode };

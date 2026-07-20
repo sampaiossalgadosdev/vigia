@@ -16,5 +16,10 @@ router.get('/:id/xml', gestao, controller.buscarXml);
 router.post('/', validator.registrar, controller.registrar);
 router.post('/:id/cancelar', gestao, controller.cancelar);
 router.post('/sync', controller.sync);
+// Sem gestao de propósito, mesmo raciocínio de registrar()/sync() acima:
+// o QR Code é buscado pelo PDV logo depois de uma venda pra imprimir o
+// DANFE na hora — quem vendeu precisa poder imprimir, independente da
+// matriz de permissões da retaguarda.
+router.get('/:id/qrcode', controller.buscarQrCode);
 
 module.exports = router;

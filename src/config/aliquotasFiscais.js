@@ -6,11 +6,24 @@
  * as atuais em 2027 (Lucro Presumido/Real) — quando isso mudar, a mudança
  * deve acontecer aqui, não numa busca por todo o código.
  *
- * ATENÇÃO — PENDENTE DE VALIDAÇÃO CONTÁBIL: a leitura de que o Simples
- * Nacional está dispensado em 2026 (só passa a destacar a partir de 2027) e
- * de que a alíquota-teste 2026 é 0,9% CBS + 0,1% IBS é a mais segura
- * disponível hoje (LC 214/2025), mas NÃO é uma certeza jurídica definitiva.
- * Confirme com o contador do cliente antes de operar em produção.
+ * ALÍQUOTA-TESTE 2026 CONFIRMADA (pesquisa externa em 2026-07-17, fontes
+ * secundárias que citam o texto literal — não direto no Diário Oficial/
+ * Planalto, indisponível no momento): Art. 346, LC 214/2025 — "a CBS será
+ * cobrada mediante aplicação da alíquota de 0,9%"; Art. 343, LC 214/2025 —
+ * "o IBS será cobrado mediante aplicação da alíquota estadual de 0,1%"
+ * (100% estadual em 2026, ver nfceXml.service.js/montarGrupoIbsCbs — o
+ * parágrafo único do Art. 343 tira essa arrecadação das repartições
+ * normais, não vai pro município). MUDA em 01/01/2027: Art. 344 — o
+ * mesmo 0,1% de IBS passa a 0,05% estadual + 0,05% municipal (o total de
+ * IBS/CBS aqui, e o rateio no XML, ainda não têm essa transição
+ * implementada — nfceXml.service.js já lança erro claro se tentar emitir
+ * com data de 2027+ sem isso).
+ *
+ * ATENÇÃO — AINDA PENDENTE DE VALIDAÇÃO CONTÁBIL: a leitura de que o
+ * Simples Nacional está dispensado em 2026 (só passa a destacar a partir
+ * de 2027) NÃO foi confirmada contra texto de lei nesta pesquisa — segue
+ * sem certeza jurídica definitiva. Confirme com o contador do cliente
+ * antes de operar em produção.
  */
 module.exports = {
   ALIQUOTA_TESTE_2026: {

@@ -14,7 +14,7 @@ require('dotenv').config();
 const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const prisma = require('../config/database');
-const { emitirNfce, cancelarNfce } = require('../services/nfceEmissao.service');
+const { emitirNfce, cancelarNfce, reservarNumeroNfce } = require('../services/nfceEmissao.service');
 const { resolverUrlsFiscais } = require('../config/webservicesSefaz');
 const { criptografar, criptografarTexto } = require('../utils/certcrypto');
 const { NFE_SchemaValidate } = require('@nfewizard/nfce');
@@ -39,13 +39,16 @@ async function criarTenantCompleto(sufixo) {
   });
 }
 
-async function criarVendaDeTeste(tenantId, { chaveNfce = 'localid-abc123', emitidoEm } = {}) {
+async function criarVendaDeTeste(tenantId, { chaveNfce = 'localid-abc123', emitidoEm, statusEmissaoFiscal } = {}) {
+  // cstIbsCbs '000'/cClassTrib '000001': códigos REAIS (RT 2025.002) —
+  // necessários pra emitirNfce chegar até o fim (ver tributoFiscal.service.js).
   const produto = await prisma.produto.create({
-    data: { tenantId, ean: '97' + Date.now().toString().slice(-11), nome: 'Produto Emissao Teste', preco: 20, ncm: '10063011', cfop: '5102' },
+    data: { tenantId, ean: '97' + Date.now().toString().slice(-11), nome: 'Produto Emissao Teste', preco: 20, ncm: '10063011', cfop: '5102', cstIbsCbs: '000', cClassTrib: '000001' },
   });
   const venda = await prisma.venda.create({
     data: {
       tenantId, subtotal: 20, total: 20, chaveNfce, emitidoEm,
+      ...(statusEmissaoFiscal ? { statusEmissaoFiscal } : {}),
       itens: { create: [{ produtoId: produto.id, quantidade: 1, precoUnitario: 20, custoUnitario: 10, subtotal: 20, total: 20 }] },
       pagamentos: { create: [{ forma: 'pix', valor: 20 }] },
     },
@@ -90,6 +93,60 @@ test('emitirNfce: tenant completo, mock retorna sucesso — chaveNfce vira a cha
     assert.ok(atualizada.emitidoEm);
   } finally {
     await limpar(tenant.id, venda.id, produto.id);
+  }
+});
+
+test('reservarNumeroNfce: emissões sucessivas do MESMO tenant recebem números sequenciais reais (1, 2, ...), não mais aleatórios', async () => {
+  const tenant = await criarTenantCompleto('09');
+  const { produto: produtoA, venda: vendaA } = await criarVendaDeTeste(tenant.id, { chaveNfce: 'localid-seq-a' });
+  const { produto: produtoB, venda: vendaB } = await criarVendaDeTeste(tenant.id, { chaveNfce: 'localid-seq-b' });
+  try {
+    const atualizadaA = await emitirNfce(tenant.id, vendaA.id);
+    const atualizadaB = await emitirNfce(tenant.id, vendaB.id);
+    assert.equal(atualizadaA.numeroNfce, 1, 'primeira emissão deste tenant começa em 1 (Tenant.ultimoNumeroNfce nasce em 0)');
+    assert.equal(atualizadaB.numeroNfce, 2, 'segunda emissão do mesmo tenant deve ser exatamente o próximo número, sem pular nem repetir');
+    // O <nNF> gravado no XML e embutido na chave de acesso precisam ser
+    // exatamente o número reservado — não um valor independente.
+    assert.match(atualizadaA.chaveNfce.slice(25, 34), /000000001/);
+    assert.match(atualizadaB.chaveNfce.slice(25, 34), /000000002/);
+  } finally {
+    await limpar(tenant.id, vendaA.id, produtoA.id);
+    await limpar(tenant.id, vendaB.id, produtoB.id);
+  }
+});
+
+test('reservarNumeroNfce: idempotente por venda — reprocessar a MESMA venda (retry de falha_temporaria) reaproveita o número já reservado, sem consumir um novo', async () => {
+  const tenant = await criarTenantCompleto('10');
+  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: 'localid-retry' });
+  try {
+    const primeiraReserva = await reservarNumeroNfce(tenant.id, venda.id, null);
+    // Simula um retry (filaEmissaoNfce chamando emitirNfce de novo pra
+    // mesma venda após falha_temporaria): lê o numeroNfce já persistido e
+    // repassa pra reservarNumeroNfce, exatamente como emitirNfce faz.
+    const vendaRecarregada = await prisma.venda.findUnique({ where: { id: venda.id } });
+    const segundaReserva = await reservarNumeroNfce(tenant.id, venda.id, vendaRecarregada.numeroNfce);
+    assert.equal(segundaReserva, primeiraReserva, 'retry da mesma venda deve reaproveitar o mesmo número, não reservar outro');
+
+    const tenantDepois = await prisma.tenant.findUnique({ where: { id: tenant.id } });
+    assert.equal(tenantDepois.ultimoNumeroNfce, primeiraReserva, 'Tenant.ultimoNumeroNfce só pode ter incrementado UMA vez, mesmo com duas chamadas');
+  } finally {
+    await limpar(tenant.id, venda.id, produto.id);
+  }
+});
+
+test('reservarNumeroNfce: tenants diferentes têm contadores independentes — cada um começa em 1', async () => {
+  const tenantX = await criarTenantCompleto('11x');
+  const tenantY = await criarTenantCompleto('11y');
+  const { produto: produtoX, venda: vendaX } = await criarVendaDeTeste(tenantX.id, { chaveNfce: 'localid-x' });
+  const { produto: produtoY, venda: vendaY } = await criarVendaDeTeste(tenantY.id, { chaveNfce: 'localid-y' });
+  try {
+    const numeroX = await reservarNumeroNfce(tenantX.id, vendaX.id, null);
+    const numeroY = await reservarNumeroNfce(tenantY.id, vendaY.id, null);
+    assert.equal(numeroX, 1);
+    assert.equal(numeroY, 1, 'contador de outro tenant não pode ser afetado pelo do primeiro');
+  } finally {
+    await limpar(tenantX.id, vendaX.id, produtoX.id);
+    await limpar(tenantY.id, vendaY.id, produtoY.id);
   }
 });
 
@@ -138,7 +195,7 @@ test('emitirNfce: Venda.xmlNfce é populado com o XML gerado tanto em sucesso qu
 
 test('cancelarNfce: dentro da janela — sucesso simulado, status da Venda atualizado', async () => {
   const tenant = await criarTenantCompleto('04');
-  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '3'.repeat(44), emitidoEm: new Date() });
+  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '3'.repeat(44), emitidoEm: new Date(), statusEmissaoFiscal: 'emitido' });
   try {
     const atualizada = await cancelarNfce(tenant.id, venda.id, 'Cliente desistiu da compra no caixa');
     assert.equal(atualizada.status, 'cancelada');
@@ -152,7 +209,7 @@ test('cancelarNfce: dentro da janela — sucesso simulado, status da Venda atual
 test('cancelarNfce: fora da janela (emitido há 40 minutos) — erro claro, sem tentar enviar o evento', async () => {
   const tenant = await criarTenantCompleto('05');
   const emitidoEm40minAtras = new Date(Date.now() - 40 * 60 * 1000);
-  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '4'.repeat(44), emitidoEm: emitidoEm40minAtras });
+  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '4'.repeat(44), emitidoEm: emitidoEm40minAtras, statusEmissaoFiscal: 'emitido' });
   try {
     let tentouEnviar = false;
     const enviarFake = async () => { tentouEnviar = true; return { ok: true, protocolo: 'X' }; };
@@ -162,6 +219,40 @@ test('cancelarNfce: fora da janela (emitido há 40 minutos) — erro claro, sem 
       (err) => err.status === 422 && /Prazo de cancelamento expirado/.test(err.message)
     );
     assert.equal(tentouEnviar, false, 'não deveria ter tentado enviar o evento — prazo já tinha expirado');
+  } finally {
+    await limpar(tenant.id, venda.id, produto.id);
+  }
+});
+
+test('cancelarNfce: venda com chaveNfce RESERVADA (fatia DANFE) mas statusEmissaoFiscal ainda "pendente" é rejeitada — chave não é sinônimo de autorizada', async () => {
+  const tenant = await criarTenantCompleto('12');
+  // Mesmo formato de chave que a reserva síncrona gera (44 dígitos) — a
+  // venda TEM uma chave, só não foi autorizada pela SEFAZ ainda (worker
+  // assíncrono nem rodou). Achado de revisão 2026-07-19: antes desta
+  // correção, cancelarNfce usava só `if (!venda.chaveNfce)` como guarda —
+  // esta venda passaria por essa checagem e tentaria mandar um evento de
+  // cancelamento pra um documento nunca autorizado (a SEFAZ rejeitaria por
+  // falta de protocolo — ver relatório da tarefa).
+  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '5'.repeat(44), statusEmissaoFiscal: 'pendente' });
+  try {
+    let tentouEnviar = false;
+    const enviarFake = async () => { tentouEnviar = true; return { ok: true, protocolo: 'X' }; };
+    await assert.rejects(
+      () => cancelarNfce(tenant.id, venda.id, 'Justificativa de teste com mais de 15 caracteres', { enviarEventoCancelamento: enviarFake }),
+      (err) => err.status === 422 && /não tem NFC-e autorizada/.test(err.message)
+    );
+    assert.equal(tentouEnviar, false, 'não deveria tentar enviar evento de cancelamento pra documento nunca autorizado');
+  } finally {
+    await limpar(tenant.id, venda.id, produto.id);
+  }
+});
+
+test('cancelarNfce: canceladoPor (repassado por venda.service.cancelar) é gravado quando informado', async () => {
+  const tenant = await criarTenantCompleto('13');
+  const { produto, venda } = await criarVendaDeTeste(tenant.id, { chaveNfce: '6'.repeat(44), emitidoEm: new Date(), statusEmissaoFiscal: 'emitido' });
+  try {
+    const atualizada = await cancelarNfce(tenant.id, venda.id, 'Justificativa de teste com mais de 15 caracteres', { canceladoPor: 'usuario-teste-123' });
+    assert.equal(atualizada.canceladoPor, 'usuario-teste-123');
   } finally {
     await limpar(tenant.id, venda.id, produto.id);
   }

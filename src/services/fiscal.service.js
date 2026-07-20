@@ -14,12 +14,18 @@
  * Também expõe o certificado digital do tenant (já descriptografado) pro
  * app ASSINATURA buscar via /api/fiscal/certificado — rota protegida por
  * exigeAcessoCompleto('assinatura_fiscal'), nunca gravado em disco aqui.
+ * E a chave de pareamento local (LAN da loja) entre vigia-pdv e o app
+ * ASSINATURA via /api/fiscal/chave-assinatura-local — SEM
+ * exigeAcessoCompleto('assinatura_fiscal') de propósito: qualquer operador
+ * de PDV precisa dela pra vender em contingência, não só o gerente (ver
+ * buscarOuCriarChaveAssinaturaLocal abaixo).
  * Utilizado por: FiscalController.
  * Não realiza acesso HTTP.
  */
+const crypto = require('crypto');
 const prisma = require('../config/database');
 const nfeDistRepo = require('../repositories/nfeDistribuicao.repository');
-const { descriptografar, descriptografarTexto } = require('../utils/certcrypto');
+const { descriptografar, descriptografarTexto, criptografarTexto } = require('../utils/certcrypto');
 const { AppError } = require('../utils/response');
 
 function parseData(valor, fimDoDia) {
@@ -73,4 +79,30 @@ async function buscarCertificadoParaAssinatura(tenantId) {
   };
 }
 
-module.exports = { buscarXmlsDoPeriodo, buscarCertificadoParaAssinatura };
+/**
+ * Segredo de pareamento local (LAN da loja) entre vigia-pdv e o app
+ * ASSINATURA — autentica as chamadas ao servidor local do gerente
+ * (servidorAssinatura.js: /assinar, /reservar-numero-contingencia), que
+ * antes aceitava qualquer requisição da rede sem provar nada. NÃO é um
+ * dado fiscal (não vai em XML nenhum).
+ * Gerado sob demanda (lazy): a primeira busca — do PDV ou do ASSINATURA,
+ * tanto faz quem chega primeiro — cria e persiste; buscas seguintes
+ * devolvem sempre o mesmo valor. Criptografado em repouso com o mesmo
+ * mecanismo do certificado/CSC (certcrypto.js).
+ * Corrida entre duas primeiras-buscas simultâneas (ex: gerente e um PDV
+ * logando ao mesmo tempo, tenant novo): possível, mas não perigosa — na
+ * pior hipótese os dois lados relogam depois e sincronizam no valor mais
+ * recente; não é dado que, se duplicado por um instante, cause dano (não é
+ * chave fiscal, é só um segredo de rede local).
+ */
+async function buscarOuCriarChaveAssinaturaLocal(tenantId) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { chaveAssinaturaLocal: true } });
+  if (!tenant) throw new AppError('Tenant não encontrado', 404);
+  if (tenant.chaveAssinaturaLocal) return descriptografarTexto(tenant.chaveAssinaturaLocal);
+
+  const novaChave = crypto.randomBytes(32).toString('base64');
+  await prisma.tenant.update({ where: { id: tenantId }, data: { chaveAssinaturaLocal: criptografarTexto(novaChave) } });
+  return novaChave;
+}
+
+module.exports = { buscarXmlsDoPeriodo, buscarCertificadoParaAssinatura, buscarOuCriarChaveAssinaturaLocal };

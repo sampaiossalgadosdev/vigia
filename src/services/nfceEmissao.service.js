@@ -432,13 +432,45 @@ async function enviarEventoCancelamentoReal(tenant, venda, justificativa) {
  * qualquer coisa. Em mock, simula sucesso; em real, envia o evento (ver
  * notas no topo do arquivo).
  *
+ * Guarda por `statusEmissaoFiscal === 'emitido'` (não mais por
+ * `chaveNfce` sozinho — achado de revisão 2026-07-19): desde a reserva
+ * SÍNCRONA de número+chave na criação da venda (fatia DANFE, ver
+ * venda.service.registrar/reservarNumeroEChaveNfceNaTransacao), uma venda
+ * pode ter `chaveNfce` preenchida com `statusEmissaoFiscal` ainda
+ * 'pendente'/'falha_temporaria' — ou seja, uma chave RESERVADA mas nunca
+ * autorizada pela SEFAZ. Pesquisa confirmou (evento 110111 exige
+ * nProtEvento; ver relatório da tarefa): só é possível cancelar o que a
+ * SEFAZ já autorizou — mandar o evento pra uma chave não autorizada seria
+ * rejeitado por falta de protocolo. `emitido` é o único estado (normal ou
+ * via contingência, ambos convergem nele) em que existe de fato um
+ * documento autorizado pra cancelar.
+ *
  * ESCOPO: isso cuida só do lado FISCAL (evento na SEFAZ + status/protocolo
- * da Venda). NÃO reverte estoque nem caixa — isso já é feito por
- * venda.service.cancelar() (intacto, não alterado); se o cancelamento
- * fiscal e o operacional precisarem andar juntos, quem chama esta função
- * (fora deste prompt) decide a ordem de acionar os dois.
+ * da Venda). NÃO reverte estoque nem caixa — isso é feito por
+ * venda.service.cancelar(), que agora chama esta função PRIMEIRO pra
+ * vendas com NFC-e emitida (decisão confirmada com o usuário 2026-07-19):
+ * se o cancelamento fiscal falhar (janela expirada, SEFAZ recusa, rede
+ * fora), lança e venda.service.cancelar propaga o erro SEM reverter
+ * estoque/caixa — nunca deixa a venda num estado "operacionalmente
+ * cancelada, mas ainda autorizada pra SEFAZ" sem nenhum mecanismo de
+ * retry. `canceladoPor` (opcional): usuário que pediu o cancelamento,
+ * repassado por venda.service.cancelar pra não perder essa informação
+ * quando o cancelamento fiscal é quem grava o status final da Venda.
  */
-async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCancelamento } = {}) {
+/**
+ * Fase 1 do cancelamento fiscal: valida tudo e chama a SEFAZ — NÃO escreve
+ * nada no banco. Separada de aplicarCancelamentoNfce (achado de revisão
+ * 2026-07-20, atomicidade completa de venda.service.cancelar): a chamada
+ * HTTP à SEFAZ não pode ficar dentro de uma transação Prisma aberta (não dá
+ * pra segurar uma transação de banco esperando uma rede externa, possivelmente
+ * lenta), mas a ESCRITA do resultado precisa participar da MESMA transação
+ * que reverte estoque/caixa — senão reabre o buraco original (SEFAZ confirma
+ * o cancelamento, mas a reversão operacional falha depois e fica pra trás).
+ * Devolve { justificativaFinal, protocolo }; nunca lança depois de a SEFAZ
+ * já ter confirmado (resultado.ok) — só antes, exatamente como cancelarNfce
+ * já fazia.
+ */
+async function resolverCancelamentoNfce(tenantId, vendaId, justificativa, { enviarEventoCancelamento } = {}) {
   if (!justificativa || justificativa.trim().length < JUSTIFICATIVA_MIN_CHARS)
     throw new AppError(`Justificativa do cancelamento deve ter pelo menos ${JUSTIFICATIVA_MIN_CHARS} caracteres`, 422);
 
@@ -447,7 +479,8 @@ async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCanc
 
   const venda = await vendaRepo.buscarParaEmissao(tenantId, vendaId);
   if (!venda) throw new AppError('Venda não encontrada', 404);
-  if (!venda.chaveNfce) throw new AppError('Esta venda não tem NFC-e emitida — não há o que cancelar', 422);
+  if (venda.statusEmissaoFiscal !== 'emitido')
+    throw new AppError('Esta venda não tem NFC-e autorizada pela SEFAZ — não há o que cancelar', 422);
   if (venda.status === 'cancelada') throw new AppError('Venda já cancelada', 409);
 
   const urls = resolverUrlsFiscais(tenant.uf, tenant.ambienteFiscal);
@@ -466,16 +499,43 @@ async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCanc
   if (!resultado.ok)
     throw new AppError(`Cancelamento rejeitado pela SEFAZ: ${resultado.motivo}`, 422);
 
-  const atualizada = await vendaRepo.atualizarStatus(tenantId, vendaId, {
+  return { justificativaFinal, protocolo: resultado.protocolo };
+}
+
+/**
+ * Fase 2 do cancelamento fiscal: grava o resultado JÁ CONFIRMADO pela SEFAZ
+ * (resolverCancelamentoNfce) — nunca chama a SEFAZ de novo, só persiste.
+ * Aceita `tx` pra poder rodar dentro da transação de venda.service.cancelar
+ * (atomicidade completa); cancelarNfce abaixo chama com o client singleton,
+ * pra quem usa o cancelamento fiscal sozinho, fora de uma transação maior.
+ */
+async function aplicarCancelamentoNfce(tx, tenantId, vendaId, { justificativaFinal, protocolo }, canceladoPor) {
+  return vendaRepo.atualizarStatus(tenantId, vendaId, {
     status: 'cancelada',
     canceladoEm: new Date(),
+    canceladoPor: canceladoPor || null,
     motivoCancelamento: justificativaFinal,
-    protocoloCancelamento: resultado.protocolo,
-  });
+    protocoloCancelamento: protocolo,
+  }, tx);
+}
+
+/**
+ * Cancelamento fiscal completo, de ponta a ponta, sem transação externa —
+ * valida, chama a SEFAZ, grava e audita, tudo de uma vez. Mantido pra
+ * compatibilidade com quem chama isto direto, fora do fluxo orquestrado por
+ * venda.service.cancelar() (ex: os testes desta função, teste de integração
+ * manual). venda.service.cancelar() NÃO usa esta função — usa
+ * resolverCancelamentoNfce/aplicarCancelamentoNfce separadamente, pra poder
+ * intercalar a escrita com a reversão operacional na mesma transação (ver
+ * comentário de cancelar() no outro arquivo).
+ */
+async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCancelamento, canceladoPor } = {}) {
+  const resolucao = await resolverCancelamentoNfce(tenantId, vendaId, justificativa, { enviarEventoCancelamento });
+  const atualizada = await aplicarCancelamentoNfce(prisma, tenantId, vendaId, resolucao, canceladoPor);
 
   await auditoriaRepo.registrar({
     tenantId, acao: 'cancelar_nfce', entidade: 'Venda', entidadeId: vendaId,
-    depois: { motivo: justificativaFinal },
+    depois: { motivo: resolucao.justificativaFinal },
   });
 
   return atualizada;
@@ -484,6 +544,8 @@ async function cancelarNfce(tenantId, vendaId, justificativa, { enviarEventoCanc
 module.exports = {
   emitirNfce,
   cancelarNfce,
+  resolverCancelamentoNfce,
+  aplicarCancelamentoNfce,
   mockAtivo,
   reservarNumeroNfce,
   reservarNumeroEChaveNfceNaTransacao,

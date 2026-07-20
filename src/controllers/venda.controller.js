@@ -26,4 +26,8 @@ const buscarXml = asyncHandler(async (req, res) => {
   success(res, await service.buscarXml(req.tenantId, req.params.id));
 });
 
-module.exports = { listar, detalhar, registrar, cancelar, sync, buscarXml };
+const buscarQrCode = asyncHandler(async (req, res) => {
+  success(res, await service.buscarQrCode(req.tenantId, req.params.id));
+});
+
+module.exports = { listar, detalhar, registrar, cancelar, sync, buscarXml, buscarQrCode };

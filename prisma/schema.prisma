@@ -94,6 +94,16 @@ model Tenant {
   cscProducaoId          String?
   cscHomologacao         String?
   cscHomologacaoId       String?
+  // Segredo de pareamento local (LAN da loja) entre o vigia-pdv e o app
+  // VIGIA Assinatura — autentica quem pode pedir assinatura/reserva de
+  // número ao servidor local do gerente (servidorAssinatura.js). NÃO é um
+  // dado fiscal (não vai em nenhum XML); é só o que fecha o buraco de
+  // "qualquer um na rede da loja pode pedir assinatura sem provar nada".
+  // Gerado sob demanda (lazy) na primeira busca de qualquer um dos dois
+  // apps — ver fiscal.service.buscarOuCriarChaveAssinaturaLocal — e
+  // criptografado em repouso com o mesmo mecanismo do certificado/CSC
+  // (certcrypto.js, CERT_ENCRYPTION_KEY).
+  chaveAssinaturaLocal   String?
   cnae                   String?
   inscricaoEstadual      String?
   ambienteFiscal         String      @default("homologacao") // homologacao | producao (por tenant; distinto do env global SEFAZ_AMBIENTE usado na Distribuição DF-e)
@@ -718,6 +728,14 @@ model Venda {
   // filaTransmissaoContingencia.service.js — NUNCA processado pelo worker
   // de 'pendente', que geraria uma segunda NFC-e do zero).
   statusEmissaoFiscal String    @default("nao_aplicavel")
+  // Preenchido só quando statusEmissaoFiscal='rejeitado' — mensagem completa
+  // do erro lançado por nfceEmissao.service (inclui cStat e xMotivo da
+  // SEFAZ, ver AppError em `NFC-e rejeitada pela SEFAZ: ${cStat} - ${xMotivo}`).
+  // Antes deste campo existir, esse texto vivia só alguns instantes num
+  // array em memória (filaEmissaoNfce.processarFilaEmissao) e virava uma
+  // linha de log (server.js) — sem persistir, ninguém conseguia consultar
+  // depois POR QUE uma nota foi rejeitada, só QUE foi (achado 2026-07-20).
+  motivoRejeicaoFiscal String?
   tentativasEmissao   Int       @default(0)
   ultimaTentativaEm   DateTime?
   proximaTentativaEm  DateTime?

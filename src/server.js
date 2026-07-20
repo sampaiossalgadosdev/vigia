@@ -14,6 +14,7 @@ const appConfig = require('./config/app');
 const logger = require('./logs/logger');
 const { error, AppError } = require('./utils/response');
 const { processarFilaEmissao, INTERVALO_PROCESSAMENTO_MINUTOS } = require('./services/filaEmissaoNfce.service');
+const { processarFilaTransmissaoContingencia, INTERVALO_PROCESSAMENTO_MINUTOS: INTERVALO_PROCESSAMENTO_CONTINGENCIA_MINUTOS } = require('./services/filaTransmissaoContingencia.service');
 const { apiLimiter } = require('./middlewares/rateLimiter');
 
 const app = express();
@@ -109,5 +110,19 @@ cron.schedule(`*/${INTERVALO_PROCESSAMENTO_MINUTOS} * * * *`, async () => {
     if (resumo.total > 0) logger.info('Fila de emissão de NFC-e processada', resumo);
   } catch (erro) {
     logger.error('Falha ao processar fila de emissão de NFC-e', { erro: erro.message });
+  }
+});
+
+// Fila de transmissão de NFC-e de contingência off-line (tpEmis=9) já
+// assinadas pelo app ASSINATURA da loja — ver venda.service.registrar
+// (opcoes.contingencia) e filaTransmissaoContingencia.service.js. Roda
+// separada da fila normal acima: nunca processa a mesma venda (status
+// diferentes).
+cron.schedule(`*/${INTERVALO_PROCESSAMENTO_CONTINGENCIA_MINUTOS} * * * *`, async () => {
+  try {
+    const resumo = await processarFilaTransmissaoContingencia();
+    if (resumo.total > 0) logger.info('Fila de transmissão de contingência NFC-e processada', resumo);
+  } catch (erro) {
+    logger.error('Falha ao processar fila de transmissão de contingência NFC-e', { erro: erro.message });
   }
 });

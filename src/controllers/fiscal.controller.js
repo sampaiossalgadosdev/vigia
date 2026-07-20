@@ -15,6 +15,11 @@ const buscarCertificado = asyncHandler(async (req, res) => {
   success(res, certificado);
 });
 
+const buscarChaveAssinaturaLocal = asyncHandler(async (req, res) => {
+  const chave = await service.buscarOuCriarChaveAssinaturaLocal(req.tenantId);
+  success(res, { chave });
+});
+
 const exportarXmls = asyncHandler(async (req, res) => {
   const { inicio, fim } = req.query;
   const { vendas, notasEntrada } = await service.buscarXmlsDoPeriodo(req.tenantId, inicio, fim);
@@ -37,4 +42,4 @@ const exportarXmls = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { buscarCertificado, exportarXmls };
+module.exports = { buscarCertificado, buscarChaveAssinaturaLocal, exportarXmls };

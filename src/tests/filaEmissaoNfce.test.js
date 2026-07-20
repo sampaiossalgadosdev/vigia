@@ -46,8 +46,10 @@ async function criarTenantIncompleto(sufixo) {
 }
 
 async function criarProduto(tenantId, sufixo) {
+  // cstIbsCbs '000'/cClassTrib '000001': códigos REAIS (RT 2025.002) —
+  // necessários pra emitirNfce chegar até o fim (ver tributoFiscal.service.js).
   return prisma.produto.create({
-    data: { tenantId, ean: '98' + Date.now().toString().slice(-11) + sufixo, nome: 'Produto Fila ' + sufixo, preco: 20, ncm: '10063011', cfop: '5102' },
+    data: { tenantId, ean: '98' + Date.now().toString().slice(-11) + sufixo, nome: 'Produto Fila ' + sufixo, preco: 20, ncm: '10063011', cfop: '5102', cstIbsCbs: '000', cClassTrib: '000001' },
   });
 }
 
@@ -90,7 +92,7 @@ before(async () => {
   await prisma.tenant.findFirst();
 });
 
-test('registrar(): tenant com configuração fiscal completa marca statusEmissaoFiscal=pendente, sem chamar a SEFAZ', async () => {
+test('registrar(): tenant com configuração fiscal completa marca statusEmissaoFiscal=pendente, SEM chamar a SEFAZ — mas número+chave já são reservados na hora (fatia DANFE, ver nfceEmissao.service.reservarNumeroEChaveNfceNaTransacao)', async () => {
   const tenant = await criarTenantCompleto('01');
   const produto = await criarProduto(tenant.id, '01');
   const caixa = await prisma.caixa.create({ data: { tenantId: tenant.id, valorAbertura: 0 } });
@@ -102,11 +104,15 @@ test('registrar(): tenant com configuração fiscal completa marca statusEmissao
     );
     assert.equal(venda.statusEmissaoFiscal, 'pendente');
     // Prova de que não houve chamada síncrona à SEFAZ: nenhum campo de
-    // autorização foi preenchido — quem preenche é só o worker depois.
+    // AUTORIZAÇÃO foi preenchido — quem transmite/autoriza é só o worker
+    // depois. numeroNfce/chaveNfce, por outro lado, JÁ vêm prontos (reserva
+    // síncrona, pro DANFE poder ser impresso na hora — isso NÃO é chamar a
+    // SEFAZ, é só um increment atômico local no Tenant).
     assert.equal(venda.emitidoEm, null);
     assert.equal(venda.protocoloAutorizacao, null);
     assert.equal(venda.xmlNfce, null);
-    assert.doesNotMatch(venda.chaveNfce || '', /^\d{44}$/, 'chaveNfce não pode virar a chave real de 44 dígitos aqui — isso só acontece no worker');
+    assert.equal(venda.numeroNfce, 1, 'primeira venda deste tenant deve reservar o número 1 na hora');
+    assert.match(venda.chaveNfce, /^\d{44}$/, 'chaveNfce já deve ser a chave real de 44 dígitos, reservada na hora (fatia DANFE)');
   } finally {
     await limpar(tenant.id, venda ? [venda.id] : [], [produto.id]);
     await prisma.caixa.delete({ where: { id: caixa.id } }).catch(() => {});
@@ -145,6 +151,7 @@ test('processarFilaEmissao: sucesso (mock) marca statusEmissaoFiscal=emitido', a
     assert.equal(depois.statusEmissaoFiscal, 'emitido');
     assert.match(depois.chaveNfce, /^\d{44}$/);
     assert.ok(depois.xmlNfce);
+    assert.equal(depois.motivoRejeicaoFiscal, null, 'motivoRejeicaoFiscal é só pra rejeição, não deve ser preenchido em sucesso');
   } finally {
     await limpar(tenant.id, [venda.id], [produto.id]);
   }
@@ -165,6 +172,7 @@ test('processarFilaEmissao: rejeição de conteúdo marca statusEmissaoFiscal=re
     assert.equal(depois.statusEmissaoFiscal, 'rejeitado');
     assert.equal(depois.tentativasEmissao, 1);
     assert.equal(depois.proximaTentativaEm, null, 'rejeição de conteúdo não agenda retry automático');
+    assert.equal(depois.motivoRejeicaoFiscal, 'NFC-e rejeitada pela SEFAZ: 204 - Rejeição: duplicidade de NF-e');
   } finally {
     await limpar(tenant.id, [venda.id], [produto.id]);
   }
@@ -188,6 +196,7 @@ test('processarFilaEmissao: falha de conexão marca falha_temporaria com proxima
     assert.equal(depois.statusEmissaoFiscal, 'falha_temporaria');
     assert.equal(depois.tentativasEmissao, 1);
     assert.ok(depois.proximaTentativaEm);
+    assert.equal(depois.motivoRejeicaoFiscal, null, 'motivoRejeicaoFiscal é só pra rejeição de conteúdo, não pra falha de conexão retentável');
     const minutosAgendados = (new Date(depois.proximaTentativaEm).getTime() - antes) / 60000;
     assert.ok(Math.abs(minutosAgendados - filaService.INTERVALO_RETRY_MINUTOS) < 0.5, `proximaTentativaEm deve ser ~${filaService.INTERVALO_RETRY_MINUTOS} minutos à frente, foi ${minutosAgendados}`);
   } finally {

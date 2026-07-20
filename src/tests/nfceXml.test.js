@@ -291,3 +291,70 @@ test('gerarXmlNfce: CST 410 (imunidade — livros/jornais) — omite o grupo gIB
 
   await assert.doesNotReject(() => NFE_SchemaValidate(comIdESignatureFicticios(xml, chaveAcesso), 'NFEAutorizacao'), 'XML com CST 410 (sem gIBSCBS) deveria passar na validação de schema');
 });
+
+/**
+ * vTroco (YA09) — NT 2016.002, regra YA09-10 (pesquisa de 2026-07-19,
+ * fonte: nfe.fazenda.gov.br): exigido quando Σ(vPag) > vNF, fórmula
+ * vTroco = Σ(vPag) - vNF. venda.pagamentos[].valor guarda o valor LÍQUIDO
+ * (nunca o tenderizado) — ver comentário de montarGrupoPagamento.
+ */
+test('gerarXmlNfce: venda sem troco (padrão) não inclui <vTroco> — vPag continua igual ao valor líquido do pagamento', () => {
+  const { venda } = montarVendaDeTeste();
+  const { xml } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const pag = parser.parse(xml).NFe.infNFe.pag;
+
+  assert.equal(pag.vTroco, undefined, 'sem troco, vTroco não deve aparecer no XML');
+  assert.equal(pag.detPag.vPag, '27.90');
+});
+
+test('gerarXmlNfce: venda com troco em dinheiro — vPag do dinheiro vem TENDERIZADO (líquido + troco) e vTroco reflete exatamente o troco, Σ(vPag) - vNF = vTroco', () => {
+  const { venda } = montarVendaDeTeste();
+  venda.troco = 8; // cliente pagou 35.90 por uma compra de 27.90
+  venda.pagamentos = [{ forma: 'dinheiro', valor: 27.9 }]; // valor LÍQUIDO — nunca o tenderizado (ver venda.service.registrar)
+
+  const { xml } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const pag = parser.parse(xml).NFe.infNFe.pag;
+
+  assert.equal(pag.vTroco, '8.00');
+  assert.equal(pag.detPag.tPag, '01');
+  assert.equal(pag.detPag.vPag, '35.90', 'vPag deve ser o valor TENDERIZADO (líquido + troco), não o líquido puro');
+  assert.equal(Number(pag.detPag.vPag) - Number(pag.vTroco), 27.9, 'Σ(vPag) - vTroco deve bater com vNF (fórmula oficial YA09-10)');
+});
+
+test('gerarXmlNfce: venda com troco > 0 mas pagamento em cartão (não dinheiro) — inconsistência, lança em vez de inflar o pagamento errado', () => {
+  const { venda } = montarVendaDeTeste();
+  venda.troco = 8;
+  venda.pagamentos = [{ forma: 'credito', valor: 27.9 }];
+
+  assert.throws(
+    () => gerarXmlNfce(venda),
+    (err) => err.status === 500 && /troco.*sem pagamento em dinheiro/.test(err.message)
+  );
+});
+
+test('gerarXmlNfce: XML com troco em dinheiro passa limpo na validação de schema real da lib (@nfewizard/nfce)', async () => {
+  const { venda } = montarVendaDeTeste('real');
+  venda.troco = 12.5;
+  venda.pagamentos = [{ forma: 'dinheiro', valor: 27.9 }];
+
+  const { xml, chaveAcesso } = gerarXmlNfce(venda);
+  await assert.doesNotReject(() => NFE_SchemaValidate(comIdESignatureFicticios(xml, chaveAcesso), 'NFEAutorizacao'), 'XML com vTroco deveria passar na validação de schema padrão');
+});
+
+test('gerarXmlNfce: múltiplos pagamentos com troco — infla especificamente a entrada de dinheiro, não a primeira do array', () => {
+  const { venda } = montarVendaDeTeste();
+  venda.total = 50;
+  venda.troco = 10;
+  venda.pagamentos = [{ forma: 'credito', valor: 20 }, { forma: 'dinheiro', valor: 30 }]; // dinheiro NÃO é o primeiro
+
+  const { xml } = gerarXmlNfce(venda);
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_', parseTagValue: false });
+  const detPag = parser.parse(xml).NFe.infNFe.pag.detPag;
+
+  assert.equal(detPag[0].tPag, '03');
+  assert.equal(detPag[0].vPag, '20.00', 'pagamento em crédito não deve ser tocado pelo troco');
+  assert.equal(detPag[1].tPag, '01');
+  assert.equal(detPag[1].vPag, '40.00', 'só a entrada de dinheiro (índice 1, não a primeira) deve ser inflada pelo troco');
+});

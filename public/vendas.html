@@ -27,8 +27,8 @@
       </div>
       <div class="painel">
         <table>
-          <thead><tr><th>ID</th><th>Data</th><th>Status</th><th>Total</th><th></th></tr></thead>
-          <tbody id="tabelaVendas"><tr><td colspan="5" class="vazio">Carregando...</td></tr></tbody>
+          <thead><tr><th>ID</th><th>Data</th><th>Status</th><th>Status fiscal</th><th>Total</th><th></th></tr></thead>
+          <tbody id="tabelaVendas"><tr><td colspan="6" class="vazio">Carregando...</td></tr></tbody>
         </table>
       </div>
     </main>
@@ -45,18 +45,41 @@
     const $ = (id) => document.getElementById(id);
     const inicio = $('inicio'), fim = $('fim'), statusFiltro = $('statusFiltro'), tabelaVendas = $('tabelaVendas');
 
+    // Rótulo + cor (classes .tag já existentes em app.css) pra cada valor de
+    // statusEmissaoFiscal — hoje só o Super Admin via essa informação
+    // (superadmin.html); ver ARQUITETURA_FISCAL.md §9.
+    const ROTULOS_STATUS_FISCAL = {
+      nao_aplicavel: { texto: 'Não aplicável', classe: 'neutro' },
+      pendente: { texto: 'Aguardando emissão', classe: 'pendente' },
+      falha_temporaria: { texto: 'Falha temporária', classe: 'pendente' },
+      rejeitado: { texto: 'Rejeitada pela SEFAZ', classe: 'erro' },
+      contingencia_pendente_transmissao: { texto: 'Contingência — aguardando envio', classe: 'pendente' },
+      emitido: { texto: 'Emitida', classe: 'ok' },
+    };
+    function badgeStatusFiscal(v) {
+      const rotulo = ROTULOS_STATUS_FISCAL[v.statusEmissaoFiscal] || { texto: v.statusEmissaoFiscal, classe: 'neutro' };
+      // Motivo só existe (e só interessa) quando rejeitado — mostrado como
+      // title (tooltip nativo) pra não precisar de outro componente só
+      // pra isso; texto completo também fica disponível em "Detalhes".
+      const titulo = v.statusEmissaoFiscal === 'rejeitado' && v.motivoRejeicaoFiscal ? ' title="' + v.motivoRejeicaoFiscal.replace(/"/g, '&quot;') + '"' : '';
+      return '<span class="tag ' + rotulo.classe + '"' + titulo + '>' + rotulo.texto + '</span>';
+    }
+
     async function carregar() {
       const params = new URLSearchParams({ page: 1, limit: 20 });
       if (inicio.value) params.set('inicio', inicio.value);
       if (fim.value) params.set('fim', fim.value);
       if (statusFiltro.value) params.set('status', statusFiltro.value);
       const data = await API.get('/api/vendas?' + params.toString());
-      if (!data.items.length) { tabelaVendas.innerHTML = '<tr><td colspan="5" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
-      tabelaVendas.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button> <button class="btn secundario pequeno" data-acao="xml" data-id="' + v.id + '">Baixar XML</button></td></tr>').join('');
+      if (!data.items.length) { tabelaVendas.innerHTML = '<tr><td colspan="6" class="vazio">Nenhuma venda encontrada.</td></tr>'; return; }
+      tabelaVendas.innerHTML = data.items.map((v) => '<tr><td>' + v.id.slice(0, 8) + '</td><td>' + UI.data(v.criadoEm) + '</td><td><span class="tag ' + (v.status === 'concluida' ? 'ok' : 'pendente') + '">' + v.status + '</span></td><td>' + badgeStatusFiscal(v) + '</td><td>' + UI.moeda(v.total) + '</td><td><button class="btn secundario pequeno" data-acao="detalhar" data-id="' + v.id + '">Detalhes</button> <button class="btn secundario pequeno" data-acao="xml" data-id="' + v.id + '">Baixar XML</button></td></tr>').join('');
     }
     async function detalhar(id) {
       const venda = await API.get('/api/vendas/' + id);
-      alert('Venda ' + venda.id + '\nTotal: ' + UI.moeda(venda.total) + '\nItens: ' + venda.itens.length);
+      const rotulo = ROTULOS_STATUS_FISCAL[venda.statusEmissaoFiscal] || { texto: venda.statusEmissaoFiscal };
+      let msg = 'Venda ' + venda.id + '\nTotal: ' + UI.moeda(venda.total) + '\nItens: ' + venda.itens.length + '\nStatus fiscal: ' + rotulo.texto;
+      if (venda.statusEmissaoFiscal === 'rejeitado' && venda.motivoRejeicaoFiscal) msg += '\nMotivo: ' + venda.motivoRejeicaoFiscal;
+      alert(msg);
     }
     async function baixarXml(id) {
       try {

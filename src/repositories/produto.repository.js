@@ -68,8 +68,9 @@ async function listar(tenantId, filtros, { skip, take, order }) {
   return { items, total };
 }
 
-async function buscarPorId(tenantId, id) {
-  return prisma.produto.findFirst({ where: { id, tenantId }, include: { categoria: true } });
+/** `tx` opcional (default o client singleton) — achado de revisão 2026-07-20: venda.service.cancelar() precisa ler o produto de dentro da MESMA transação que reverte o estoque dele. Chamadores existentes continuam iguais, sem passar o 3º argumento. */
+async function buscarPorId(tenantId, id, tx = prisma) {
+  return tx.produto.findFirst({ where: { id, tenantId }, include: { categoria: true } });
 }
 
 async function buscarPorEan(tenantId, ean) {

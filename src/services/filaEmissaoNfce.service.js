@@ -37,6 +37,15 @@ const INTERVALO_PROCESSAMENTO_MINUTOS = Number(process.env.NFCE_PROCESSAMENTO_MI
  * porque o prazo legal de contingência conta a partir da venda real, não
  * de quando ela chegou no banco.
  *
+ * `status: { not: 'cancelada' }` — achado de revisão 2026-07-19: sem isso,
+ * cancelar uma venda ainda 'pendente'/'falha_temporaria' (venda.service.
+ * cancelar) não impedia este worker de emitir a NFC-e depois, criando um
+ * documento fiscal autorizado pra uma venda que não existe mais (estoque/
+ * caixa já revertidos). Uma NFC-e autorizada nunca some sozinha desta
+ * fila (só chega a 'pendente'/'falha_temporaria', nunca 'emitido' junto
+ * com 'cancelada' — ver nfceEmissao.service.cancelarNfce, que é quem trata
+ * o caso de venda JÁ emitida).
+ *
  * PROPOSITALMENTE SEM FILTRO DE tenantId — isto é global por design, não
  * um esquecimento. Únicos consumidores hoje: o cron de server.js (worker
  * de background, processa o sistema inteiro) e a rota de superadmin
@@ -51,6 +60,7 @@ async function buscarPendentes() {
   const agora = new Date();
   return prisma.venda.findMany({
     where: {
+      status: { not: 'cancelada' },
       OR: [
         { statusEmissaoFiscal: 'pendente' },
         { statusEmissaoFiscal: 'falha_temporaria', proximaTentativaEm: { lte: agora } },
@@ -93,7 +103,14 @@ async function processarFilaEmissao(opcoesEmissao = {}) {
       if (rejeicaoDeConteudo) {
         await prisma.venda.update({
           where: { id: venda.id },
-          data: { statusEmissaoFiscal: 'rejeitado', tentativasEmissao: { increment: 1 }, ultimaTentativaEm: new Date() },
+          // motivoRejeicaoFiscal (achado 2026-07-20): antes só sobrevivia em
+          // resumo.erros (em memória, devolvido pra quem chamou) e num log —
+          // sem persistir, ninguém conseguia ver depois POR QUE a SEFAZ
+          // recusou, só QUE recusou. Mensagem completa (inclui cStat e
+          // xMotivo, ver AppError em nfceEmissao.service) guardada como veio,
+          // sem reprocessar/recortar — evita presumir um formato de texto
+          // que pode mudar.
+          data: { statusEmissaoFiscal: 'rejeitado', tentativasEmissao: { increment: 1 }, ultimaTentativaEm: new Date(), motivoRejeicaoFiscal: erro.message },
         });
         resumo.rejeitadas++;
       } else {
@@ -182,6 +199,6 @@ async function statusFila() {
 }
 
 module.exports = {
-  processarFilaEmissao, calcularUrgenciaEmissao, calcularPrazoLimiteContingencia, statusFila,
+  processarFilaEmissao, buscarPendentes, calcularUrgenciaEmissao, calcularPrazoLimiteContingencia, statusFila,
   INTERVALO_RETRY_MINUTOS, INTERVALO_PROCESSAMENTO_MINUTOS,
 };
